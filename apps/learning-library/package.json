@@ -1,0 +1,39 @@
+{
+  "name": "@curio/learning-library",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3031",
+    "lint": "eslint app components lib tests *.ts --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --configLoader runner",
+    "build": "next build",
+    "build:cloudflare": "opennextjs-cloudflare build",
+    "preview:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -- --keep-vars",
+    "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "cf:dry-run": "opennextjs-cloudflare build && wrangler deploy --dry-run --keep-vars"
+  },
+  "dependencies": {
+    "@opennextjs/cloudflare": "^1.20.2",
+    "@supabase/supabase-js": "^2.112.0",
+    "next": "16.3.0",
+    "openai": "6.47.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "eslint": "^9.35.0",
+    "eslint-config-next": "16.3.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0",
+    "wrangler": "^4.123.0"
+  },
+  "overrides": {
+    "@smithy/md5-js": "4.4.16"
+  }
+}

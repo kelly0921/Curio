@@ -1,0 +1,295 @@
+import { describe, expect, it, vi } from "vitest";
+import type { LearningCardAnalyzer, LearningCardResearcher, MediaTranscriber, PublicSourceRetriever } from "@/lib/ai/services";
+import { MemoryLearningItemRepository } from "@/lib/data/memory-repository";
+import type { IngestionInput, LearningCard } from "@/lib/domain";
+import { LEARNING_CARD_PROMPT_VERSION } from "@/lib/ai/prompt";
+import { processLearningItem, sourceFingerprint } from "@/lib/processing/pipeline";
+
+const card: LearningCard = {
+  title: "A grounded card",
+  primaryTopic: "career",
+  secondaryTopics: ["communication"],
+  contentType: "framework",
+  summary: "A source-grounded summary.",
+  keyTakeaways: ["Keep the evidence."],
+  relevanceReason: "Useful for early-career reflection.",
+  suggestedAction: "Write one note.",
+  claimsToVerify: [],
+  notes: [
+    { type: "principle", title: "Keep evidence", detail: "Preserve the source material behind the learning." },
+    { type: "tactic", title: "Write one note", detail: "Record one useful idea while the context is available." },
+    { type: "claim", title: "Ground the summary", detail: "Every summary should remain traceable to source evidence." },
+    { type: "example", title: "Retain provenance", detail: "Store the transcript or caption beside the card." },
+  ],
+  researchBrief: null,
+  personalization: null,
+};
+
+function uploadInput(file: File): IngestionInput {
+  return {
+    sourceType: "uploaded_media",
+    sourceUrl: null,
+    creator: "@teacher",
+    sourceCaption: null,
+    extractedVisualText: null,
+    intent: "remember",
+    mediaFile: file,
+  };
+}
+
+describe("Learning Item pipeline", () => {
+  it("transcribes uploaded media, records provenance, and stays partial", async () => {
+    const repository = new MemoryLearningItemRepository();
+    const transcriber: MediaTranscriber = { transcribe: vi.fn().mockResolvedValue({ text: "Keep a small decision log.", model: "test-transcriber" }) };
+    const analyzer: LearningCardAnalyzer = { analyze: vi.fn().mockResolvedValue({ card, mode: "live_openai", model: "test-analyzer", promptVersion: LEARNING_CARD_PROMPT_VERSION }) };
+    const result = await processLearningItem(uploadInput(new File(["video"], "lesson.mp4", { type: "video/mp4" })), {
+      repository,
+      transcriber,
+      analyzer,
+    });
+
+    expect(result.item.processingStatus).toBe("partial");
+    expect(result.item.accessLevel).toBe("partial");
+    expect(result.item.sourceMaterials).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "transcript", text: "Keep a small decision log.", origin: "openai_transcription" }),
+    ]));
+    expect(result.item.card?.title).toBe("A grounded card");
+    expect(analyzer.analyze).toHaveBeenCalledWith(expect.objectContaining({ accessLevel: "partial" }));
+  });
+
+  it("stores a bare source URL as link-only without calling the analyzer", async () => {
+    const analyzer: LearningCardAnalyzer = { analyze: vi.fn() };
+    const result = await processLearningItem({
+      sourceType: "external_url",
+      sourceUrl: "https://www.youtube.com/watch?v=ABC123&utm_source=share",
+      creator: null,
+      sourceCaption: null,
+      extractedVisualText: null,
+      intent: "reference",
+      mediaFile: null,
+    }, {
+      repository: new MemoryLearningItemRepository(),
+      transcriber: null,
+      analyzer,
+    });
+
+    expect(result.item.accessLevel).toBe("link_only");
+    expect(result.item.card).toBeNull();
+    expect(result.item.platform).toBe("youtube");
+    expect(result.item.issues[0]?.code).toBe("LINK_ONLY");
+    expect(analyzer.analyze).not.toHaveBeenCalled();
+  });
+
+  it("retrieves public source text before generating a card", async () => {
+    const analyzer: LearningCardAnalyzer = { analyze: vi.fn().mockResolvedValue({ card, mode: "live_openai", model: "test-analyzer", promptVersion: LEARNING_CARD_PROMPT_VERSION }) };
+    const retriever: PublicSourceRetriever = {
+      retrieve: vi.fn().mockResolvedValue({
+        materials: [{
+          kind: "caption",
+          label: "Exact public page text retrieved with OpenAI web search",
+          text: "Write the decision, outcome, and lesson while the context is fresh.",
+          origin: "openai_web_search",
+          completeness: "partial",
+        }],
+        creator: "@public_teacher",
+        model: "test-retriever",
+        consultedUrls: ["https://www.instagram.com/reel/ABC123/"],
+      }),
+    };
+    const result = await processLearningItem({
+      sourceType: "external_url",
+      sourceUrl: "https://www.instagram.com/reel/ABC123/",
+      creator: null,
+      sourceCaption: null,
+      extractedVisualText: null,
+      intent: "remember",
+      mediaFile: null,
+    }, {
+      repository: new MemoryLearningItemRepository(),
+      transcriber: null,
+      retriever,
+      analyzer,
+    });
+
+    expect(result.item.accessLevel).toBe("partial");
+    expect(result.item.creator).toBe("@public_teacher");
+    expect(result.item.sourceCaption).toContain("decision, outcome, and lesson");
+    expect(result.item.sourceMaterials).toEqual([
+      expect.objectContaining({ kind: "caption", origin: "openai_web_search", completeness: "partial" }),
+    ]);
+    expect(result.item.card?.title).toBe("A grounded card");
+    expect(retriever.retrieve).toHaveBeenCalledWith("https://www.instagram.com/reel/ABC123/");
+    expect(analyzer.analyze).toHaveBeenCalledOnce();
+  });
+
+  it("adds source-validated research after extracting detailed notes", async () => {
+    const analyzer: LearningCardAnalyzer = {
+      analyze: vi.fn().mockResolvedValue({ card, mode: "live_openai", model: "test-analyzer", promptVersion: LEARNING_CARD_PROMPT_VERSION }),
+    };
+    const researcher: LearningCardResearcher = {
+      research: vi.fn().mockResolvedValue({
+        overview: "The central claim is supported, with an important eligibility condition.",
+        model: "test-researcher",
+        promptVersion: "test-research-v1",
+        findings: [{
+          topic: "HSA eligibility",
+          verdict: "supported_with_context",
+          explanation: "HSA contributions generally require eligible high-deductible health-plan coverage and no disqualifying coverage.",
+          correction: "Eligibility is not based only on being healthy.",
+          sources: [{ title: "Publication 969", publisher: "IRS", url: "https://www.irs.gov/publications/p969" }],
+        }],
+      }),
+    };
+    const result = await processLearningItem({
+      sourceType: "external_url",
+      sourceUrl: "https://example.com/hsa-lesson",
+      creator: null,
+      sourceCaption: "An HSA can be a powerful tax-advantaged account.",
+      extractedVisualText: null,
+      intent: "verify",
+      mediaFile: null,
+    }, {
+      repository: new MemoryLearningItemRepository(),
+      transcriber: null,
+      analyzer,
+      researcher,
+    });
+
+    expect(result.item.card?.notes).toHaveLength(4);
+    expect(result.item.card?.researchBrief).toEqual(expect.objectContaining({
+      model: "test-researcher",
+      findings: [expect.objectContaining({ verdict: "supported_with_context" })],
+    }));
+    expect(researcher.research).toHaveBeenCalledOnce();
+    expect(result.item.processingStatus).toBe("partial");
+  });
+
+  it("can retry AI retrieval for an existing link-only item", async () => {
+    const repository = new MemoryLearningItemRepository();
+    const retriever: PublicSourceRetriever = {
+      retrieve: vi.fn()
+        .mockResolvedValueOnce({ materials: [], creator: null, model: "test-retriever", consultedUrls: [] })
+        .mockResolvedValueOnce({
+          materials: [{
+            kind: "caption",
+            label: "Exact public page text retrieved with OpenAI web search",
+            text: "A public caption became available.",
+            origin: "openai_web_search",
+            completeness: "partial",
+          }],
+          creator: null,
+          model: "test-retriever",
+          consultedUrls: ["https://example.com/lesson"],
+        }),
+    };
+    const analyzer: LearningCardAnalyzer = { analyze: vi.fn().mockResolvedValue({ card, mode: "live_openai", model: "test-analyzer", promptVersion: LEARNING_CARD_PROMPT_VERSION }) };
+    const input: IngestionInput = {
+      sourceType: "external_url",
+      sourceUrl: "https://example.com/lesson",
+      creator: null,
+      sourceCaption: null,
+      extractedVisualText: null,
+      intent: "remember",
+      mediaFile: null,
+    };
+
+    const first = await processLearningItem(input, { repository, transcriber: null, retriever, analyzer });
+    const retried = await processLearningItem(input, { repository, transcriber: null, retriever, analyzer });
+
+    expect(first.item.accessLevel).toBe("link_only");
+    expect(retried.duplicate).toBe(false);
+    expect(retried.item.id).toBe(first.item.id);
+    expect(retried.item.card?.title).toBe("A grounded card");
+    expect(retried.item.issues).toEqual([]);
+    expect(retriever.retrieve).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns the existing item when identical media is submitted twice", async () => {
+    const repository = new MemoryLearningItemRepository();
+    const transcribe = vi.fn().mockResolvedValue({ text: "Same source.", model: "test-transcriber" });
+    const analyze = vi.fn().mockResolvedValue({ card, mode: "live_openai", model: "test-analyzer", promptVersion: LEARNING_CARD_PROMPT_VERSION });
+    const dependencies = {
+      repository,
+      transcriber: { transcribe },
+      analyzer: { analyze },
+    };
+    const first = await processLearningItem(uploadInput(new File(["same bytes"], "one.mp4", { type: "video/mp4" })), dependencies);
+    const second = await processLearningItem(uploadInput(new File(["same bytes"], "renamed.mp4", { type: "video/mp4" })), dependencies);
+
+    expect(second.duplicate).toBe(true);
+    expect(second.item.id).toBe(first.item.id);
+    expect(transcribe).toHaveBeenCalledTimes(1);
+    expect(analyze).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps meaningful video query parameters while ignoring tracking parameters", async () => {
+    const input = (sourceUrl: string): IngestionInput => ({
+      sourceType: "external_url",
+      sourceUrl,
+      creator: null,
+      sourceCaption: null,
+      extractedVisualText: null,
+      intent: "remember",
+      mediaFile: null,
+    });
+
+    const first = await sourceFingerprint(input("https://youtube.com/watch?v=first&utm_source=share"));
+    const firstWithoutTracking = await sourceFingerprint(input("https://youtube.com/watch?v=first"));
+    const second = await sourceFingerprint(input("https://youtube.com/watch?v=second"));
+
+    expect(first).toBe(firstWithoutTracking);
+    expect(first).not.toBe(second);
+  });
+
+  it("enriches an existing link-only save when context arrives later", async () => {
+    const repository = new MemoryLearningItemRepository();
+    const analyzer: LearningCardAnalyzer = { analyze: vi.fn().mockResolvedValue({ card, mode: "live_openai", model: "test-analyzer", promptVersion: LEARNING_CARD_PROMPT_VERSION }) };
+    const base: IngestionInput = {
+      sourceType: "external_url",
+      sourceUrl: "https://example.com/lesson",
+      creator: null,
+      sourceCaption: null,
+      extractedVisualText: null,
+      intent: "remember",
+      mediaFile: null,
+    };
+    const first = await processLearningItem(base, { repository, transcriber: null, analyzer });
+    const enriched = await processLearningItem({ ...base, sourceCaption: "A useful lesson with enough evidence to process." }, {
+      repository,
+      transcriber: null,
+      analyzer,
+    });
+
+    expect(first.item.accessLevel).toBe("link_only");
+    expect(enriched.duplicate).toBe(false);
+    expect(enriched.item.id).toBe(first.item.id);
+    expect(enriched.item.card?.title).toBe("A grounded card");
+    expect(enriched.item.issues).toEqual([]);
+    expect(analyzer.analyze).toHaveBeenCalledOnce();
+  });
+
+  it("refreshes a saved URL card when the writing prompt version changes", async () => {
+    const repository = new MemoryLearningItemRepository();
+    const analyze = vi.fn()
+      .mockResolvedValueOnce({ card, mode: "live_openai", model: "test-analyzer", promptVersion: "learning-card-v1" })
+      .mockResolvedValueOnce({ card: { ...card, title: "A tighter learning" }, mode: "live_openai", model: "test-analyzer", promptVersion: LEARNING_CARD_PROMPT_VERSION });
+    const input: IngestionInput = {
+      sourceType: "external_url",
+      sourceUrl: "https://example.com/versioned-lesson",
+      creator: null,
+      sourceCaption: "A complete source caption for prompt-version testing.",
+      extractedVisualText: null,
+      intent: "remember",
+      mediaFile: null,
+    };
+
+    const first = await processLearningItem(input, { repository, transcriber: null, analyzer: { analyze } });
+    const refreshed = await processLearningItem(input, { repository, transcriber: null, analyzer: { analyze } });
+
+    expect(refreshed.duplicate).toBe(false);
+    expect(refreshed.item.id).toBe(first.item.id);
+    expect(refreshed.item.card?.title).toBe("A tighter learning");
+    expect(refreshed.item.analysisPromptVersion).toBe(LEARNING_CARD_PROMPT_VERSION);
+    expect(analyze).toHaveBeenCalledTimes(2);
+  });
+});

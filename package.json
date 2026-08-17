@@ -1,0 +1,13 @@
+{
+  "name": "curio",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:processor": "npm --prefix apps/learning-library run dev",
+    "dev:mobile": "npm --prefix apps/mobile run start:go",
+    "test": "npm --prefix apps/learning-library test",
+    "lint": "npm --prefix apps/learning-library run lint && npm --prefix apps/mobile run lint",
+    "typecheck": "npm --prefix apps/learning-library run typecheck && npm --prefix apps/mobile run typecheck",
+    "export:web": "npm --prefix apps/mobile run export:web"
+  }
+}

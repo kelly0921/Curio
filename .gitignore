@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.expo/
+.next/
+.open-next/
+.wrangler/
+.vscode/
+.dev.vars
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+*.log
+.DS_Store

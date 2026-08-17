@@ -1,0 +1,388 @@
+import { Link, router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { CurioBrand } from '@/components/curio-brand';
+import { InstagramSourceViewer } from '@/components/instagram-source-viewer';
+import { colors, fonts, shadows } from '@/constants/curio-theme';
+import { getLearningItem, saveLink, type LearningItem } from '@/lib/curio-api';
+
+function label(value: string): string {
+  return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
+}
+
+function sourceName(item: LearningItem): string {
+  if (item.creator) return item.creator;
+  if (item.sourceType === 'uploaded_media') return 'Shared recording';
+  if (item.sourceType === 'demo_fixture') return 'Curio sample';
+  return `${label(item.platform)} source`;
+}
+
+function originalSourceLink(sourceUrl: string, platform: LearningItem['platform']): { href: string; inline: boolean; label: string; target: '_blank' | '_self' } {
+  if (platform !== 'instagram') return { href: sourceUrl, inline: false, label: 'Open original source', target: '_blank' };
+
+  try {
+    const url = new URL(sourceUrl);
+    url.protocol = 'https:';
+    url.hostname = 'www.instagram.com';
+    url.port = '';
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    const mediaPath = url.pathname.match(/^\/(reel|reels|p)\/([A-Za-z0-9_-]+)/u);
+    if (mediaPath) {
+      const mediaType = mediaPath[1] === 'reels' ? 'reel' : mediaPath[1];
+      url.pathname = `/${mediaType}/${mediaPath[2]}/embed/captioned/`;
+      return { href: url.toString(), inline: true, label: mediaType === 'p' ? 'View original post' : 'View original Reel', target: '_self' };
+    }
+    if (url.pathname !== '/') url.pathname = `${url.pathname.replace(/\/+$/u, '')}/`;
+    return { href: url.toString(), inline: false, label: 'Open original source', target: '_self' };
+  } catch {
+    return { href: sourceUrl, inline: false, label: 'Open original source', target: '_self' };
+  }
+}
+
+export default function ItemDetailScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const [item, setItem] = useState<LearningItem | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const [showSource, setShowSource] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    void getLearningItem(id).then(setItem).finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) {
+    return <View style={styles.loading}><ActivityIndicator color={colors.ink} /><Text style={styles.loadingText}>Opening this find…</Text></View>;
+  }
+
+  if (!item) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.missing}><Text style={styles.missingTitle}>This save isn’t here yet.</Text><Pressable onPress={() => router.dismissTo('/')} style={styles.darkButton}><Text style={styles.darkButtonText}>Back to Curio</Text></Pressable></View>
+      </SafeAreaView>
+    );
+  }
+
+  const card = item.card;
+  const notes = card?.notes ?? [];
+  const research = card?.researchBrief ?? null;
+  const personalization = card?.personalization ?? null;
+  const originalSource = item.sourceUrl ? originalSourceLink(item.sourceUrl, item.platform) : null;
+  const evidence = [
+    item.sourceCaption && { label: 'Caption or supplied context', value: item.sourceCaption },
+    item.transcript && { label: 'Transcript', value: item.transcript },
+    item.extractedVisualText && { label: 'Visible text', value: item.extractedVisualText },
+  ].filter(Boolean) as { label: string; value: string }[];
+
+  async function retryPublicRetrieval() {
+    if (!item?.sourceUrl || retrying) return;
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      const result = await saveLink(item.sourceUrl, { intent: item.intent });
+      setItem(result.item);
+    } catch (error) {
+      setRetryError(error instanceof Error ? error.message : 'Curio could not retry this source.');
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  return (
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
+      <View style={styles.topbar}>
+        <Pressable accessibilityLabel="Back to saved items" onPress={() => router.dismissTo('/')} style={styles.back}><Text style={styles.backText}>←</Text></Pressable>
+        <CurioBrand compact />
+        <View style={styles.topbarSpacer} />
+      </View>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.sourceRow}>
+          <View style={styles.sourceAvatar}><Text style={styles.sourceAvatarText}>{sourceName(item).slice(0, 1).toUpperCase()}</Text></View>
+          <View style={styles.sourceCopy}><Text style={styles.sourceLabel}>LEARNED FROM</Text><Text numberOfLines={1} style={styles.sourceName}>{sourceName(item)}</Text></View>
+          <View style={[styles.status, !card && styles.statusWaiting]}><Text style={[styles.statusText, !card && styles.statusWaitingText]}>{card ? 'READY' : label(item.accessLevel).toUpperCase()}</Text></View>
+        </View>
+
+        {card ? (
+          <>
+            <View style={[styles.heroCard, shadows.card]}>
+              <View style={styles.tagRow}>
+                <View style={styles.topicTag}><Text style={styles.topicTagText}>{card.primaryTopic}</Text></View>
+                <Text style={styles.contentType}>{label(card.contentType)}</Text>
+              </View>
+              <Text style={styles.title}>{card.title}</Text>
+              <Text style={styles.summary}>{card.summary}</Text>
+            </View>
+
+            {notes.length > 0 && (
+              <View style={styles.notesSection}>
+                <Text style={styles.eyebrow}>NOTES FROM THE SOURCE</Text>
+                <Text style={styles.sectionTitle}>What was worth capturing</Text>
+                {notes.map((note, index) => (
+                  <View key={`${note.type}-${note.title}-${index}`} style={styles.noteRow}>
+                    <Text style={styles.noteType}>{label(note.type).toUpperCase()}</Text>
+                    <Text style={styles.noteTitle}>{note.title}</Text>
+                    <Text style={styles.noteDetail}>{note.detail}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <View style={styles.section}>
+              <Text style={styles.eyebrow}>THE SIGNAL</Text>
+              <Text style={styles.sectionTitle}>Worth remembering</Text>
+              {card.keyTakeaways.map((takeaway, index) => (
+                <View key={`${index}-${takeaway}`} style={styles.takeaway}>
+                  <View style={styles.takeawayNumber}><Text style={styles.takeawayNumberText}>{index + 1}</Text></View>
+                  <Text style={styles.takeawayText}>{takeaway}</Text>
+                </View>
+              ))}
+            </View>
+
+            {research && (
+              <View style={styles.researchSection}>
+                <Text style={styles.eyebrow}>RESEARCH & CONTEXT</Text>
+                <Text style={styles.sectionTitle}>What holds up</Text>
+                <Text style={styles.researchOverview}>{research.overview}</Text>
+                {research.findings.map((finding, index) => (
+                  <View key={`${finding.topic}-${index}`} style={[styles.researchFinding, shadows.card]}>
+                    <View style={styles.researchFindingHeader}>
+                      <Text style={styles.researchVerdict}>{label(finding.verdict).toUpperCase()}</Text>
+                      <Text style={styles.researchTopic}>{finding.topic}</Text>
+                    </View>
+                    <Text style={styles.researchExplanation}>{finding.explanation}</Text>
+                    {finding.correction && (
+                      <View style={styles.correctionBlock}>
+                        <Text style={styles.correctionLabel}>CORRECTION / MISSING CONTEXT</Text>
+                        <Text style={styles.correctionText}>{finding.correction}</Text>
+                      </View>
+                    )}
+                    {finding.sources.length > 0 && (
+                      <View style={styles.researchSources}>
+                        {finding.sources.map((source) => (
+                          <Link asChild href={source.url} key={source.url} rel="noopener noreferrer" target="_blank">
+                            <Pressable accessibilityHint="Open this research source" style={styles.researchSource}>
+                              <Text numberOfLines={2} style={styles.researchSourceText}>{source.publisher} · {source.title}</Text>
+                              <Text style={styles.researchSourceArrow}>↗</Text>
+                            </Pressable>
+                          </Link>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {personalization ? (
+              <View style={styles.personalizationSection}>
+                <View style={styles.personalizationHeading}>
+                  <View><Text style={styles.eyebrow}>PERSONALIZED FOR YOU</Text><Text style={styles.sectionTitle}>Why this matters now</Text></View>
+                  <View style={styles.priorityPill}><Text style={styles.priorityPillText}>{personalization.priority.toUpperCase()} · {personalization.priorityScore}</Text></View>
+                </View>
+                <View style={[styles.contextCard, { backgroundColor: colors.sage }]}>
+                  <Text style={styles.contextIcon}>◇</Text>
+                  <Text style={styles.contextLabel}>WHY NOW</Text>
+                  <Text style={styles.contextText}>{personalization.whyNow}</Text>
+                </View>
+                <View style={[styles.contextCard, { backgroundColor: colors.butter }]}>
+                  <Text style={styles.contextIcon}>→</Text>
+                  <Text style={styles.contextLabel}>HOW TO USE THIS</Text>
+                  <Text style={styles.contextText}>{personalization.personalizedUse}</Text>
+                  <View style={styles.personalizedNext}><Text style={styles.personalizedNextLabel}>NEXT STEP</Text><Text style={styles.personalizedNextText}>{personalization.nextStep}</Text></View>
+                </View>
+                {personalization.contextUsed.length > 0 && (
+                  <View style={styles.contextReceipt}>
+                    <Text style={styles.contextReceiptLabel}>CONTEXT CURIO USED</Text>
+                    <Text style={styles.contextReceiptIntro}>Only matching {label(personalization.domain).toLocaleLowerCase()} context was included.</Text>
+                    {personalization.contextUsed.map((entry) => (
+                      <View key={entry.recordId} style={styles.contextSignal}>
+                        <View style={styles.contextSignalTop}>
+                          <Text style={styles.contextSignalKind}>{label(entry.kind).toUpperCase()}</Text>
+                          {entry.isDemo && <Text style={styles.demoContext}>DEMO</Text>}
+                        </View>
+                        <Text style={styles.contextSignalText}>{entry.statement}</Text>
+                        <Text style={styles.contextSignalSource}>{entry.sourceLabel}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            ) : (
+              <>
+                <View style={[styles.contextCard, { backgroundColor: colors.sage }]}>
+                  <Text style={styles.contextIcon}>◇</Text>
+                  <Text style={styles.contextLabel}>WHY THIS MIGHT MATTER TO YOU</Text>
+                  <Text style={styles.contextText}>{card.relevanceReason}</Text>
+                </View>
+                <View style={[styles.contextCard, { backgroundColor: colors.butter }]}>
+                  <Text style={styles.contextIcon}>→</Text>
+                  <Text style={styles.contextLabel}>ONE THING TO TRY</Text>
+                  <Text style={styles.contextText}>{card.suggestedAction}</Text>
+                </View>
+              </>
+            )}
+
+            {card.claimsToVerify.length > 0 && (
+              <View style={styles.verifyCard}>
+                <Text style={styles.verifyLabel}>△ VERIFY BEFORE RELYING ON IT</Text>
+                {card.claimsToVerify.map((claim, index) => (
+                  <View key={`${index}-${claim.claim}`} style={styles.claim}>
+                    <Text style={styles.claimText}>{claim.claim}</Text>
+                    <Text style={styles.claimReason}>{claim.reasonToVerify}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
+        ) : (
+          <View style={[styles.sourceOnly, shadows.card]}>
+            <Text style={styles.eyebrow}>SAVED WITHOUT GUESSING</Text>
+            <Text style={styles.sourceOnlyTitle}>The link is here. Its lesson still needs evidence.</Text>
+            <Text style={styles.sourceOnlyCopy}>{item.issues[0]?.message || 'Share a recording or add the source caption before Curio generates a Learning Card.'}</Text>
+            {retryError && <Text style={styles.retryError}>{retryError}</Text>}
+            {item.sourceUrl && (
+              <Pressable disabled={retrying} onPress={() => void retryPublicRetrieval()} style={[styles.darkButton, retrying && styles.buttonDisabled]}>
+                {retrying && <ActivityIndicator color={colors.surface} size="small" />}
+                <Text style={styles.darkButtonText}>{retrying ? 'Looking for public evidence…' : 'Try AI retrieval again'}</Text>
+              </Pressable>
+            )}
+            <Pressable onPress={() => router.push('/capture')} style={styles.contextButton}><Text style={styles.contextButtonText}>Add context or a recording</Text></Pressable>
+          </View>
+        )}
+
+        <View style={styles.evidenceSection}>
+          <Text style={styles.eyebrow}>SOURCE RECEIPT</Text>
+          <Text style={styles.sectionTitle}>What Curio actually analyzed</Text>
+          <Text style={styles.evidenceIntro}>{evidence.length ? `${evidence.length} evidence channel${evidence.length === 1 ? '' : 's'} supported this card.` : 'No caption, transcript, or visible text was available from this link.'}</Text>
+          {evidence.map((entry) => (
+            <View key={entry.label} style={styles.evidenceBlock}>
+              <Text style={styles.evidenceLabel}>{entry.label.toUpperCase()}</Text>
+              <Text numberOfLines={8} style={styles.evidenceText}>{entry.value}</Text>
+            </View>
+          ))}
+          {originalSource?.inline ? (
+            <>
+              <Pressable
+                accessibilityHint={`Show the original ${label(item.platform)} source inside Curio`}
+                onPress={() => setShowSource((visible) => !visible)}
+                style={styles.sourceButton}>
+                <Text style={styles.sourceButtonText}>{showSource ? 'Hide original Reel' : originalSource.label}</Text>
+                <Text style={styles.sourceButtonText}>{showSource ? '↑' : '↓'}</Text>
+              </Pressable>
+              {showSource && <InstagramSourceViewer onDismiss={() => setShowSource(false)} sourceUrl={originalSource.href} />}
+            </>
+          ) : originalSource ? (
+            <Link asChild href={originalSource.href} rel="noopener noreferrer" target={originalSource.target}>
+              <Pressable accessibilityHint={`Open the original ${label(item.platform)} source`} style={styles.sourceButton}>
+                <Text style={styles.sourceButtonText}>{originalSource.label}</Text><Text style={styles.sourceButtonText}>↗</Text>
+              </Pressable>
+            </Link>
+          ) : null}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: { backgroundColor: colors.canvas, flex: 1 },
+  loading: { alignItems: 'center', backgroundColor: colors.canvas, flex: 1, gap: 12, justifyContent: 'center' },
+  loadingText: { color: colors.muted, fontFamily: fonts.body, fontSize: 12 },
+  topbar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 10 },
+  back: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 18, borderWidth: 1, height: 36, justifyContent: 'center', width: 36 },
+  backText: { color: colors.ink, fontSize: 21 },
+  topbarSpacer: { width: 36 },
+  content: { paddingBottom: 42, paddingHorizontal: 18, paddingTop: 16 },
+  sourceRow: { alignItems: 'center', flexDirection: 'row', marginBottom: 18 },
+  sourceAvatar: { alignItems: 'center', backgroundColor: colors.peach, borderRadius: 20, height: 40, justifyContent: 'center', width: 40 },
+  sourceAvatarText: { color: colors.ink, fontFamily: fonts.display, fontSize: 18, fontWeight: '700' },
+  sourceCopy: { flex: 1, marginLeft: 11 },
+  sourceLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '800', letterSpacing: 1.2 },
+  sourceName: { color: colors.ink, fontFamily: fonts.body, fontSize: 13, fontWeight: '800', marginTop: 2 },
+  status: { backgroundColor: '#DCE9D8', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 7 },
+  statusWaiting: { backgroundColor: '#E8E3D8' },
+  statusText: { color: colors.success, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+  statusWaitingText: { color: colors.muted },
+  heroCard: { backgroundColor: colors.surface, borderRadius: 28, padding: 23 },
+  tagRow: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  topicTag: { backgroundColor: colors.peach, borderRadius: 18, paddingHorizontal: 10, paddingVertical: 6 },
+  topicTagText: { color: colors.ink, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', textTransform: 'uppercase' },
+  contentType: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
+  title: { color: colors.ink, fontFamily: fonts.display, fontSize: 34, fontWeight: '700', letterSpacing: -1.3, lineHeight: 37, marginTop: 19 },
+  summary: { color: colors.muted, fontFamily: fonts.body, fontSize: 14, lineHeight: 21, marginTop: 15 },
+  notesSection: { paddingTop: 34 },
+  noteRow: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 17 },
+  noteType: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  noteTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: '700', marginTop: 5 },
+  noteDetail: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, lineHeight: 19, marginTop: 7 },
+  section: { paddingVertical: 34 },
+  eyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1.4 },
+  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.8, marginBottom: 16, marginTop: 4 },
+  takeaway: { alignItems: 'flex-start', borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: 13, paddingVertical: 17 },
+  takeawayNumber: { alignItems: 'center', backgroundColor: colors.dark, borderRadius: 13, height: 26, justifyContent: 'center', width: 26 },
+  takeawayNumberText: { color: colors.surface, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
+  takeawayText: { color: colors.ink, flex: 1, fontFamily: fonts.body, fontSize: 14, lineHeight: 20 },
+  researchSection: { paddingBottom: 30 },
+  researchOverview: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, lineHeight: 20, marginBottom: 15, marginTop: -7 },
+  researchFinding: { backgroundColor: colors.surface, borderRadius: 22, marginBottom: 13, padding: 19 },
+  researchFindingHeader: { gap: 5 },
+  researchVerdict: { color: colors.success, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
+  researchTopic: { color: colors.ink, fontFamily: fonts.display, fontSize: 21, fontWeight: '700', lineHeight: 25 },
+  researchExplanation: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, lineHeight: 19, marginTop: 11 },
+  correctionBlock: { backgroundColor: colors.butter, borderRadius: 15, marginTop: 14, padding: 13 },
+  correctionLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.8 },
+  correctionText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  researchSources: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 15, paddingTop: 7 },
+  researchSource: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
+  researchSourceText: { color: colors.ink, flex: 1, fontFamily: fonts.body, fontSize: 10, fontWeight: '700', lineHeight: 14, marginRight: 10 },
+  researchSourceArrow: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '800' },
+  contextCard: { borderRadius: 24, marginBottom: 13, padding: 21 },
+  personalizationSection: { paddingTop: 4 },
+  personalizationHeading: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' },
+  priorityPill: { backgroundColor: '#DCE9D8', borderRadius: 14, marginTop: 3, paddingHorizontal: 9, paddingVertical: 7 },
+  priorityPillText: { color: colors.success, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.7 },
+  contextIcon: { color: colors.ink, fontSize: 22 },
+  contextLabel: { color: 'rgba(23,23,19,0.65)', fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1.1, marginTop: 17 },
+  contextText: { color: colors.ink, fontFamily: fonts.display, fontSize: 21, fontWeight: '700', lineHeight: 27, marginTop: 8 },
+  personalizedNext: { borderTopColor: 'rgba(23,23,19,0.16)', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 16, paddingTop: 13 },
+  personalizedNextLabel: { color: 'rgba(23,23,19,0.6)', fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.9 },
+  personalizedNextText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '700', lineHeight: 17, marginTop: 5 },
+  contextReceipt: { borderColor: colors.line, borderRadius: 22, borderWidth: 1, marginBottom: 23, padding: 18 },
+  contextReceiptLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  contextReceiptIntro: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 5 },
+  contextSignal: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 13, paddingTop: 13 },
+  contextSignalTop: { alignItems: 'center', flexDirection: 'row', gap: 7 },
+  contextSignalKind: { color: colors.success, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.8 },
+  demoContext: { backgroundColor: colors.lilac, borderRadius: 8, color: colors.ink, fontFamily: fonts.body, fontSize: 6, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 6, paddingVertical: 3 },
+  contextSignalText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 6 },
+  contextSignalSource: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, marginTop: 5 },
+  verifyCard: { borderColor: '#C89E92', borderRadius: 24, borderWidth: 1, marginTop: 8, padding: 20 },
+  verifyLabel: { color: colors.danger, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  claim: { marginTop: 15 },
+  claimText: { color: colors.ink, fontFamily: fonts.body, fontSize: 13, fontWeight: '800', lineHeight: 18 },
+  claimReason: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, lineHeight: 16, marginTop: 5 },
+  sourceOnly: { backgroundColor: colors.surface, borderRadius: 28, padding: 24 },
+  sourceOnlyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 31, fontWeight: '700', letterSpacing: -1, lineHeight: 34, marginTop: 9 },
+  sourceOnlyCopy: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, lineHeight: 19, marginTop: 13 },
+  darkButton: { alignItems: 'center', alignSelf: 'flex-start', backgroundColor: colors.dark, borderRadius: 15, flexDirection: 'row', gap: 8, marginTop: 20, paddingHorizontal: 17, paddingVertical: 13 },
+  darkButtonText: { color: colors.surface, fontFamily: fonts.body, fontSize: 11, fontWeight: '800' },
+  buttonDisabled: { opacity: 0.7 },
+  contextButton: { alignSelf: 'flex-start', marginTop: 15, paddingVertical: 5 },
+  contextButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '800', textDecorationLine: 'underline' },
+  retryError: { color: colors.danger, fontFamily: fonts.body, fontSize: 11, lineHeight: 16, marginTop: 13 },
+  evidenceSection: { paddingTop: 38 },
+  evidenceIntro: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, lineHeight: 17, marginBottom: 16, marginTop: -7 },
+  evidenceBlock: { backgroundColor: 'rgba(255,252,246,0.62)', borderRadius: 18, marginBottom: 10, padding: 16 },
+  evidenceLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  evidenceText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 7 },
+  sourceButton: { alignItems: 'center', borderColor: colors.ink, borderRadius: 15, borderWidth: 1, flexDirection: 'row', justifyContent: 'space-between', marginTop: 9, paddingHorizontal: 16, paddingVertical: 14 },
+  sourceButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '800' },
+  missing: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: 30 },
+  missingTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 28, fontWeight: '700', textAlign: 'center' },
+});
