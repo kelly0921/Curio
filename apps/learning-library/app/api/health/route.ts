@@ -4,11 +4,11 @@ import { persistenceConfiguration } from "@/lib/data/provider";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const persistence = persistenceConfiguration();
+  const persistence = await persistenceConfiguration();
   return NextResponse.json({
     ok: persistence.mode !== "invalid",
     data: {
-      service: "learning-library",
+      service: "curio-processor",
       openAIConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
       persistence,
       uploadBoundary: "direct-small-file-v0.1",

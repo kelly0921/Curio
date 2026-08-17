@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "learning-library",
+  "name": "curio-processor",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-08-17",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
@@ -11,9 +11,24 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "learning-library"
+      "service": "curio-processor"
     }
   ],
+  "d1_databases": [
+    {
+      "binding": "CURIO_DB",
+      "database_name": "curio-learning-library",
+      "database_id": "b049fddc-b4aa-41e4-943a-120e4f807cf3",
+      "migrations_dir": "d1/migrations"
+    }
+  ],
+  "vars": {
+    "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-mini-transcribe",
+    "OPENAI_ANALYSIS_MODEL": "gpt-5.4-mini",
+    "OPENAI_RETRIEVAL_MODEL": "gpt-5.4-mini",
+    "ENABLE_EXPERIMENTAL_INSTAGRAM_EMBED": "true",
+    "CURIO_ALLOWED_ORIGINS": "http://localhost:8081,http://localhost:8082,http://localhost:19006,http://127.0.0.1:8081,http://127.0.0.1:8082,http://127.0.0.1:19006,http://192.168.0.231:8081,http://192.168.0.231:8082,http://192.168.0.231:19006"
+  },
   "observability": {
     "enabled": true,
     "logs": { "enabled": true, "head_sampling_rate": 1 },

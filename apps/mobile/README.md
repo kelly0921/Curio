@@ -21,10 +21,20 @@ Incoming sharing is experimental in Expo SDK 57. On iOS, the share extension ope
 
 - Node.js LTS
 - An Expo account for cloud development builds
-- The Curio processor running from `apps/learning-library`
+- The deployed Curio processor, or the local processor running from `apps/learning-library`
 - An Apple Developer account for an installable iPhone development build, or an Android phone for the Android internal build
 
-## Run the processor
+## Processor connection
+
+The personal beta is deployed at:
+
+```text
+https://curio-processor.kellychenmeiyi.workers.dev
+```
+
+The Git-ignored `apps/mobile/.env.local` contains this URL and the matching personal-beta token. The Expo `development`, `preview`, and `production` environments are also configured, so the app can reach Curio without the computer running.
+
+To use the local processor instead, update `EXPO_PUBLIC_CURIO_API_URL`, then run:
 
 In terminal one:
 
@@ -34,15 +44,16 @@ npm install
 npm run dev
 ```
 
-Leave it running on port 3031. The mobile app derives the LAN host from Metro and uses the same machine on port 3031.
+Leave it running on port 3031. Without an explicit URL, the mobile app derives the LAN host from Metro and uses the same machine on port 3031.
 
 If the app shows **Processor not connected**, create `apps/mobile/.env.local`:
 
 ```dotenv
 EXPO_PUBLIC_CURIO_API_URL=http://YOUR_COMPUTER_LAN_IP:3031
+EXPO_PUBLIC_CURIO_API_TOKEN=YOUR_PERSONAL_BETA_TOKEN
 ```
 
-Both devices must be on the same Wi-Fi network and Windows Firewall must allow the Node development servers. Use a deployed HTTPS Worker URL for EAS preview and production builds.
+Both devices must be on the same Wi-Fi network and Windows Firewall must allow the Node development servers. `EXPO_PUBLIC_` values are bundled into the app and should never contain OpenAI or database credentials; this token is only a temporary personal-beta gate.
 
 ## Visual preview
 
@@ -81,7 +92,7 @@ Open the installed Curio development client and connect to Metro.
 
 ## Test the share flow
 
-1. Start the Next processor on the computer and Metro in `apps/mobile`.
+1. Start Metro in `apps/mobile`. Start the local processor only if you changed the API URL back to the LAN address.
 2. Open Instagram or TikTok on the phone.
 3. Tap **Share** on a post and choose **Curio**. You may need to add Curio through the share sheet's **More** action the first time.
 4. Curio should open, show the automatic processing state, and then show the saved source or Learning Card.
@@ -102,9 +113,9 @@ node node_modules/expo/bin/cli config --type public
 ## Production gates still open
 
 - Replace the personal prototype identifiers (`com.kelly.curio`) before store submission if needed.
-- Add Supabase Auth and user-scoped RLS before inviting external testers.
+- Add real user authentication and user-scoped storage before inviting external testers.
 - Replace the labeled mock context connection with user-authorized Notion sync.
-- Deploy the API over HTTPS; do not use a LAN URL in a production binary.
+- Replace the personal-beta bearer gate before distributing the binary.
 - Move uploaded media to signed R2 uploads and processing to a Queue.
 - Add job status, retries, idempotency, rate limits, crash reporting, privacy policy, export, and account deletion.
 - Replace the template app icon and finalize store metadata.

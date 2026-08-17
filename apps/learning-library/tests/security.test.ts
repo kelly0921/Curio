@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { isApiRequestAuthorized } from "@/lib/api/access-control";
 import { developmentAppOrigin, isSameOriginRequest } from "@/lib/api/same-origin";
 import { createSupabaseServerFetch } from "@/lib/data/supabase-repository";
 
@@ -49,6 +50,33 @@ describe("server boundaries", () => {
       headers: { origin: "http://localhost:8099" },
     });
     expect(developmentAppOrigin(unknownPort, "development")).toBeNull();
+  });
+
+  it("requires the configured personal token in production", async () => {
+    const previous = process.env.CURIO_API_TOKEN;
+    process.env.CURIO_API_TOKEN = "a-long-personal-beta-token";
+    try {
+      const unauthorized = new Request("https://curio.example/api/items");
+      expect(await isApiRequestAuthorized(unauthorized, "production")).toBe(false);
+
+      const authorized = new Request("https://curio.example/api/items", {
+        headers: { Authorization: "Bearer a-long-personal-beta-token" },
+      });
+      expect(await isApiRequestAuthorized(authorized, "production")).toBe(true);
+    } finally {
+      if (previous === undefined) Reflect.deleteProperty(process.env, "CURIO_API_TOKEN");
+      else process.env.CURIO_API_TOKEN = previous;
+    }
+  });
+
+  it("fails closed in production when no personal token is configured", async () => {
+    const previous = process.env.CURIO_API_TOKEN;
+    Reflect.deleteProperty(process.env, "CURIO_API_TOKEN");
+    try {
+      expect(await isApiRequestAuthorized(new Request("https://curio.example/api/items"), "production")).toBe(false);
+    } finally {
+      if (previous !== undefined) process.env.CURIO_API_TOKEN = previous;
+    }
   });
 
   it("does not mirror a new Supabase opaque key into a Bearer header", async () => {

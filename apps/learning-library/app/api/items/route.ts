@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { OpenAILearningServices } from "@/lib/ai/services";
+import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
 import { IngestionValidationError, MAX_REQUEST_BYTES, parseIngestionForm } from "@/lib/api/ingestion";
-import { developmentAppOrigin, isSameOriginRequest } from "@/lib/api/same-origin";
 import { getLearningItemRepository } from "@/lib/data/provider";
 import { getPersonalContextSnapshot } from "@/lib/context/provider";
 import { personalizeLearningItem, personalizeLearningItems } from "@/lib/context/personalization";
@@ -15,19 +15,8 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function responseHeaders(request: Request): HeadersInit | undefined {
-  const origin = developmentAppOrigin(request);
-  if (!origin) return undefined;
-  return {
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Origin": origin,
-    "Vary": "Origin",
-  };
-}
-
 function errorResponse(request: Request, code: string, message: string, status: number) {
-  return NextResponse.json({ ok: false, error: { code, message } }, { status, headers: responseHeaders(request) });
+  return NextResponse.json({ ok: false, error: { code, message } }, { status, headers: apiResponseHeaders(request) });
 }
 
 function openAIServices(): OpenAILearningServices | null {
@@ -36,12 +25,16 @@ function openAIServices(): OpenAILearningServices | null {
 }
 
 export async function GET(request: Request) {
+  if (!await isApiRequestAuthorized(request)) {
+    return errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401);
+  }
   try {
-    const items = await getLearningItemRepository().list();
+    const repository = await getLearningItemRepository();
+    const items = await repository.list();
     const context = await getPersonalContextSnapshot();
     return NextResponse.json(
       { ok: true, data: { items: personalizeLearningItems(items, context) } },
-      { headers: responseHeaders(request) },
+      { headers: apiResponseHeaders(request) },
     );
   } catch (error) {
     console.error(JSON.stringify({ event: "learning_items_list_failed", errorType: error instanceof Error ? error.name : "unknown" }));
@@ -50,14 +43,14 @@ export async function GET(request: Request) {
 }
 
 export function OPTIONS(request: Request) {
-  const headers = responseHeaders(request);
+  const headers = apiResponseHeaders(request);
   if (!headers) return new NextResponse(null, { status: 403 });
   return new NextResponse(null, { status: 204, headers });
 }
 
 export async function POST(request: Request) {
-  if (!isSameOriginRequest(request) && !developmentAppOrigin(request)) {
-    return errorResponse(request, "CROSS_ORIGIN_REQUEST", "Cross-origin submissions are not allowed.", 403);
+  if (!await isApiRequestAuthorized(request)) {
+    return errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401);
   }
   const contentLength = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
@@ -66,6 +59,7 @@ export async function POST(request: Request) {
 
   try {
     const input = parseIngestionForm(await request.formData());
+    const repository = await getLearningItemRepository();
     const services = openAIServices();
     const retriever = services
       ? new PublicSourceRetrieverChain([
@@ -74,7 +68,7 @@ export async function POST(request: Request) {
       ])
       : null;
     const result = await processLearningItem(input, {
-      repository: getLearningItemRepository(),
+      repository,
       transcriber: services,
       retriever,
       analyzer: services,
@@ -83,7 +77,7 @@ export async function POST(request: Request) {
     const context = await getPersonalContextSnapshot();
     return NextResponse.json(
       { ok: true, data: { ...result, item: personalizeLearningItem(result.item, context) } },
-      { status: result.duplicate ? 200 : 201, headers: responseHeaders(request) },
+      { status: result.duplicate ? 200 : 201, headers: apiResponseHeaders(request) },
     );
   } catch (error) {
     if (error instanceof IngestionValidationError) {
@@ -92,6 +86,7 @@ export async function POST(request: Request) {
     console.error(JSON.stringify({
       event: "learning_item_processing_failed",
       errorType: error instanceof Error ? error.name : "unknown",
+      errorMessage: error instanceof Error ? error.message : "Unknown processing error",
       validationIssues: error instanceof ZodError
         ? error.issues.map((entry) => ({ path: entry.path.join("."), code: entry.code, message: entry.message }))
         : undefined,

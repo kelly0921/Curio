@@ -208,15 +208,22 @@ async function readEnvelope<T>(response: Response): Promise<T> {
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 150_000);
+  const headers = new Headers(init?.headers);
+  const personalAccessToken = process.env.EXPO_PUBLIC_CURIO_API_TOKEN?.trim();
+  if (personalAccessToken) headers.set('Authorization', `Bearer ${personalAccessToken}`);
   try {
-    return await fetch(`${getCurioApiUrl()}${path}`, { ...init, signal: controller.signal });
+    return await fetch(`${getCurioApiUrl()}${path}`, { ...init, headers, signal: controller.signal });
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw new CurioApiError('REQUEST_TIMEOUT', 'Curio is still waiting on the processor. Try again in a moment.');
     }
+    const apiUrl = getCurioApiUrl();
+    const connectionHint = apiUrl.startsWith('http://')
+      ? 'Make sure the processor is running and both devices are on the same network.'
+      : 'Check your internet connection and the deployed processor status.';
     throw new CurioApiError(
       'PROCESSOR_UNREACHABLE',
-      `Curio could not reach ${getCurioApiUrl()}. Make sure the web processor is running and both devices are on the same network.`,
+      `Curio could not reach ${apiUrl}. ${connectionHint}`,
     );
   } finally {
     clearTimeout(timeout);

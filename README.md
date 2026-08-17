@@ -5,7 +5,13 @@ Curio turns useful social videos and links into organized knowledge: detailed so
 ## Repository layout
 
 - `apps/mobile` — Expo mobile-first capture, library, source viewer, and For You experience.
-- `apps/learning-library` — Next.js processing API, OpenAI extraction and research, context routing, and optional Supabase persistence.
+- `apps/learning-library` — Next.js processing API, OpenAI extraction and research, context routing, and durable Cloudflare D1 persistence.
+
+## Live personal beta
+
+The protected processor is deployed at [https://curio-processor.kellychenmeiyi.workers.dev](https://curio-processor.kellychenmeiyi.workers.dev). Its health endpoint reports the OpenAI and D1 configuration without exposing secrets. Expo development, preview, and production environments point to this URL.
+
+The mobile app and Worker share a generated personal-beta access token stored only in Git-ignored local files, encrypted Worker secrets, and EAS environment variables. This gate prevents anonymous use during personal testing; replace it with real user authentication before distributing the app.
 
 ## Local development
 
@@ -41,7 +47,7 @@ npm run export:web
 npm --prefix apps/mobile run preview:web
 ```
 
-See the application READMEs for LAN configuration, Expo builds, Supabase migrations, Cloudflare deployment, and current prototype limitations.
+See the application READMEs for LAN configuration, Expo builds, D1 migrations, Cloudflare deployment, optional Supabase support, and current prototype limitations.
 
 ## Quality checks
 
