@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { type WebViewMessageEvent, WebView } from 'react-native-webview';
 
 interface InstagramMediaDiscoveryProps {
@@ -73,25 +73,38 @@ export function InstagramMediaDiscovery({ onMediaUrls, sourceUrl }: InstagramMed
   }
 
   return (
-    <WebView
-      allowsInlineMediaPlayback
-      injectedJavaScript={discoveryScript}
-      injectedJavaScriptBeforeContentLoaded={discoveryScript}
-      javaScriptEnabled
-      key={embedUrl}
-      mediaPlaybackRequiresUserAction={false}
-      onMessage={receiveMessage}
-      onShouldStartLoadWithRequest={(request) => (
-        request.url === 'about:blank'
-        || /^https:\/\/([^.]+\.)?(instagram\.com|cdninstagram\.com|fbcdn\.net)(?:\/|$)/iu.test(request.url)
-      )}
-      originWhitelist={['https://*']}
-      source={{ uri: embedUrl }}
-      style={styles.hidden}
-    />
+    <View collapsable={false} pointerEvents="none" style={styles.hiddenContainer}>
+      <WebView
+        allowsInlineMediaPlayback
+        containerStyle={styles.hiddenWebViewContainer}
+        injectedJavaScript={discoveryScript}
+        injectedJavaScriptBeforeContentLoaded={discoveryScript}
+        javaScriptEnabled
+        key={embedUrl}
+        mediaPlaybackRequiresUserAction={false}
+        onMessage={receiveMessage}
+        onShouldStartLoadWithRequest={(request) => (
+          request.url === 'about:blank'
+          || /^https:\/\/([^.]+\.)?(instagram\.com|cdninstagram\.com|fbcdn\.net)(?:\/|$)/iu.test(request.url)
+        )}
+        originWhitelist={['https://*']}
+        source={{ uri: embedUrl }}
+        style={styles.hiddenWebView}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  hidden: { bottom: 0, height: 2, opacity: 0.01, position: 'absolute', right: 0, width: 2 },
+  hiddenContainer: {
+    height: 1,
+    opacity: 0.01,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: 1,
+  },
+  hiddenWebViewContainer: { flex: 0, height: 1, width: 1 },
+  hiddenWebView: { flex: 0, height: 1, width: 1 },
 });
