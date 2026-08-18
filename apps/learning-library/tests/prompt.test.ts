@@ -32,6 +32,37 @@ describe("Learning Card prompt boundary", () => {
     expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("Never imply you watched a full video");
   });
 
+  it("makes full Reel evidence primary and keeps the caption secondary", () => {
+    const prompt = buildLearningCardPrompt({
+      accessLevel: "partial",
+      sourceMaterials: [{
+        kind: "caption",
+        label: "Reel caption",
+        text: "Caption headline",
+        origin: "instagram_browser_caption",
+        completeness: "complete_for_channel",
+      }, {
+        kind: "visible_text",
+        label: "Timestamped Reel visuals",
+        text: "[00:05] On-screen text: Tip one",
+        origin: "instagram_browser_visual_analysis",
+        completeness: "partial",
+      }, {
+        kind: "transcript",
+        label: "Full Reel transcript",
+        text: "Spoken tip one with details.",
+        origin: "instagram_browser_transcription",
+        completeness: "complete_for_channel",
+      }],
+    });
+
+    expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("PRIMARY SOURCE EVIDENCE");
+    expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("caption is supporting context only");
+    expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("full Reel transcript and timestamped visual evidence");
+    expect(prompt.indexOf("Spoken tip one with details.")).toBeLessThan(prompt.indexOf("[00:05] On-screen text: Tip one"));
+    expect(prompt.indexOf("[00:05] On-screen text: Tip one")).toBeLessThan(prompt.indexOf("Caption headline"));
+  });
+
   it("requires compact lesson-first writing without repetitive attribution", () => {
     expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("Lead with the lesson itself");
     expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("Do not write filler attribution");
@@ -62,6 +93,7 @@ describe("Learning Card prompt boundary", () => {
   it("requires a useful independent supplement when a promised list is inaccessible", () => {
     expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("Use independent_supplement");
     expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("match the promised list count up to five");
+    expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("return exactly that many findings up to five");
     expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("not a reconstruction");
     expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("create exactly one finding for each angle");
     expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("Keep supplement findings mutually distinct");
@@ -82,5 +114,13 @@ describe("Learning Card prompt boundary", () => {
       "reservations, crowd planning, or luggage logistics",
       "local etiquette, safety, or disruption planning",
     ]);
+
+    expect(detectSupplementResearchAngles([{
+      kind: "transcript",
+      label: "Full Reel transcript",
+      text: "Five Japan trip tips: use vacuum bags; add Suica; download apps; carry an overflow bag; buy a smoothie.",
+      origin: "instagram_browser_transcription",
+      completeness: "complete_for_channel",
+    }])).toEqual([]);
   });
 });

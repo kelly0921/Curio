@@ -31,6 +31,9 @@ export const sourceMaterialSchema = z.object({
   origin: z.enum([
     "openai_transcription",
     "openai_web_search",
+    "instagram_browser_caption",
+    "instagram_browser_transcription",
+    "instagram_browser_visual_analysis",
     "instagram_public_embed_caption",
     "instagram_public_embed_transcription",
     "user_supplied",
@@ -218,6 +221,7 @@ export const learningItemSchema = z.object({
   analysisMode: z.enum(["live_openai", "deterministic_demo", "not_run"]),
   analysisModel: z.string().max(120).nullable(),
   analysisPromptVersion: z.string().max(120).nullable().default(null),
+  sourceRetrievalVersion: z.string().max(120).nullable().default(null),
   transcriptionModel: z.string().max(120).nullable(),
   issues: z.array(processingIssueSchema),
   recommendationFeedback: recommendationFeedbackSchema.nullable().default(null),
@@ -263,6 +267,7 @@ export interface IngestionInput {
   extractedVisualText: string | null;
   intent: Intent;
   mediaFile: File | null;
+  publicMediaUrls?: string[];
 }
 
 export interface ProcessingResult {

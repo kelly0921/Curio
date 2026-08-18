@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { IngestionValidationError, parseIngestionForm } from "@/lib/api/ingestion";
 
 describe("ingestion validation", () => {
-  it("accepts an Instagram Reel URL without pretending to retrieve it", () => {
+  it("accepts an Instagram Reel URL for public-source retrieval", () => {
     const form = new FormData();
     form.set("sourceType", "instagram_url");
     form.set("sourceUrl", "https://www.instagram.com/reel/ABC123/?utm_source=share");
@@ -10,6 +10,22 @@ describe("ingestion validation", () => {
     const input = parseIngestionForm(form);
     expect(input.sourceType).toBe("instagram_url");
     expect(input.mediaFile).toBeNull();
+  });
+
+  it("accepts bounded client-discovered media only for an Instagram source", () => {
+    const form = new FormData();
+    form.set("sourceType", "external_url");
+    form.set("sourceUrl", "https://www.instagram.com/reel/ABC123/");
+    form.set("publicMediaUrls", JSON.stringify([
+      "https://media.cdninstagram.com/reel-audio.mp4?efg=encoded",
+      "https://scontent.example.fbcdn.net/reel-video.mp4?efg=encoded",
+    ]));
+    const input = parseIngestionForm(form);
+
+    expect(input.publicMediaUrls).toHaveLength(2);
+
+    form.set("sourceUrl", "https://example.com/video");
+    expect(() => parseIngestionForm(form)).toThrow(IngestionValidationError);
   });
 
   it("rejects a lookalike non-Instagram host", () => {

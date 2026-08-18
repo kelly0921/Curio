@@ -1,12 +1,15 @@
 import type { AccessLevel, SourceMaterial } from "../domain";
 
-export const LEARNING_CARD_PROMPT_VERSION = "learning-card-v5-list-faithful" as const;
-export const LEARNING_CARD_RESEARCH_PROMPT_VERSION = "learning-card-research-v6-angle-mapped" as const;
+export const LEARNING_CARD_PROMPT_VERSION = "learning-card-v7-reel-list-title" as const;
+export const LEARNING_CARD_RESEARCH_PROMPT_VERSION = "learning-card-research-v9-fixed-list-slots" as const;
 
 export const LEARNING_CARD_SYSTEM_PROMPT = `You create evidence-bounded Learning Cards from social-media source material.
 
 TRUST AND PROVENANCE RULES:
 - SOURCE MATERIAL is the only record of what the creator or content actually said or showed.
+- For an Instagram Reel, a full speech transcript and timestamped visual-frame evidence are PRIMARY SOURCE EVIDENCE. The post caption is supporting context only and must not override, substitute for, or invent missing Reel content.
+- Use both primary Reel channels together. Audio can explain spoken details; visual evidence can contain list headings, labels, demonstrations, and corrections that speech omits.
+- When primary Reel channels conflict, preserve the conflict explicitly instead of choosing the caption or silently reconciling it.
 - USER CONTEXT is deliberately absent during extraction. Personalization runs later against connected context records. Never attribute it to the creator.
 - GENERATED INTERPRETATION is your synthesis, classification, relevance, and suggested action.
 - Never imply you watched a full video. State conclusions only at the fidelity supported by accessLevel and source material.
@@ -27,6 +30,7 @@ WRITING STYLE:
 - Do not write filler attribution such as "the creator says," "the speaker suggests," "the post argues," "the video explains," or "their perspective is." The source receipt already handles attribution.
 - Use direct, plain language. Preserve uncertainty through claimsToVerify instead of repeating qualifiers throughout the card.
 - title: one concrete idea in 4–8 words.
+- For a finite list, title the shared subject of the whole list. Do not mislabel every entry as packing, finance, transit, or another category taken from only the first tip.
 - summary: one sentence, at most 35 words.
 - keyTakeaways: 1–5 distinct points, each at most 24 words. Preserve finite lists exactly as described above; otherwise prefer 2–3 points. Do not restate the summary.
 - relevanceReason: one general sentence, at most 25 words, explaining when this knowledge could be useful. Do not invent personal context.
@@ -40,10 +44,12 @@ export const LEARNING_CARD_RESEARCH_SYSTEM_PROMPT = `Research and verify the use
 
 SOURCE BOUNDARY:
 - The source card and source materials show what Curio actually extracted. Never claim missing details came from the creator.
+- Treat the full Reel transcript and timestamped visual evidence as the account of the Reel. Use its caption only for secondary framing, never as a replacement for the actual list or lesson.
 - Ignore promotional calls to follow, like, subscribe, or view more content. Do not spend findings validating the caption, the creator's positioning, or the existence of a post.
 
 RESEARCH MODES:
 - Use source_validation when substantive source ideas are available. Research each important claim or named mechanism and preserve the order of a finite list.
+- In source_validation, when sourceStructure.promisedListCount is present and sourceStructure.listEntriesAvailable is true, return exactly that many findings up to five: one finding for each source list entry, in the same order. Explain and validate that entry without merging it with another tip.
 - Use independent_supplement when the source announces a numbered or named list but the actual entries are unavailable. The overview must say the original entries were not accessible and the findings are independently researched, not a reconstruction.
 - In independent_supplement mode, match the promised list count up to five. Make every finding a distinct, practical, authoritative tip about the subject—not an explanation of the evidence gap.
 - When sourceStructure.requiredFindingAngles is non-empty, create exactly one finding for each angle in the listed order. Do not omit, merge, replace, or repeat an angle.
@@ -80,6 +86,25 @@ const TRAVEL_RESEARCH_ANGLES = [
   "local etiquette, safety, or disruption planning",
 ] as const;
 
+const SOURCE_EVIDENCE_PRIORITY: Record<SourceMaterial["origin"], number> = {
+  instagram_browser_transcription: 0,
+  instagram_browser_visual_analysis: 1,
+  instagram_public_embed_transcription: 2,
+  openai_transcription: 3,
+  user_supplied: 4,
+  instagram_browser_caption: 5,
+  instagram_public_embed_caption: 6,
+  openai_web_search: 7,
+  demo_fixture: 8,
+};
+
+export function prioritizeSourceMaterials(sourceMaterials: SourceMaterial[]): SourceMaterial[] {
+  return sourceMaterials
+    .map((material, index) => ({ material, index }))
+    .sort((left, right) => SOURCE_EVIDENCE_PRIORITY[left.material.origin] - SOURCE_EVIDENCE_PRIORITY[right.material.origin] || left.index - right.index)
+    .map(({ material }) => material);
+}
+
 export function detectPromisedListCount(sourceMaterials: SourceMaterial[]): number | null {
   const text = sourceMaterials.map((material) => material.text).join("\n").normalize("NFKC");
   const match = text.match(/\b(2|3|4|5|two|three|four|five)\s+(?:(?:practical|quick|essential|important|simple|best)\s+)?(?:tips|ways|steps|ideas|lessons|mistakes|rules|recommendations|things)\b/iu);
@@ -91,12 +116,18 @@ export function detectPromisedListCount(sourceMaterials: SourceMaterial[]): numb
 export function detectSupplementResearchAngles(sourceMaterials: SourceMaterial[]): string[] {
   const promisedListCount = detectPromisedListCount(sourceMaterials);
   if (!promisedListCount) return [];
+  if (sourceMaterials.some((material) => material.kind === "transcript" || material.kind === "visible_text")) return [];
   const text = sourceMaterials.map((material) => material.text).join("\n").normalize("NFKC");
   const isBroadTravelTopic = /\b(?:travel|trip|visit|vacation|itinerary|tourism|tourist)\b/iu.test(text);
   return isBroadTravelTopic ? TRAVEL_RESEARCH_ANGLES.slice(0, promisedListCount) : [];
 }
 
+export function hasDetailedSourceEvidence(sourceMaterials: SourceMaterial[]): boolean {
+  return sourceMaterials.some((material) => material.kind === "transcript" || material.kind === "visible_text");
+}
+
 export function buildLearningCardPrompt(input: PromptInput): string {
+  const prioritizedMaterials = prioritizeSourceMaterials(input.sourceMaterials);
   return [
     `PROMPT VERSION: ${LEARNING_CARD_PROMPT_VERSION}`,
     "",
@@ -106,8 +137,9 @@ export function buildLearningCardPrompt(input: PromptInput): string {
       caution: input.accessLevel === "partial"
         ? "Only the listed channels were available. The complete visual/video meaning may be missing."
         : "Use only the listed source channels.",
-      promisedListCount: detectPromisedListCount(input.sourceMaterials),
-      materials: input.sourceMaterials,
+      evidenceOrder: "Primary Reel transcript, then timestamped Reel visuals, then other transcripts/user evidence, then captions and web-page text.",
+      promisedListCount: detectPromisedListCount(prioritizedMaterials),
+      materials: prioritizedMaterials,
     }, null, 2),
     "",
     "USER CONTEXT:",

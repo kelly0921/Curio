@@ -278,13 +278,16 @@ async function submitForm(form: FormData): Promise<{ item: LearningItem; duplica
 
 export async function saveLink(
   sourceUrl: string,
-  options: { context?: string | null; intent?: Intent } = {},
+  options: { context?: string | null; intent?: Intent; publicMediaUrls?: string[] } = {},
 ): Promise<{ item: LearningItem; duplicate: boolean }> {
   const form = new FormData();
   form.append('sourceType', 'external_url');
   form.append('sourceUrl', sourceUrl.trim());
   form.append('intent', options.intent ?? 'remember');
   if (options.context?.trim()) form.append('sourceCaption', options.context.trim());
+  if (options.publicMediaUrls?.length) {
+    form.append('publicMediaUrls', JSON.stringify([...new Set(options.publicMediaUrls)].slice(0, 30)));
+  }
   return submitForm(form);
 }
 

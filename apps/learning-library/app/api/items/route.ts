@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import type { BrowserWorker } from "@cloudflare/puppeteer";
 import { ZodError } from "zod";
 import { OpenAILearningServices } from "@/lib/ai/services";
 import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
@@ -12,6 +14,10 @@ import {
   InstagramPublicEmbedRetriever,
   PublicSourceRetrieverChain,
 } from "@/lib/retrieval/public-source";
+import {
+  CloudflareInstagramReelCapture,
+  InstagramFullReelRetriever,
+} from "@/lib/retrieval/instagram-reel";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +28,16 @@ function errorResponse(request: Request, code: string, message: string, status: 
 function openAIServices(): OpenAILearningServices | null {
   if (!process.env.OPENAI_API_KEY?.trim()) return null;
   return new OpenAILearningServices();
+}
+
+async function cloudflareBrowserWorker(): Promise<BrowserWorker | null> {
+  try {
+    const { env } = await getCloudflareContext({ async: true });
+    return (env as CloudflareEnv & { BROWSER?: BrowserWorker }).BROWSER ?? null;
+  } catch {
+    // Local Next.js development does not have a Browser Rendering binding.
+    return null;
+  }
 }
 
 export async function GET(request: Request) {
@@ -61,8 +77,14 @@ export async function POST(request: Request) {
     const input = parseIngestionForm(await request.formData());
     const repository = await getLearningItemRepository();
     const services = openAIServices();
+    const browserWorker = services ? await cloudflareBrowserWorker() : null;
     const retriever = services
       ? new PublicSourceRetrieverChain([
+        ...(browserWorker ? [new InstagramFullReelRetriever(
+          new CloudflareInstagramReelCapture(browserWorker),
+          services,
+          services,
+        )] : []),
         ...(experimentalInstagramEmbedEnabled() ? [new InstagramPublicEmbedRetriever(services)] : []),
         services,
       ])

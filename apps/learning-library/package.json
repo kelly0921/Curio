@@ -24,6 +24,7 @@
     "zod": "4.1.12"
   },
   "devDependencies": {
+    "@cloudflare/puppeteer": "^1.1.0",
     "@cloudflare/workers-types": "5.20260817.1",
     "@types/node": "^24.0.0",
     "@types/react": "^19.1.0",

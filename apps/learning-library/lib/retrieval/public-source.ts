@@ -1,5 +1,6 @@
 import type {
   MediaTranscriber,
+  PublicSourceRetrievalHints,
   PublicSourceRetrievalResult,
   PublicSourceRetriever,
 } from "../ai/services";
@@ -252,12 +253,12 @@ export class InstagramPublicEmbedRetriever implements PublicSourceRetriever {
 export class PublicSourceRetrieverChain implements PublicSourceRetriever {
   constructor(private readonly retrievers: PublicSourceRetriever[]) {}
 
-  async retrieve(sourceUrl: string): Promise<PublicSourceRetrievalResult> {
+  async retrieve(sourceUrl: string, hints?: PublicSourceRetrievalHints): Promise<PublicSourceRetrievalResult> {
     const consultedUrls = new Set<string>();
     let lastModel = "public-source-retrieval";
     for (const retriever of this.retrievers) {
       try {
-        const result = await retriever.retrieve(sourceUrl);
+        const result = await retriever.retrieve(sourceUrl, hints);
         for (const url of result.consultedUrls) consultedUrls.add(url);
         lastModel = result.model;
         if (result.materials.length) return { ...result, consultedUrls: [...consultedUrls] };

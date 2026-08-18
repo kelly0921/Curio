@@ -24,12 +24,26 @@ const fieldsSchema = z.object({
   creator: z.string().trim().max(200).nullable(),
   sourceCaption: z.string().trim().max(12_000).nullable(),
   extractedVisualText: z.string().trim().max(20_000).nullable(),
+  publicMediaUrls: z.array(z.string().url().max(4_000)).max(30),
   intent: intentSchema,
 }).strict();
 
 export class IngestionValidationError extends Error {
   constructor(public readonly code: string, message: string, public readonly status = 400) {
     super(message);
+  }
+}
+
+function parsePublicMediaUrls(value: FormDataEntryValue | null): string[] {
+  if (typeof value !== "string" || !value.trim()) return [];
+  if (value.length > 120_000) {
+    throw new IngestionValidationError("INVALID_PUBLIC_MEDIA_HINTS", "The public media receipt was unexpectedly large.");
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === "string") : [];
+  } catch {
+    throw new IngestionValidationError("INVALID_PUBLIC_MEDIA_HINTS", "The public media receipt could not be read.");
   }
 }
 
@@ -52,7 +66,7 @@ function assertInstagramUrl(value: string): void {
   if (url.protocol !== "https:" || !supportedHost || !supportedPath) {
     throw new IngestionValidationError(
       "INVALID_INSTAGRAM_URL",
-      "Use an HTTPS Instagram Reel or post URL. The server will store it but will not scrape Instagram.",
+      "Use an HTTPS Instagram Reel or post URL.",
     );
   }
 }
@@ -96,6 +110,7 @@ export function parseIngestionForm(formData: FormData): IngestionInput {
     creator: nullableText(formData.get("creator")),
     sourceCaption: nullableText(formData.get("sourceCaption")),
     extractedVisualText: nullableText(formData.get("extractedVisualText")),
+    publicMediaUrls: parsePublicMediaUrls(formData.get("publicMediaUrls")),
     intent: nullableText(formData.get("intent")) ?? "remember",
   });
   if (!parsed.success) {
@@ -115,6 +130,16 @@ export function parseIngestionForm(formData: FormData): IngestionInput {
   if (parsed.data.sourceType === "external_url") {
     if (!parsed.data.sourceUrl) throw new IngestionValidationError("SOURCE_URL_REQUIRED", "Paste a source URL.");
     assertExternalUrl(parsed.data.sourceUrl);
+  }
+
+  if (parsed.data.publicMediaUrls.length && parsed.data.sourceUrl) {
+    const hostname = new URL(parsed.data.sourceUrl).hostname.toLowerCase();
+    if (hostname !== "instagram.com" && hostname !== "www.instagram.com" && hostname !== "instagr.am") {
+      throw new IngestionValidationError(
+        "INVALID_PUBLIC_MEDIA_HINTS",
+        "Public Reel media can only accompany an Instagram source URL.",
+      );
+    }
   }
 
   return { ...parsed.data, mediaFile };

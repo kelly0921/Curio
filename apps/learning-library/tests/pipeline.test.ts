@@ -4,6 +4,7 @@ import { MemoryLearningItemRepository } from "@/lib/data/memory-repository";
 import type { IngestionInput, LearningCard } from "@/lib/domain";
 import { LEARNING_CARD_PROMPT_VERSION } from "@/lib/ai/prompt";
 import { processLearningItem, sourceFingerprint } from "@/lib/processing/pipeline";
+import { PUBLIC_SOURCE_RETRIEVAL_VERSION } from "@/lib/retrieval/instagram-reel";
 
 const card: LearningCard = {
   title: "A grounded card",
@@ -204,6 +205,117 @@ describe("Learning Item pipeline", () => {
     expect(retried.item.card?.title).toBe("A grounded card");
     expect(retried.item.issues).toEqual([]);
     expect(retriever.retrieve).toHaveBeenCalledTimes(2);
+  });
+
+  it("upgrades an existing caption-only Reel once with primary audio and visual evidence", async () => {
+    const repository = new MemoryLearningItemRepository();
+    const analyze = vi.fn().mockResolvedValue({
+      card,
+      mode: "live_openai",
+      model: "test-analyzer",
+      promptVersion: LEARNING_CARD_PROMPT_VERSION,
+    });
+    const retriever: PublicSourceRetriever = {
+      retrieve: vi.fn().mockResolvedValue({
+        materials: [{
+          kind: "transcript",
+          label: "Full speech transcript from the public Instagram Reel",
+          text: "Tip one. Tip two. Tip three. Tip four. Tip five.",
+          origin: "instagram_browser_transcription",
+          completeness: "complete_for_channel",
+        }, {
+          kind: "visible_text",
+          label: "Timestamped visual evidence sampled across the full Reel",
+          text: "[00:03] On-screen text: Tip 1",
+          origin: "instagram_browser_visual_analysis",
+          completeness: "partial",
+        }],
+        creator: "@public_teacher",
+        model: "test-transcriber+test-vision",
+        transcriptionModel: "test-transcriber",
+        consultedUrls: ["https://www.instagram.com/reel/ABC123/"],
+      }),
+    };
+    const input: IngestionInput = {
+      sourceType: "instagram_url",
+      sourceUrl: "https://www.instagram.com/reel/ABC123/",
+      creator: null,
+      sourceCaption: "Five Japan trip tips.",
+      extractedVisualText: null,
+      intent: "remember",
+      mediaFile: null,
+    };
+
+    const captionOnly = await processLearningItem(input, {
+      repository,
+      transcriber: null,
+      analyzer: { analyze },
+    });
+    const upgraded = await processLearningItem(input, {
+      repository,
+      transcriber: null,
+      retriever,
+      analyzer: { analyze },
+    });
+    const duplicate = await processLearningItem(input, {
+      repository,
+      transcriber: null,
+      retriever,
+      analyzer: { analyze },
+    });
+
+    expect(captionOnly.item.sourceRetrievalVersion).toBeNull();
+    expect(upgraded.duplicate).toBe(false);
+    expect(upgraded.item.sourceRetrievalVersion).toBe(PUBLIC_SOURCE_RETRIEVAL_VERSION);
+    expect(upgraded.item.transcriptionModel).toBe("test-transcriber");
+    expect(upgraded.item.sourceMaterials.slice(0, 2).map((material) => material.origin)).toEqual([
+      "instagram_browser_transcription",
+      "instagram_browser_visual_analysis",
+    ]);
+    expect(duplicate.duplicate).toBe(true);
+    expect(retriever.retrieve).toHaveBeenCalledOnce();
+    expect(analyze).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses new phone-discovered media to retry a Reel after a server-only fallback", async () => {
+    const repository = new MemoryLearningItemRepository();
+    const analyze = vi.fn().mockResolvedValue({ card, mode: "live_openai", model: "test-analyzer", promptVersion: LEARNING_CARD_PROMPT_VERSION });
+    const input: IngestionInput = {
+      sourceType: "external_url",
+      sourceUrl: "https://www.instagram.com/reel/CLIENT123/",
+      creator: null,
+      sourceCaption: "Three useful tips.",
+      extractedVisualText: null,
+      intent: "remember",
+      mediaFile: null,
+    };
+    const captionOnly = await processLearningItem(input, { repository, transcriber: null, analyzer: { analyze } });
+    await repository.save({ ...captionOnly.item, sourceRetrievalVersion: PUBLIC_SOURCE_RETRIEVAL_VERSION });
+
+    const retrieve = vi.fn().mockResolvedValue({
+      materials: [{
+        kind: "transcript",
+        label: "Full speech transcript from the public Instagram Reel",
+        text: "The complete spoken tips.",
+        origin: "instagram_browser_transcription",
+        completeness: "complete_for_channel",
+      }],
+      creator: null,
+      model: "test-transcriber",
+      transcriptionModel: "test-transcriber",
+      consultedUrls: [input.sourceUrl],
+    });
+    const mediaUrls = ["https://media.cdninstagram.com/reel.mp4?efg=encoded"];
+    const retried = await processLearningItem({ ...input, publicMediaUrls: mediaUrls }, {
+      repository,
+      transcriber: null,
+      retriever: { retrieve },
+      analyzer: { analyze },
+    });
+
+    expect(retried.duplicate).toBe(false);
+    expect(retried.item.transcript).toBe("The complete spoken tips.");
+    expect(retrieve).toHaveBeenCalledWith(input.sourceUrl, { publicMediaUrls: mediaUrls });
   });
 
   it("returns the existing item when identical media is submitted twice", async () => {

@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CurioBrand } from '@/components/curio-brand';
+import { InstagramMediaDiscovery } from '@/components/instagram-media-discovery';
 import { colors, fonts } from '@/constants/curio-theme';
 import { CurioApiError, saveLink, saveSharedMedia } from '@/lib/curio-api';
 import { type IncomingSharePayload, parseIncomingShare } from '@/lib/incoming-share';
@@ -33,11 +34,22 @@ const useCurioIncomingShare = (
 
 const progressCopy = ['Receiving your find', 'Checking the source', 'Finding the useful signal', 'Putting it in the right place'];
 
+function isInstagramReel(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return ['instagram.com', 'www.instagram.com', 'instagr.am'].includes(url.hostname.toLowerCase())
+      && /^\/(?:reel|reels)\/[A-Za-z0-9_-]+/u.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 export default function HandleShareScreen() {
   const { clearSharedPayloads, error: shareError, isResolving, resolvedSharedPayloads, sharedPayloads } = useCurioIncomingShare();
   const [stage, setStage] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
   const started = useRef(false);
+  const mediaUrls = useRef<string[]>([]);
   const incoming = useMemo(
     () => parseIncomingShare([...sharedPayloads, ...resolvedSharedPayloads]),
     [resolvedSharedPayloads, sharedPayloads],
@@ -52,11 +64,21 @@ export default function HandleShareScreen() {
     if (isResolving || started.current || (!incoming.url && !incoming.media)) return;
     started.current = true;
 
-    const operation = incoming.url
-      ? saveLink(incoming.url, { context: incoming.context })
-      : saveSharedMedia(incoming.media!);
+    const operation = async () => {
+      if (incoming.url && isInstagramReel(incoming.url) && mediaUrls.current.length === 0) {
+        for (let attempt = 0; attempt < 20 && mediaUrls.current.length === 0; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+      }
+      if (incoming.url && isInstagramReel(incoming.url) && mediaUrls.current.length) {
+        await new Promise((resolve) => setTimeout(resolve, 1_200));
+      }
+      return incoming.url
+        ? saveLink(incoming.url, { context: incoming.context, publicMediaUrls: mediaUrls.current })
+        : saveSharedMedia(incoming.media!);
+    };
 
-    void operation.then((result) => {
+    void operation().then((result) => {
       clearSharedPayloads();
       router.replace({ pathname: '/item/[id]', params: { id: result.item.id } });
     }).catch((caught) => {
@@ -69,6 +91,12 @@ export default function HandleShareScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <InstagramMediaDiscovery
+        onMediaUrls={(incomingUrls) => {
+          mediaUrls.current = [...new Set([...mediaUrls.current, ...incomingUrls])].slice(0, 30);
+        }}
+        sourceUrl={incoming.url ?? ''}
+      />
       <View style={styles.top}><CurioBrand compact /></View>
       <View style={styles.body}>
         {problem ? (

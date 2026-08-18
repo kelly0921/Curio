@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CurioBrand } from '@/components/curio-brand';
+import { InstagramMediaDiscovery } from '@/components/instagram-media-discovery';
 import { colors, fonts } from '@/constants/curio-theme';
 import { CurioApiError, saveDemo, saveLink } from '@/lib/curio-api';
 
@@ -27,6 +28,16 @@ function validHttpsUrl(value: string): boolean {
   }
 }
 
+function isInstagramReel(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    return ['instagram.com', 'www.instagram.com', 'instagr.am'].includes(url.hostname.toLowerCase())
+      && /^\/(?:reel|reels)\/[A-Za-z0-9_-]+/u.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 export default function CaptureScreen() {
   const [url, setUrl] = useState('');
   const [context, setContext] = useState('');
@@ -34,6 +45,7 @@ export default function CaptureScreen() {
   const [saving, setSaving] = useState(false);
   const [stage, setStage] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const mediaUrls = useRef<string[]>([]);
 
   useEffect(() => {
     if (!saving) return;
@@ -50,7 +62,15 @@ export default function CaptureScreen() {
     setStage(0);
     setError(null);
     try {
-      const result = await saveLink(url, { context });
+      if (isInstagramReel(url) && mediaUrls.current.length === 0) {
+        for (let attempt = 0; attempt < 20 && mediaUrls.current.length === 0; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+      }
+      if (isInstagramReel(url) && mediaUrls.current.length) {
+        await new Promise((resolve) => setTimeout(resolve, 1_200));
+      }
+      const result = await saveLink(url, { context, publicMediaUrls: mediaUrls.current });
       router.replace({ pathname: '/item/[id]', params: { id: result.item.id } });
     } catch (caught) {
       setError(caught instanceof CurioApiError ? caught.message : 'Curio could not save this link.');
@@ -73,6 +93,12 @@ export default function CaptureScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <InstagramMediaDiscovery
+        onMediaUrls={(incoming) => {
+          mediaUrls.current = [...new Set([...mediaUrls.current, ...incoming])].slice(0, 30);
+        }}
+        sourceUrl={url}
+      />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.topbar}>
@@ -98,7 +124,10 @@ export default function CaptureScreen() {
               autoFocus
               editable={!saving}
               keyboardType="url"
-              onChangeText={setUrl}
+              onChangeText={(value) => {
+                mediaUrls.current = [];
+                setUrl(value);
+              }}
               onSubmitEditing={() => void submit()}
               placeholder="https://instagram.com/reel/…"
               placeholderTextColor="#999286"

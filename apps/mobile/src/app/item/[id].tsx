@@ -67,8 +67,8 @@ export default function ItemDetailScreen() {
   const originalSource = item.sourceUrl ? originalSourceLink(item.sourceUrl, item.platform) : null;
   const evidence = [
     item.sourceCaption && { label: 'Caption or supplied context', value: item.sourceCaption },
-    item.transcript && { label: 'Transcript', value: item.transcript },
-    item.extractedVisualText && { label: 'Visible text', value: item.extractedVisualText },
+    item.transcript && { label: item.platform === 'instagram' ? 'Full Reel transcript' : 'Transcript', value: item.transcript },
+    item.extractedVisualText && { label: item.platform === 'instagram' ? 'Timestamped Reel visuals' : 'Visible text', value: item.extractedVisualText },
   ].filter(Boolean) as { label: string; value: string }[];
 
   async function retryPublicRetrieval() {
