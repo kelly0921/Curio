@@ -101,6 +101,44 @@ export const learningPresentationTypeSchema = z.enum([
   "story",
 ]);
 
+export const knowledgeResourceTypeSchema = z.enum([
+  "guide",
+  "glossary",
+  "playbook",
+  "watchlist",
+]);
+
+export const saveIntentSchema = z.enum([
+  "understand",
+  "try",
+  "visit",
+  "buy",
+  "track",
+  "compare",
+  "reference",
+]);
+
+export const resourceEntryKindSchema = z.enum([
+  "insight",
+  "step",
+  "term",
+  "recommendation",
+]);
+
+export const resourceEntryStatusSchema = z.enum([
+  "active",
+  "contested",
+  "superseded",
+]);
+
+export const resourceContributionDispositionSchema = z.enum([
+  "created",
+  "enriched",
+  "supporting",
+  "updated",
+  "conflict",
+]);
+
 export const contextRecordKindSchema = z.enum([
   "goal",
   "fact",
@@ -208,6 +246,55 @@ export const learningCardSchema = z.object({
   personalization: learningPersonalizationSchema.nullable().default(null),
 }).strict();
 
+export const knowledgeResourceEntrySchema = z.object({
+  id: z.string().uuid(),
+  kind: resourceEntryKindSchema,
+  heading: z.string().min(1).max(180).nullable(),
+  detail: z.string().min(1).max(1_200),
+  sourceItemIds: z.array(z.string().uuid()).min(1).max(100),
+  research: researchFindingSchema.nullable().default(null),
+  researchedAt: isoDateTimeSchema.nullable().default(null),
+  status: resourceEntryStatusSchema.default("active"),
+  relatedEntryIds: z.array(z.string().uuid()).max(20).default([]),
+}).strict();
+
+export const resourceContributionSchema = z.object({
+  sourceItemId: z.string().uuid(),
+  disposition: resourceContributionDispositionSchema,
+  addedEntryIds: z.array(z.string().uuid()).max(50),
+  supportedEntryIds: z.array(z.string().uuid()).max(50),
+  updatedEntryIds: z.array(z.string().uuid()).max(50).default([]),
+  conflictingEntryIds: z.array(z.string().uuid()).max(50).default([]),
+  summary: z.string().min(1).max(500),
+  decisionMode: z.enum(["ai", "deterministic"]).default("deterministic"),
+  decisionConfidence: z.number().min(0).max(1).default(1),
+  decisionReason: z.string().min(1).max(800).nullable().default(null),
+  mergeModel: z.string().min(1).max(120).nullable().default(null),
+  mergePromptVersion: z.string().min(1).max(120).nullable().default(null),
+  createdAt: isoDateTimeSchema,
+}).strict();
+
+export const knowledgeResourceSchema = z.object({
+  id: z.string().uuid(),
+  profileId: z.string().uuid(),
+  resourceType: knowledgeResourceTypeSchema,
+  domain: contextDomainSchema,
+  intent: saveIntentSchema.default("understand"),
+  canonicalTopic: z.string().min(1).max(160),
+  title: z.string().min(1).max(180),
+  summary: z.string().min(1).max(1_200),
+  entities: z.array(z.string().min(1).max(120)).max(30),
+  entries: z.array(knowledgeResourceEntrySchema).min(1).max(100),
+  sourceItemIds: z.array(z.string().uuid()).min(1).max(200),
+  contributions: z.array(resourceContributionSchema).min(1).max(200),
+  lastResearchedAt: isoDateTimeSchema.nullable(),
+  mergeModel: z.string().min(1).max(120).nullable().default(null),
+  mergePromptVersion: z.string().min(1).max(120).nullable().default(null),
+  version: z.number().int().min(1),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
 export const processingIssueSchema = z.object({
   code: z.string().min(1).max(80),
   message: z.string().min(1).max(1_000),
@@ -237,6 +324,8 @@ export const learningItemSchema = z.object({
   sourceRetrievalVersion: z.string().max(120).nullable().default(null),
   transcriptionModel: z.string().max(120).nullable(),
   issues: z.array(processingIssueSchema),
+  resourceIds: z.array(z.string().uuid()).max(10).default([]),
+  inferredIntent: saveIntentSchema.nullable().default(null),
   recommendationFeedback: recommendationFeedbackSchema.nullable().default(null),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
@@ -263,6 +352,13 @@ export type ResearchFinding = z.infer<typeof researchFindingSchema>;
 export type ResearchBrief = z.infer<typeof researchBriefSchema>;
 export type ContextDomain = z.infer<typeof contextDomainSchema>;
 export type LearningPresentationType = z.infer<typeof learningPresentationTypeSchema>;
+export type KnowledgeResourceType = z.infer<typeof knowledgeResourceTypeSchema>;
+export type SaveIntent = z.infer<typeof saveIntentSchema>;
+export type KnowledgeResourceEntry = z.infer<typeof knowledgeResourceEntrySchema>;
+export type ResourceEntryStatus = z.infer<typeof resourceEntryStatusSchema>;
+export type ResourceContribution = z.infer<typeof resourceContributionSchema>;
+export type ResourceContributionDisposition = z.infer<typeof resourceContributionDispositionSchema>;
+export type KnowledgeResource = z.infer<typeof knowledgeResourceSchema>;
 export type ContextRecordKind = z.infer<typeof contextRecordKindSchema>;
 export type ContextConnection = z.infer<typeof contextConnectionSchema>;
 export type ContextRecord = z.infer<typeof contextRecordSchema>;

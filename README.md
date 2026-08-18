@@ -2,6 +2,8 @@
 
 Curio turns useful social videos and links into organized knowledge: detailed source notes, source-validated research, and personalized priorities based on connected context.
 
+The long-term product direction is to treat saved posts as input sources and turn them into deduplicated living resources rather than accumulating one card per source. See [Curio product direction](docs/PRODUCT_DIRECTION.md).
+
 ## Repository layout
 
 - `apps/mobile` — Expo mobile-first capture, library, source viewer, and For You experience.

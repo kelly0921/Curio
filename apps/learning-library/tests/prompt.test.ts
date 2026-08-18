@@ -4,6 +4,7 @@ import {
   detectNamedTakeawayTargets,
   detectPromisedListCount,
   detectSupplementResearchAngles,
+  KNOWLEDGE_RESOURCE_MERGE_SYSTEM_PROMPT,
   LEARNING_CARD_RESEARCH_SYSTEM_PROMPT,
   LEARNING_CARD_SYSTEM_PROMPT,
   requiresEntityAlignedSources,
@@ -195,5 +196,14 @@ describe("Learning Card prompt boundary", () => {
       origin: "instagram_browser_transcription",
       completeness: "complete_for_channel",
     }])).toEqual([]);
+  });
+
+  it("keeps resource matching narrow and makes disagreements visible", () => {
+    expect(KNOWLEDGE_RESOURCE_MERGE_SYSTEM_PROMPT).toContain("same durable subject and user job");
+    expect(KNOWLEDGE_RESOURCE_MERGE_SYSTEM_PROMPT).toContain("HSA and infinite banking remain separate");
+    expect(KNOWLEDGE_RESOURCE_MERGE_SYSTEM_PROMPT).toContain("Never merge everything in a broad domain");
+    expect(KNOWLEDGE_RESOURCE_MERGE_SYSTEM_PROMPT).toContain("Classify every incoming takeaway exactly once");
+    expect(KNOWLEDGE_RESOURCE_MERGE_SYSTEM_PROMPT).toContain("both versions should remain visible");
+    expect(KNOWLEDGE_RESOURCE_MERGE_SYSTEM_PROMPT).toContain("Choose uncertain");
   });
 });

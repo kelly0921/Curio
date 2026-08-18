@@ -5,6 +5,8 @@ The Expo app is Curio's primary capture and browsing experience. It keeps the ex
 ## What works in this iteration
 
 - Native React Native saved-library UI with search and automatic topic collections
+- Living guides, glossaries, playbooks, and watchlists that consolidate related saves while retaining source provenance
+- A secondary source archive for opening each original Reel or card
 - One-field link capture with optional source context
 - Incoming iOS Share Extension and Android share intents through `expo-sharing`
 - Automatic handling for a shared URL or a shared audio/video file

@@ -1,6 +1,11 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { learningItemSchema, type LearningItem } from "../domain";
-import type { LearningItemRepository } from "./repository";
+import {
+  knowledgeResourceSchema,
+  learningItemSchema,
+  type KnowledgeResource,
+  type LearningItem,
+} from "../domain";
+import type { CurioRepository } from "./repository";
 
 interface LearningItemRow {
   id: string;
@@ -20,7 +25,7 @@ export function createSupabaseServerFetch(secretKey: string, fetchImpl: typeof f
   };
 }
 
-export class SupabaseLearningItemRepository implements LearningItemRepository {
+export class SupabaseLearningItemRepository implements CurioRepository {
   private readonly client: SupabaseClient;
 
   constructor(url: string, secretKey: string) {
@@ -84,5 +89,43 @@ export class SupabaseLearningItemRepository implements LearningItemRepository {
     }, { onConflict: "id" }).select("record_json").single();
     if (result.error) throw new Error(`Supabase save learning item failed: ${result.error.message}`);
     return learningItemSchema.parse(result.data.record_json);
+  }
+
+  async listResources(profileId: string): Promise<KnowledgeResource[]> {
+    const result = await this.client
+      .from("knowledge_resource")
+      .select("id,record_json")
+      .eq("profile_id", profileId)
+      .order("updated_at", { ascending: false });
+    if (result.error) throw new Error(`Supabase list knowledge resources failed: ${result.error.message}`);
+    return (result.data ?? []).map((row) => knowledgeResourceSchema.parse(row.record_json));
+  }
+
+  async findResourceById(id: string): Promise<KnowledgeResource | null> {
+    const result = await this.client
+      .from("knowledge_resource")
+      .select("id,record_json")
+      .eq("id", id)
+      .maybeSingle();
+    if (result.error) throw new Error(`Supabase find knowledge resource failed: ${result.error.message}`);
+    return result.data ? knowledgeResourceSchema.parse(result.data.record_json) : null;
+  }
+
+  async saveResource(resource: KnowledgeResource): Promise<KnowledgeResource> {
+    const validated = knowledgeResourceSchema.parse(resource);
+    const result = await this.client.from("knowledge_resource").upsert({
+      id: validated.id,
+      profile_id: validated.profileId,
+      resource_type: validated.resourceType,
+      domain: validated.domain,
+      canonical_topic: validated.canonicalTopic,
+      title: validated.title,
+      source_count: validated.sourceItemIds.length,
+      record_json: validated,
+      created_at: validated.createdAt,
+      updated_at: validated.updatedAt,
+    }, { onConflict: "id" }).select("record_json").single();
+    if (result.error) throw new Error(`Supabase save knowledge resource failed: ${result.error.message}`);
+    return knowledgeResourceSchema.parse(result.data.record_json);
   }
 }

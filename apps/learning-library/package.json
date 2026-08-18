@@ -8,9 +8,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --configLoader runner",
     "build": "next build",
-    "build:cloudflare": "opennextjs-cloudflare build",
+    "build:cloudflare": "node build-cloudflare.mjs",
     "preview:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -- --keep-vars",
+    "deploy:cloudflare": "node build-cloudflare.mjs && opennextjs-cloudflare deploy -- --keep-vars",
     "cf:typegen": "wrangler types --env-interface CloudflareEnv --include-runtime false cloudflare-env.d.ts",
     "cf:dry-run": "opennextjs-cloudflare build && wrangler deploy --dry-run --keep-vars"
   },

@@ -15,11 +15,13 @@ export default function RootLayout() {
           headerShown: false,
         }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="sources" />
         <Stack.Screen name="priorities" options={{ animation: 'fade' }} />
         <Stack.Screen name="settings" />
         <Stack.Screen name="capture" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         <Stack.Screen name="handle-share" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="item/[id]" />
+        <Stack.Screen name="resource/[id]" />
       </Stack>
     </SafeAreaProvider>
   );

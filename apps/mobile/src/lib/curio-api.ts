@@ -17,6 +17,10 @@ export type Intent = 'remember' | 'try' | 'verify' | 'reference' | 'use_for_cont
 export type ContextDomain = 'finance' | 'travel' | 'food' | 'ai_work' | 'career' | 'health' | 'home' | 'relationships' | 'general';
 export type ContextRecordKind = 'goal' | 'fact' | 'preference' | 'constraint' | 'plan' | 'habit' | 'resource';
 export type LearningPresentationType = 'named_list' | 'ranked_list' | 'how_to' | 'explainer' | 'recommendation' | 'comparison' | 'news_update' | 'story';
+export type KnowledgeResourceType = 'guide' | 'glossary' | 'playbook' | 'watchlist';
+export type SaveIntent = 'understand' | 'try' | 'visit' | 'buy' | 'track' | 'compare' | 'reference';
+export type ResourceEntryStatus = 'active' | 'contested' | 'superseded';
+export type ResourceContributionDisposition = 'created' | 'enriched' | 'supporting' | 'updated' | 'conflict';
 
 export interface ContextConnection {
   id: string;
@@ -128,11 +132,68 @@ export interface LearningItem {
   intent: Intent;
   card: LearningCard | null;
   issues: { code: string; message: string; recoverable: boolean }[];
+  resourceIds?: string[];
+  inferredIntent?: SaveIntent | null;
   recommendationFeedback: {
     state: 'done' | 'later' | 'not_relevant';
     updatedAt: string;
     revisitAt: string | null;
   } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnowledgeResourceEntry {
+  id: string;
+  kind: 'insight' | 'step' | 'term' | 'recommendation';
+  heading: string | null;
+  detail: string;
+  sourceItemIds: string[];
+  research: {
+    topic: string;
+    verdict: 'confirmed' | 'supported_with_context' | 'corrected' | 'not_verified' | 'opinion';
+    explanation: string;
+    correction: string | null;
+    sources: { title: string; publisher: string; url: string }[];
+  } | null;
+  researchedAt: string | null;
+  status?: ResourceEntryStatus;
+  relatedEntryIds?: string[];
+}
+
+export interface ResourceContribution {
+  sourceItemId: string;
+  disposition: ResourceContributionDisposition;
+  addedEntryIds: string[];
+  supportedEntryIds: string[];
+  updatedEntryIds?: string[];
+  conflictingEntryIds?: string[];
+  summary: string;
+  decisionMode?: 'ai' | 'deterministic';
+  decisionConfidence?: number;
+  decisionReason?: string | null;
+  mergeModel?: string | null;
+  mergePromptVersion?: string | null;
+  createdAt: string;
+}
+
+export interface KnowledgeResource {
+  id: string;
+  profileId: string;
+  resourceType: KnowledgeResourceType;
+  domain: ContextDomain;
+  intent?: SaveIntent;
+  canonicalTopic: string;
+  title: string;
+  summary: string;
+  entities: string[];
+  entries: KnowledgeResourceEntry[];
+  sourceItemIds: string[];
+  contributions: ResourceContribution[];
+  lastResearchedAt: string | null;
+  mergeModel?: string | null;
+  mergePromptVersion?: string | null;
+  version: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -149,12 +210,27 @@ interface ItemsEnvelope {
 
 interface ItemEnvelope {
   ok: true;
-  data: { item: LearningItem; duplicate: boolean };
+  data: {
+    item: LearningItem;
+    duplicate: boolean;
+    resource?: KnowledgeResource | null;
+    resourceUpdate?: ResourceContribution | null;
+  };
 }
 
 interface ContextEnvelope {
   ok: true;
   data: { context: ContextSnapshot };
+}
+
+interface ResourcesEnvelope {
+  ok: true;
+  data: { resources: KnowledgeResource[] };
+}
+
+interface ResourceEnvelope {
+  ok: true;
+  data: { resource: KnowledgeResource; sources: LearningItem[] };
 }
 
 interface FeedbackEnvelope {
@@ -200,6 +276,7 @@ export function getCurioApiUrl(): string {
 }
 
 let itemSnapshot: LearningItem[] = [];
+let resourceSnapshot: KnowledgeResource[] = [];
 
 function remember(item: LearningItem): LearningItem {
   itemSnapshot = [item, ...itemSnapshot.filter((entry) => entry.id !== item.id)];
@@ -228,7 +305,7 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const personalAccessToken = process.env.EXPO_PUBLIC_CURIO_API_TOKEN?.trim();
   if (personalAccessToken) headers.set('Authorization', `Bearer ${personalAccessToken}`);
   try {
-    return await fetch(`${getCurioApiUrl()}${path}`, { ...init, headers, signal: controller.signal });
+    return await fetch(`${getCurioApiUrl()}${path}`, { ...init, headers, signal: controller.signal, cache: 'no-store' });
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw new CurioApiError('REQUEST_TIMEOUT', 'Curio is still waiting on the processor. Try again in a moment.');
@@ -250,6 +327,19 @@ export async function listLearningItems(): Promise<LearningItem[]> {
   const body = await readEnvelope<ItemsEnvelope>(await apiFetch('/api/items', { headers: { Accept: 'application/json' } }));
   itemSnapshot = body.data.items;
   return body.data.items;
+}
+
+export async function listKnowledgeResources(): Promise<KnowledgeResource[]> {
+  const body = await readEnvelope<ResourcesEnvelope>(await apiFetch('/api/resources', { headers: { Accept: 'application/json' } }));
+  resourceSnapshot = body.data.resources;
+  return body.data.resources;
+}
+
+export async function getKnowledgeResource(id: string): Promise<{ resource: KnowledgeResource; sources: LearningItem[] } | null> {
+  const cached = resourceSnapshot.find((resource) => resource.id === id);
+  const body = await readEnvelope<ResourceEnvelope>(await apiFetch(`/api/resources/${encodeURIComponent(id)}`, { headers: { Accept: 'application/json' } }));
+  resourceSnapshot = [body.data.resource, ...resourceSnapshot.filter((resource) => resource.id !== id)];
+  return { resource: cached ? { ...cached, ...body.data.resource } : body.data.resource, sources: body.data.sources };
 }
 
 export async function getPersonalContext(): Promise<ContextSnapshot> {
@@ -274,15 +364,30 @@ export async function updateRecommendationFeedback(
   return remember(body.data.item);
 }
 
-async function submitForm(form: FormData): Promise<{ item: LearningItem; duplicate: boolean }> {
+export interface CaptureResult {
+  item: LearningItem;
+  duplicate: boolean;
+  resource: KnowledgeResource | null;
+  resourceUpdate: ResourceContribution | null;
+}
+
+async function submitForm(form: FormData): Promise<CaptureResult> {
   const body = await readEnvelope<ItemEnvelope>(await apiFetch('/api/items', { method: 'POST', body: form }));
-  return { item: remember(body.data.item), duplicate: body.data.duplicate };
+  if (body.data.resource) {
+    resourceSnapshot = [body.data.resource, ...resourceSnapshot.filter((resource) => resource.id !== body.data.resource?.id)];
+  }
+  return {
+    item: remember(body.data.item),
+    duplicate: body.data.duplicate,
+    resource: body.data.resource ?? null,
+    resourceUpdate: body.data.resourceUpdate ?? null,
+  };
 }
 
 export async function saveLink(
   sourceUrl: string,
   options: { context?: string | null; intent?: Intent; publicMediaUrls?: string[] } = {},
-): Promise<{ item: LearningItem; duplicate: boolean }> {
+): Promise<CaptureResult> {
   const form = new FormData();
   form.append('sourceType', 'external_url');
   form.append('sourceUrl', sourceUrl.trim());
@@ -298,7 +403,7 @@ export async function saveSharedMedia(media: {
   uri: string;
   name?: string | null;
   mimeType?: string | null;
-}): Promise<{ item: LearningItem; duplicate: boolean }> {
+}): Promise<CaptureResult> {
   const name = media.name || media.uri.split('/').pop() || 'shared-video.mp4';
   const file = { uri: media.uri, name, type: media.mimeType || 'video/mp4' };
   const form = new FormData();
@@ -308,7 +413,7 @@ export async function saveSharedMedia(media: {
   return submitForm(form);
 }
 
-export async function saveDemo(): Promise<{ item: LearningItem; duplicate: boolean }> {
+export async function saveDemo(): Promise<CaptureResult> {
   const form = new FormData();
   form.append('sourceType', 'demo_fixture');
   form.append('intent', 'remember');

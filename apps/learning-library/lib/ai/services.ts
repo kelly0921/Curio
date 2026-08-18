@@ -9,17 +9,23 @@ import {
   learningNoteSchema,
   researchFindingSchema,
   researchSourceSchema,
+  saveIntentSchema,
   type AccessLevel,
+  type KnowledgeResource,
   type LearningCard,
+  type LearningItem,
   type ResearchFinding,
   type SourceMaterial,
 } from "../domain";
 import {
+  buildKnowledgeResourceMergePrompt,
   buildLearningCardPrompt,
   detectNamedTakeawayTargets,
   detectPromisedListCount,
   detectSupplementResearchAngles,
   hasDetailedSourceEvidence,
+  KNOWLEDGE_RESOURCE_MERGE_PROMPT_VERSION,
+  KNOWLEDGE_RESOURCE_MERGE_SYSTEM_PROMPT,
   LEARNING_CARD_PROMPT_VERSION,
   LEARNING_CARD_RESEARCH_PROMPT_VERSION,
   LEARNING_CARD_RESEARCH_SYSTEM_PROMPT,
@@ -65,6 +71,24 @@ const reelFrameObservationSchema = z.object({
 
 const reelFrameEvidenceSchema = z.object({
   observations: z.array(reelFrameObservationSchema).max(48),
+}).strict();
+
+const resourcePointDecisionSchema = z.object({
+  incomingIndex: z.number().int().min(0).max(4),
+  action: z.enum(["new", "supports", "conflicts", "updates"]),
+  existingEntryId: z.string().uuid().nullable(),
+  reason: z.string().min(1).max(500),
+}).strict();
+
+const resourceMergeDecisionSchema = z.object({
+  matchDecision: z.enum(["merge", "create", "uncertain"]),
+  matchedResourceId: z.string().uuid().nullable(),
+  confidence: z.number().min(0).max(1),
+  reason: z.string().min(1).max(800),
+  inferredIntent: saveIntentSchema,
+  synthesizedTitle: z.string().min(1).max(180).nullable(),
+  synthesizedSummary: z.string().min(1).max(1_200).nullable(),
+  pointDecisions: z.array(resourcePointDecisionSchema).min(1).max(5),
 }).strict();
 
 export interface TranscriptionResult {
@@ -124,6 +148,15 @@ export interface PublicSourceRetriever {
   retrieve(sourceUrl: string, hints?: PublicSourceRetrievalHints): Promise<PublicSourceRetrievalResult>;
 }
 
+export type KnowledgeResourceMergeResult = z.infer<typeof resourceMergeDecisionSchema> & {
+  model: string;
+  promptVersion: string;
+};
+
+export interface KnowledgeResourceMerger {
+  decide(input: { item: LearningItem; candidates: KnowledgeResource[] }): Promise<KnowledgeResourceMergeResult>;
+}
+
 export class MissingOpenAIConfigurationError extends Error {
   readonly code = "OPENAI_NOT_CONFIGURED";
 }
@@ -162,7 +195,7 @@ function consultedUrlsFrom(response: Awaited<ReturnType<OpenAI["responses"]["par
   return [...urls];
 }
 
-export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyzer, LearningCardAnalyzer, LearningCardResearcher, PublicSourceRetriever {
+export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyzer, LearningCardAnalyzer, LearningCardResearcher, PublicSourceRetriever, KnowledgeResourceMerger {
   private readonly client: OpenAI;
   private readonly transcriptionModel: string;
   private readonly analysisModel: string;
@@ -314,6 +347,57 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
       mode: "live_openai",
       model: response.model,
       promptVersion: LEARNING_CARD_PROMPT_VERSION,
+    };
+  }
+
+  async decide(input: { item: LearningItem; candidates: KnowledgeResource[] }): Promise<KnowledgeResourceMergeResult> {
+    if (!input.item.card) throw new Error("A Learning Card is required for resource matching.");
+    if (!input.candidates.length) throw new Error("At least one resource candidate is required for resource matching.");
+    const response = await this.client.responses.parse({
+      model: this.analysisModel,
+      instructions: KNOWLEDGE_RESOURCE_MERGE_SYSTEM_PROMPT,
+      input: buildKnowledgeResourceMergePrompt(input),
+      text: { format: zodTextFormat(resourceMergeDecisionSchema, "knowledge_resource_merge") },
+    });
+    if (response.status !== "completed" || !response.output_parsed) {
+      throw new Error(`OpenAI resource matching did not complete (${response.status ?? "unknown"}).`);
+    }
+
+    const parsed = resourceMergeDecisionSchema.parse(response.output_parsed);
+    const expectedIndexes = input.item.card.keyTakeaways.map((_takeaway, index) => index);
+    const actualIndexes = parsed.pointDecisions.map((point) => point.incomingIndex).sort((left, right) => left - right);
+    if (actualIndexes.length !== expectedIndexes.length || actualIndexes.some((value, index) => value !== expectedIndexes[index])) {
+      throw new Error("OpenAI resource matching did not classify every incoming takeaway exactly once.");
+    }
+    const matched = parsed.matchedResourceId
+      ? input.candidates.find((candidate) => candidate.id === parsed.matchedResourceId)
+      : null;
+    if (parsed.matchDecision === "merge" && !matched) {
+      throw new Error("OpenAI resource matching selected a resource outside the supplied candidates.");
+    }
+    if (parsed.matchDecision !== "merge" && parsed.matchedResourceId !== null) {
+      throw new Error("OpenAI resource matching returned a resource for a non-merge decision.");
+    }
+    if (parsed.matchDecision === "merge" && (!parsed.synthesizedTitle || !parsed.synthesizedSummary)) {
+      throw new Error("OpenAI resource matching omitted the combined resource synthesis.");
+    }
+    if (parsed.matchDecision !== "merge" && (parsed.synthesizedTitle !== null || parsed.synthesizedSummary !== null)) {
+      throw new Error("OpenAI resource matching synthesized a resource for a non-merge decision.");
+    }
+
+    const matchedEntryIds = new Set(matched?.entries.map((entry) => entry.id) ?? []);
+    for (const point of parsed.pointDecisions) {
+      if (point.action === "new" && point.existingEntryId !== null) {
+        throw new Error("A new resource point cannot reference an existing entry.");
+      }
+      if (point.action !== "new" && (!point.existingEntryId || !matchedEntryIds.has(point.existingEntryId))) {
+        throw new Error("A related resource point referenced an entry outside the matched resource.");
+      }
+    }
+    return {
+      ...parsed,
+      model: response.model,
+      promptVersion: KNOWLEDGE_RESOURCE_MERGE_PROMPT_VERSION,
     };
   }
 

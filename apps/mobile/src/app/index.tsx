@@ -15,33 +15,34 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CurioBottomBar } from '@/components/curio-bottom-bar';
 import { CurioBrand } from '@/components/curio-brand';
-import { SavedTile } from '@/components/saved-tile';
+import { ResourceTile } from '@/components/resource-tile';
 import { colors, fonts } from '@/constants/curio-theme';
-import { CurioApiError, getCurioApiUrl, listLearningItems, type LearningItem } from '@/lib/curio-api';
-
-function topicKey(item: LearningItem): string {
-  return item.card?.primaryTopic?.trim().toLocaleLowerCase() || 'needs source';
-}
+import { CurioApiError, getCurioApiUrl, listKnowledgeResources, type KnowledgeResource } from '@/lib/curio-api';
 
 function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
 }
 
-function saveCountLabel(count: number): string {
-  return `${count} save${count === 1 ? '' : 's'}`;
+function resourceCountLabel(count: number): string {
+  return `${count} resource${count === 1 ? '' : 's'}`;
 }
 
-function searchableText(item: LearningItem): string {
-  return [item.card?.title, item.card?.summary, item.card?.primaryTopic, item.creator, item.platform]
-    .filter(Boolean)
-    .join(' ')
-    .toLocaleLowerCase();
+function searchableText(resource: KnowledgeResource): string {
+  return [
+    resource.title,
+    resource.summary,
+    resource.canonicalTopic,
+    resource.domain,
+    resource.resourceType,
+    ...resource.entities,
+    ...resource.entries.flatMap((entry) => [entry.heading, entry.detail]),
+  ].filter(Boolean).join(' ').toLocaleLowerCase();
 }
 
 export default function HomeScreen() {
-  const [items, setItems] = useState<LearningItem[]>([]);
+  const [resources, setResources] = useState<KnowledgeResource[]>([]);
   const [query, setQuery] = useState('');
-  const [topic, setTopic] = useState('all');
+  const [domain, setDomain] = useState('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,11 +50,10 @@ export default function HomeScreen() {
   const load = useCallback(async (pullToRefresh = false) => {
     if (pullToRefresh) setRefreshing(true);
     try {
-      const nextItems = await listLearningItems();
-      setItems(nextItems);
+      setResources(await listKnowledgeResources());
       setError(null);
     } catch (caught) {
-      setError(caught instanceof CurioApiError ? caught.message : 'Curio could not load your saves.');
+      setError(caught instanceof CurioApiError ? caught.message : 'Curio could not load your knowledge library.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -66,17 +66,17 @@ export default function HomeScreen() {
 
   const collections = useMemo(() => {
     const counts = new Map<string, number>();
-    items.forEach((item) => counts.set(topicKey(item), (counts.get(topicKey(item)) ?? 0) + 1));
+    resources.forEach((resource) => counts.set(resource.domain, (counts.get(resource.domain) ?? 0) + 1));
     return [...counts.entries()].sort((left, right) => right[1] - left[1]);
-  }, [items]);
+  }, [resources]);
 
-  const visibleItems = useMemo(() => {
+  const visibleResources = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
-    return items.filter((item) => {
-      if (topic !== 'all' && topicKey(item) !== topic) return false;
-      return !normalizedQuery || searchableText(item).includes(normalizedQuery);
+    return resources.filter((resource) => {
+      if (domain !== 'all' && resource.domain !== domain) return false;
+      return !normalizedQuery || searchableText(resource).includes(normalizedQuery);
     });
-  }, [items, query, topic]);
+  }, [domain, query, resources]);
 
   const showCollections = collections.length > 1;
   const hasQuery = Boolean(query.trim());
@@ -85,10 +85,10 @@ export default function HomeScreen() {
     <View style={styles.screen}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <FlatList
-          columnWrapperStyle={visibleItems.length > 1 ? styles.columns : undefined}
+          columnWrapperStyle={visibleResources.length > 1 ? styles.columns : undefined}
           contentContainerStyle={styles.content}
-          data={visibleItems}
-          keyExtractor={(item) => item.id}
+          data={visibleResources}
+          keyExtractor={(resource) => resource.id}
           keyboardDismissMode="on-drag"
           ListHeaderComponent={(
             <View>
@@ -101,26 +101,30 @@ export default function HomeScreen() {
 
               <View style={styles.hero}>
                 <Text style={styles.eyebrow}>MY CURIO</Text>
-                <Text style={styles.heading}>Saved</Text>
-                <Text style={styles.intro}>Everything interesting, organized into ideas you can actually find again.</Text>
+                <Text style={styles.heading}>Library</Text>
+                <Text style={styles.intro}>Your saves, merged into knowledge you can find and keep building.</Text>
                 <View style={styles.searchBox}>
                   <Text style={styles.searchIcon}>⌕</Text>
                   <TextInput
-                    accessibilityLabel="Search your saves"
+                    accessibilityLabel="Search your knowledge"
                     autoCapitalize="none"
                     onChangeText={setQuery}
-                    placeholder="Search ideas, creators, topics"
+                    placeholder="Search ideas, terms, places"
                     placeholderTextColor="#958F83"
                     returnKeyType="search"
                     style={styles.searchInput}
                     value={query}
                   />
                 </View>
+                <Pressable onPress={() => router.push('/sources')} style={styles.sourceArchiveLink}>
+                  <Text style={styles.sourceArchiveText}>View original saves</Text>
+                  <Text style={styles.sourceArchiveArrow}>→</Text>
+                </Pressable>
               </View>
 
               {error && (
                 <View style={styles.offlineBanner}>
-                  <Text style={styles.offlineTitle}>Processor not connected</Text>
+                  <Text style={styles.offlineTitle}>Knowledge library unavailable</Text>
                   <Text style={styles.offlineCopy}>{error}</Text>
                   <Text selectable style={styles.apiAddress}>{getCurioApiUrl()}</Text>
                 </View>
@@ -130,19 +134,19 @@ export default function HomeScreen() {
                 <>
                   <View style={styles.sectionHeading}>
                     <Text style={styles.sectionTitle}>Collections</Text>
-                    <Text style={styles.sectionMeta}>{collections.length} topic{collections.length === 1 ? '' : 's'}</Text>
+                    <Text style={styles.sectionMeta}>{collections.length} area{collections.length === 1 ? '' : 's'}</Text>
                   </View>
                   <ScrollView contentContainerStyle={styles.collectionRow} horizontal showsHorizontalScrollIndicator={false}>
-                    <Pressable onPress={() => setTopic('all')} style={[styles.collection, topic === 'all' && styles.collectionActive]}>
+                    <Pressable onPress={() => setDomain('all')} style={[styles.collection, domain === 'all' && styles.collectionActive]}>
                       <View style={[styles.collectionDot, { backgroundColor: colors.dark }]}><Text style={styles.collectionDotLight}>✦</Text></View>
-                      <View><Text style={styles.collectionName}>Everything</Text><Text style={styles.collectionCount}>{saveCountLabel(items.length)}</Text></View>
+                      <View><Text style={styles.collectionName}>Everything</Text><Text style={styles.collectionCount}>{resourceCountLabel(resources.length)}</Text></View>
                     </Pressable>
                     {collections.map(([key, count], index) => (
-                      <Pressable key={key} onPress={() => setTopic(key)} style={[styles.collection, topic === key && styles.collectionActive]}>
+                      <Pressable key={key} onPress={() => setDomain(key)} style={[styles.collection, domain === key && styles.collectionActive]}>
                         <View style={[styles.collectionDot, { backgroundColor: [colors.peach, colors.sage, colors.sky, colors.lilac][index % 4] }]}>
                           <Text style={styles.collectionLetter}>{label(key).slice(0, 1)}</Text>
                         </View>
-                        <View><Text numberOfLines={1} style={styles.collectionName}>{label(key)}</Text><Text style={styles.collectionCount}>{saveCountLabel(count)}</Text></View>
+                        <View><Text numberOfLines={1} style={styles.collectionName}>{label(key)}</Text><Text style={styles.collectionCount}>{resourceCountLabel(count)}</Text></View>
                       </Pressable>
                     ))}
                   </ScrollView>
@@ -151,27 +155,27 @@ export default function HomeScreen() {
 
               {(showCollections || hasQuery) && (
                 <View style={[styles.sectionHeading, styles.libraryHeading]}>
-                  <Text style={styles.sectionTitle}>{hasQuery ? 'Results' : topic === 'all' ? 'All saves' : label(topic)}</Text>
-                  <Text style={styles.sectionMeta}>{saveCountLabel(visibleItems.length)}</Text>
+                  <Text style={styles.sectionTitle}>{hasQuery ? 'Results' : domain === 'all' ? 'Living resources' : label(domain)}</Text>
+                  <Text style={styles.sectionMeta}>{resourceCountLabel(visibleResources.length)}</Text>
                 </View>
               )}
             </View>
           )}
           ListEmptyComponent={loading ? (
-            <View style={styles.loading}><ActivityIndicator color={colors.ink} /><Text style={styles.loadingText}>Opening your Curio…</Text></View>
+            <View style={styles.loading}><ActivityIndicator color={colors.ink} /><Text style={styles.loadingText}>Building your knowledge library…</Text></View>
           ) : (
             <View style={styles.empty}>
               <View style={styles.emptyMark}><Text style={styles.emptyMarkText}>✦</Text></View>
-              <Text style={styles.emptyTitle}>{query ? 'Nothing found yet' : 'Start with one curiosity'}</Text>
-              <Text style={styles.emptyCopy}>{query ? 'Try a broader word or clear the search.' : 'Share a useful Instagram or TikTok link to Curio, or paste one here.'}</Text>
-              {!query && <Pressable onPress={() => router.push('/capture')} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Save your first find</Text></Pressable>}
+              <Text style={styles.emptyTitle}>{query ? 'Nothing found yet' : 'Start one living resource'}</Text>
+              <Text style={styles.emptyCopy}>{query ? 'Try a broader idea or clear the search.' : 'Share a useful Reel or link. Curio will turn it into knowledge and merge future saves into it.'}</Text>
+              {!query && <Pressable onPress={() => router.push('/capture')} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Add your first source</Text></Pressable>}
             </View>
           )}
           numColumns={2}
           refreshControl={<RefreshControl onRefresh={() => void load(true)} refreshing={refreshing} tintColor={colors.ink} />}
           renderItem={({ item, index }) => (
             <View style={styles.tileCell}>
-              <SavedTile index={index} item={item} onPress={() => router.push({ pathname: '/item/[id]', params: { id: item.id } })} />
+              <ResourceTile index={index} resource={item} onPress={() => router.push({ pathname: '/resource/[id]', params: { id: item.id } })} />
             </View>
           )}
           showsVerticalScrollIndicator={false}
@@ -199,6 +203,9 @@ const styles = StyleSheet.create({
   searchBox: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 17, borderWidth: 1, flexDirection: 'row', gap: 10, marginTop: 22, paddingHorizontal: 14 },
   searchIcon: { color: colors.muted, fontSize: 24, marginTop: -2 },
   searchInput: { color: colors.ink, flex: 1, fontFamily: fonts.body, fontSize: 14, height: 51 },
+  sourceArchiveLink: { alignItems: 'center', flexDirection: 'row', gap: 6, marginTop: 13, paddingVertical: 5, width: 150 },
+  sourceArchiveText: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, fontWeight: '800' },
+  sourceArchiveArrow: { color: colors.muted, fontSize: 12 },
   offlineBanner: { backgroundColor: '#F3DFD4', borderRadius: 18, marginBottom: 28, padding: 16 },
   offlineTitle: { color: colors.ink, fontFamily: fonts.body, fontSize: 13, fontWeight: '800' },
   offlineCopy: { color: '#735C51', fontFamily: fonts.body, fontSize: 12, lineHeight: 17, marginTop: 4 },

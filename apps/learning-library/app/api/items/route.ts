@@ -9,6 +9,7 @@ import { getLearningItemRepository } from "@/lib/data/provider";
 import { getPersonalContextSnapshot } from "@/lib/context/provider";
 import { personalizeLearningItem, personalizeLearningItems } from "@/lib/context/personalization";
 import { processLearningItem } from "@/lib/processing/pipeline";
+import { upsertKnowledgeResourceForItem } from "@/lib/knowledge/resources";
 import {
   experimentalInstagramEmbedEnabled,
   InstagramPublicEmbedRetriever,
@@ -96,9 +97,22 @@ export async function POST(request: Request) {
       analyzer: services,
       researcher: services,
     });
+    const resourceMerger = process.env.RESOURCE_MERGE_AI_ENABLED === "true" ? services : null;
+    const resourceUpdate = result.item.card && (!result.duplicate || result.item.resourceIds.length === 0)
+      ? await upsertKnowledgeResourceForItem(result.item, repository, { merger: resourceMerger })
+      : null;
+    const savedItem = resourceUpdate?.item ?? result.item;
     const context = await getPersonalContextSnapshot();
     return NextResponse.json(
-      { ok: true, data: { ...result, item: personalizeLearningItem(result.item, context) } },
+      {
+        ok: true,
+        data: {
+          ...result,
+          item: personalizeLearningItem(savedItem, context),
+          resource: resourceUpdate?.resource ?? null,
+          resourceUpdate: resourceUpdate?.contribution ?? null,
+        },
+      },
       { status: result.duplicate ? 200 : 201, headers: apiResponseHeaders(request) },
     );
   } catch (error) {

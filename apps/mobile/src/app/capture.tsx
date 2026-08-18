@@ -71,7 +71,10 @@ export default function CaptureScreen() {
         await new Promise((resolve) => setTimeout(resolve, 1_200));
       }
       const result = await saveLink(url, { context, publicMediaUrls: mediaUrls.current });
-      router.replace({ pathname: '/item/[id]', params: { id: result.item.id } });
+      const resourceId = result.resource?.id ?? result.item.resourceIds?.[0];
+      router.replace(resourceId
+        ? { pathname: '/resource/[id]', params: { id: resourceId } }
+        : { pathname: '/item/[id]', params: { id: result.item.id } });
     } catch (caught) {
       setError(caught instanceof CurioApiError ? caught.message : 'Curio could not save this link.');
       setSaving(false);
@@ -84,7 +87,10 @@ export default function CaptureScreen() {
     setError(null);
     try {
       const result = await saveDemo();
-      router.replace({ pathname: '/item/[id]', params: { id: result.item.id } });
+      const resourceId = result.resource?.id ?? result.item.resourceIds?.[0];
+      router.replace(resourceId
+        ? { pathname: '/resource/[id]', params: { id: resourceId } }
+        : { pathname: '/item/[id]', params: { id: result.item.id } });
     } catch (caught) {
       setError(caught instanceof CurioApiError ? caught.message : 'Curio could not load the sample.');
       setSaving(false);

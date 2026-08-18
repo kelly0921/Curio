@@ -80,7 +80,10 @@ export default function HandleShareScreen() {
 
     void operation().then((result) => {
       clearSharedPayloads();
-      router.replace({ pathname: '/item/[id]', params: { id: result.item.id } });
+      const resourceId = result.resource?.id ?? result.item.resourceIds?.[0];
+      router.replace(resourceId
+        ? { pathname: '/resource/[id]', params: { id: resourceId } }
+        : { pathname: '/item/[id]', params: { id: result.item.id } });
     }).catch((caught) => {
       setSaveError(caught instanceof CurioApiError ? caught.message : 'Curio could not finish this share.');
     });
@@ -108,7 +111,7 @@ export default function HandleShareScreen() {
             <Pressable onPress={() => { clearSharedPayloads(); router.replace('/capture'); }} style={styles.primaryButton}>
               <Text style={styles.primaryText}>Paste the link</Text><Text style={styles.primaryText}>→</Text>
             </Pressable>
-            <Pressable onPress={() => { clearSharedPayloads(); router.replace('/'); }} style={styles.secondaryButton}><Text style={styles.secondaryText}>Back to saved</Text></Pressable>
+            <Pressable onPress={() => { clearSharedPayloads(); router.replace('/'); }} style={styles.secondaryButton}><Text style={styles.secondaryText}>Back to library</Text></Pressable>
           </>
         ) : (
           <>

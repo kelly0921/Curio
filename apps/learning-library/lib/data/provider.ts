@@ -1,7 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { D1LearningItemRepository } from "./d1-repository";
 import { MemoryLearningItemRepository } from "./memory-repository";
-import type { LearningItemRepository } from "./repository";
+import type { CurioRepository } from "./repository";
 import { SupabaseLearningItemRepository } from "./supabase-repository";
 
 const runtime = globalThis as typeof globalThis & {
@@ -39,7 +39,7 @@ async function cloudflareDatabase(): Promise<D1Database | null> {
 
 async function configuredRepository(): Promise<{
   configuration: PersistenceConfiguration;
-  repository: LearningItemRepository;
+  repository: CurioRepository;
 }> {
   const { url, secretKey } = environment();
   if (url || secretKey) {
@@ -73,7 +73,7 @@ export async function persistenceConfiguration(): Promise<PersistenceConfigurati
   return (await configuredRepository()).configuration;
 }
 
-export async function getLearningItemRepository(): Promise<LearningItemRepository> {
+export async function getLearningItemRepository(): Promise<CurioRepository> {
   const configured = await configuredRepository();
   if (configured.configuration.mode === "invalid") {
     throw new Error(`INVALID_PERSISTENCE_CONFIGURATION: ${configured.configuration.message}`);

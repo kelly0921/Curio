@@ -1,8 +1,14 @@
-import { learningItemSchema, type LearningItem } from "../domain";
-import type { LearningItemRepository } from "./repository";
+import {
+  knowledgeResourceSchema,
+  learningItemSchema,
+  type KnowledgeResource,
+  type LearningItem,
+} from "../domain";
+import type { CurioRepository } from "./repository";
 
-export class MemoryLearningItemRepository implements LearningItemRepository {
+export class MemoryLearningItemRepository implements CurioRepository {
   private readonly items = new Map<string, LearningItem>();
+  private readonly resources = new Map<string, KnowledgeResource>();
 
   async list(): Promise<LearningItem[]> {
     return [...this.items.values()]
@@ -23,6 +29,24 @@ export class MemoryLearningItemRepository implements LearningItemRepository {
   async save(item: LearningItem): Promise<LearningItem> {
     const validated = learningItemSchema.parse(item);
     this.items.set(validated.id, validated);
+    return validated;
+  }
+
+  async listResources(profileId: string): Promise<KnowledgeResource[]> {
+    return [...this.resources.values()]
+      .filter((resource) => resource.profileId === profileId)
+      .map((resource) => knowledgeResourceSchema.parse(resource))
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }
+
+  async findResourceById(id: string): Promise<KnowledgeResource | null> {
+    const resource = this.resources.get(id);
+    return resource ? knowledgeResourceSchema.parse(resource) : null;
+  }
+
+  async saveResource(resource: KnowledgeResource): Promise<KnowledgeResource> {
+    const validated = knowledgeResourceSchema.parse(resource);
+    this.resources.set(validated.id, validated);
     return validated;
   }
 }
