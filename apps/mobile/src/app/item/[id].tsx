@@ -4,9 +4,9 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CurioBrand } from '@/components/curio-brand';
-import { InstagramSourceViewer } from '@/components/instagram-source-viewer';
 import { colors, fonts, shadows } from '@/constants/curio-theme';
 import { getLearningItem, saveLink, type LearningItem } from '@/lib/curio-api';
+import { originalSourceLink } from '@/lib/original-source';
 
 function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
@@ -32,38 +32,12 @@ function externalHref(value: string): Href {
   return value as Href;
 }
 
-function originalSourceLink(sourceUrl: string, platform: LearningItem['platform']): { href: string; inline: boolean; label: string; target: '_blank' | '_self' } {
-  if (platform !== 'instagram') return { href: sourceUrl, inline: false, label: 'Open original source', target: '_blank' };
-
-  try {
-    const url = new URL(sourceUrl);
-    url.protocol = 'https:';
-    url.hostname = 'www.instagram.com';
-    url.port = '';
-    url.username = '';
-    url.password = '';
-    url.search = '';
-    url.hash = '';
-    const mediaPath = url.pathname.match(/^\/(reel|reels|p)\/([A-Za-z0-9_-]+)/u);
-    if (mediaPath) {
-      const mediaType = mediaPath[1] === 'reels' ? 'reel' : mediaPath[1];
-      url.pathname = `/${mediaType}/${mediaPath[2]}/embed/captioned/`;
-      return { href: url.toString(), inline: true, label: mediaType === 'p' ? 'View original post' : 'View original Reel', target: '_self' };
-    }
-    if (url.pathname !== '/') url.pathname = `${url.pathname.replace(/\/+$/u, '')}/`;
-    return { href: url.toString(), inline: false, label: 'Open original source', target: '_self' };
-  } catch {
-    return { href: sourceUrl, inline: false, label: 'Open original source', target: '_self' };
-  }
-}
-
 export default function ItemDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [item, setItem] = useState<LearningItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
-  const [showSource, setShowSource] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -279,18 +253,7 @@ export default function ItemDetailScreen() {
               <Text numberOfLines={8} style={styles.evidenceText}>{entry.value}</Text>
             </View>
           ))}
-          {originalSource?.inline ? (
-            <>
-              <Pressable
-                accessibilityHint={`Show the original ${label(item.platform)} source inside Curio`}
-                onPress={() => setShowSource((visible) => !visible)}
-                style={styles.sourceButton}>
-                <Text style={styles.sourceButtonText}>{showSource ? 'Hide original Reel' : originalSource.label}</Text>
-                <Text style={styles.sourceButtonText}>{showSource ? '↑' : '↓'}</Text>
-              </Pressable>
-              {showSource && <InstagramSourceViewer onDismiss={() => setShowSource(false)} sourceUrl={originalSource.href} />}
-            </>
-          ) : originalSource ? (
+          {originalSource ? (
             <Link asChild href={externalHref(originalSource.href)} rel="noopener noreferrer" target={originalSource.target}>
               <Pressable accessibilityHint={`Open the original ${label(item.platform)} source`} style={styles.sourceButton}>
                 <Text style={styles.sourceButtonText}>{originalSource.label}</Text><Text style={styles.sourceButtonText}>↗</Text>
