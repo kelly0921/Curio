@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useIncomingShare } from 'expo-sharing';
+import * as Sharing from 'expo-sharing';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,12 +7,34 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CurioBrand } from '@/components/curio-brand';
 import { colors, fonts } from '@/constants/curio-theme';
 import { CurioApiError, saveLink, saveSharedMedia } from '@/lib/curio-api';
-import { parseIncomingShare } from '@/lib/incoming-share';
+import { type IncomingSharePayload, parseIncomingShare } from '@/lib/incoming-share';
+
+interface IncomingShareState {
+  clearSharedPayloads: () => void;
+  error: Error | null;
+  isResolving: boolean;
+  resolvedSharedPayloads: IncomingSharePayload[];
+  sharedPayloads: IncomingSharePayload[];
+}
+
+function useUnavailableIncomingShare(): IncomingShareState {
+  return {
+    clearSharedPayloads: () => undefined,
+    error: new Error('Sharing directly into Curio requires a development build. Paste the link instead.'),
+    isResolving: false,
+    resolvedSharedPayloads: [],
+    sharedPayloads: [],
+  };
+}
+
+const useCurioIncomingShare = (
+  Sharing as typeof Sharing & { useIncomingShare?: () => IncomingShareState }
+).useIncomingShare ?? useUnavailableIncomingShare;
 
 const progressCopy = ['Receiving your find', 'Checking the source', 'Finding the useful signal', 'Putting it in the right place'];
 
 export default function HandleShareScreen() {
-  const { clearSharedPayloads, error: shareError, isResolving, resolvedSharedPayloads, sharedPayloads } = useIncomingShare();
+  const { clearSharedPayloads, error: shareError, isResolving, resolvedSharedPayloads, sharedPayloads } = useCurioIncomingShare();
   const [stage, setStage] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
   const started = useRef(false);
