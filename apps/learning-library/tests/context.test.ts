@@ -82,13 +82,22 @@ describe("connected-context personalization", () => {
       priority: "high",
       recommendationTier: "do_now",
       evidenceStatus: "unresearched",
-      engineVersion: "context-router-v2",
+      engineVersion: "context-router-v3-card-domain",
     }));
     expect(personalized.card?.personalization?.contextUsed.length).toBeGreaterThan(0);
     expect(personalized.card?.personalization?.contextUsed.every((entry) => entry.domain === "finance")).toBe(true);
     expect(personalized.card?.personalization?.contextUsed.some((entry) => entry.statement.includes("tax-advantaged"))).toBe(true);
     expect(personalized.card?.personalization?.whyNow).not.toContain("international trip");
     expect(personalized.card?.personalization?.whyNow).not.toContain("weeknight meal");
+  });
+
+  it("prefers the extracted card domain over keyword guesswork", () => {
+    const item = hsaItem();
+    const explicitlyTravel = learningItemSchema.parse({
+      ...item,
+      card: { ...item.card, domain: "travel" },
+    });
+    expect(detectContextDomain(explicitlyTravel)).toBe("travel");
   });
 
   it("does not manufacture a recommendation without a meaningful context match", async () => {

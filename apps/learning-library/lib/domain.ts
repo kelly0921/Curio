@@ -90,6 +90,17 @@ export const contextDomainSchema = z.enum([
   "general",
 ]);
 
+export const learningPresentationTypeSchema = z.enum([
+  "named_list",
+  "ranked_list",
+  "how_to",
+  "explainer",
+  "recommendation",
+  "comparison",
+  "news_update",
+  "story",
+]);
+
 export const contextRecordKindSchema = z.enum([
   "goal",
   "fact",
@@ -175,6 +186,8 @@ export const learningCardSchema = z.object({
   title: z.string().min(1).max(160),
   primaryTopic: z.string().min(1).max(80),
   secondaryTopics: z.array(z.string().min(1).max(80)).max(5),
+  domain: contextDomainSchema.default("general"),
+  presentationType: learningPresentationTypeSchema.default("explainer"),
   contentType: z.enum([
     "tactic",
     "framework",
@@ -249,6 +262,7 @@ export type LearningNote = z.infer<typeof learningNoteSchema>;
 export type ResearchFinding = z.infer<typeof researchFindingSchema>;
 export type ResearchBrief = z.infer<typeof researchBriefSchema>;
 export type ContextDomain = z.infer<typeof contextDomainSchema>;
+export type LearningPresentationType = z.infer<typeof learningPresentationTypeSchema>;
 export type ContextRecordKind = z.infer<typeof contextRecordKindSchema>;
 export type ContextConnection = z.infer<typeof contextConnectionSchema>;
 export type ContextRecord = z.infer<typeof contextRecordSchema>;

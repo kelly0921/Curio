@@ -76,6 +76,17 @@ describe("Learning Card prompt boundary", () => {
     expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("claimsToVerify: keep only the 3 highest-value");
   });
 
+  it("routes cards by both subject domain and information structure", () => {
+    expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("INFORMATION DESIGN ROUTER");
+    expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("domain by the knowledge the reader is saving");
+    expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("presentationType by the source's dominant information structure");
+    expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("finance domain");
+    expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("named_list in travel");
+    expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("alignedFindingTargets");
+    expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("instead of paraphrasing the source takeaway");
+    expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("For travel, add the practical logistics");
+  });
+
   it("preserves finite lists without inventing missing entries or padded notes", () => {
     expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("Use one keyTakeaway per available list entry");
     expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("the entries themselves are unavailable, do not invent them");

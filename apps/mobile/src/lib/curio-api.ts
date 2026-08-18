@@ -16,6 +16,7 @@ export type AccessLevel = 'full' | 'partial' | 'link_only' | 'unsupported' | 'fa
 export type Intent = 'remember' | 'try' | 'verify' | 'reference' | 'use_for_content';
 export type ContextDomain = 'finance' | 'travel' | 'food' | 'ai_work' | 'career' | 'health' | 'home' | 'relationships' | 'general';
 export type ContextRecordKind = 'goal' | 'fact' | 'preference' | 'constraint' | 'plan' | 'habit' | 'resource';
+export type LearningPresentationType = 'named_list' | 'ranked_list' | 'how_to' | 'explainer' | 'recommendation' | 'comparison' | 'news_update' | 'story';
 
 export interface ContextConnection {
   id: string;
@@ -83,6 +84,8 @@ export interface LearningCard {
   title: string;
   primaryTopic: string;
   secondaryTopics: string[];
+  domain?: ContextDomain;
+  presentationType?: LearningPresentationType;
   contentType: string;
   summary: string;
   keyTakeaways: string[];

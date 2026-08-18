@@ -8,7 +8,7 @@ import {
   type LearningPersonalization,
 } from "../domain";
 
-export const PERSONALIZATION_ENGINE_VERSION = "context-router-v2" as const;
+export const PERSONALIZATION_ENGINE_VERSION = "context-router-v3-card-domain" as const;
 
 const DOMAIN_PATTERNS: Record<Exclude<ContextDomain, "general">, RegExp> = {
   finance: /\b(finance|financial|money|wealth|invest|investment|stock|fund|tax|hsa|retirement|ira|saving|budget|credit|debt)\b/iu,
@@ -51,6 +51,7 @@ function cardText(item: LearningItem): string {
 }
 
 export function detectContextDomain(item: LearningItem): ContextDomain {
+  if (item.card?.domain && item.card.domain !== "general") return item.card.domain;
   const text = cardText(item);
   let best: { domain: ContextDomain; score: number } = { domain: "general", score: 0 };
   for (const [domain, pattern] of Object.entries(DOMAIN_PATTERNS) as [Exclude<ContextDomain, "general">, RegExp][]) {

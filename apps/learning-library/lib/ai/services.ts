@@ -3,7 +3,9 @@ import { zodTextFormat } from "openai/helpers/zod";
 import type { ResponseInputContent } from "openai/resources/responses/responses";
 import { z } from "zod";
 import {
+  contextDomainSchema,
   learningCardSchema,
+  learningPresentationTypeSchema,
   learningNoteSchema,
   researchFindingSchema,
   researchSourceSchema,
@@ -35,6 +37,8 @@ const publicSourceEvidenceSchema = z.object({
 }).strict();
 
 const sourceLearningCardOutputSchema = learningCardSchema.omit({ personalization: true, researchBrief: true }).extend({
+  domain: contextDomainSchema,
+  presentationType: learningPresentationTypeSchema,
   notes: z.array(learningNoteSchema).max(8),
 }).strict();
 
@@ -319,16 +323,28 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
     const namedFindingTargets = hasDetailedSourceEvidence(prioritizedMaterials)
       ? detectNamedTakeawayTargets(input.card.keyTakeaways)
       : [];
+    const supportsAlignedLearningUnits = [
+      "named_list",
+      "ranked_list",
+      "how_to",
+      "recommendation",
+      "comparison",
+    ].includes(input.card.presentationType);
+    const alignedFindingTargets = namedFindingTargets.length
+      ? namedFindingTargets
+      : hasDetailedSourceEvidence(prioritizedMaterials) && supportsAlignedLearningUnits
+        ? input.card.keyTakeaways
+        : [];
     const expectedFindingCount = promisedListCount && promisedListCount <= 5
       && (hasDetailedSourceEvidence(prioritizedMaterials) || requiredFindingAngles.length === promisedListCount)
       ? promisedListCount
-      : namedFindingTargets.length || null;
+      : alignedFindingTargets.length || null;
     const alignedFindingKeys = expectedFindingCount
       ? Array.from({ length: expectedFindingCount }, (_value, index) => `finding${index + 1}`)
       : [];
     const alignedFindingShape = Object.fromEntries(alignedFindingKeys.map((key, index) => {
       const target = hasDetailedSourceEvidence(prioritizedMaterials)
-        ? namedFindingTargets[index] ?? input.card.keyTakeaways[index] ?? `Source list item ${index + 1}`
+        ? alignedFindingTargets[index] ?? input.card.keyTakeaways[index] ?? `Source list item ${index + 1}`
         : requiredFindingAngles[index] ?? `Independent supplement item ${index + 1}`;
       return [key, researchFindingOutputSchema.describe(
         `Research only list item ${index + 1}: ${target}. Do not split this item or substitute another list item.`,
@@ -348,6 +364,8 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
           title: input.card.title,
           primaryTopic: input.card.primaryTopic,
           secondaryTopics: input.card.secondaryTopics,
+          domain: input.card.domain,
+          presentationType: input.card.presentationType,
           contentType: input.card.contentType,
           summary: input.card.summary,
           keyTakeaways: input.card.keyTakeaways,
@@ -358,6 +376,7 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
           promisedListCount,
           listEntriesAvailable: hasDetailedSourceEvidence(prioritizedMaterials),
           namedFindingTargets,
+          alignedFindingTargets,
           requiredFindingAngles,
         },
         sourceMaterials: prioritizedMaterials,
@@ -424,6 +443,8 @@ export class DemoLearningCardAnalyzer implements LearningCardAnalyzer {
         title: "Document outcomes while context is fresh",
         primaryTopic: "career growth",
         secondaryTopics: ["communication", "content creation"],
+        domain: "career",
+        presentationType: "explainer",
         contentType: "framework",
         summary: "Record decisions, outcomes, and lessons as work happens so useful contributions remain visible without creating extra reporting work.",
         keyTakeaways: [

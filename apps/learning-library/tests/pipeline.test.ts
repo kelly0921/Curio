@@ -10,6 +10,8 @@ const card: LearningCard = {
   title: "A grounded card",
   primaryTopic: "career",
   secondaryTopics: ["communication"],
+  domain: "career",
+  presentationType: "explainer",
   contentType: "framework",
   summary: "A source-grounded summary.",
   keyTakeaways: ["Keep the evidence."],

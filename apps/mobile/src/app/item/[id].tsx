@@ -6,8 +6,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CurioBrand } from '@/components/curio-brand';
 import { colors, fonts, shadows } from '@/constants/curio-theme';
 import { getLearningItem, saveLink, type LearningItem } from '@/lib/curio-api';
+import {
+  learningFormatLabel,
+  learningSectionTitle,
+  learningUnits,
+  researchVerdictLabel,
+  researchVerdictTone,
+  shouldInlineResearch,
+  shouldShowVerificationQueue,
+  type ResearchFindingLike,
+} from '@/lib/learning-presentation';
 import { originalSourceLink } from '@/lib/original-source';
-import { takeawayParts } from '@/lib/takeaway';
 
 function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
@@ -33,6 +42,36 @@ function externalHref(value: string): Href {
   return value as Href;
 }
 
+function FindingSources({
+  expanded,
+  finding,
+  onToggle,
+}: {
+  expanded: boolean;
+  finding: ResearchFindingLike;
+  onToggle: () => void;
+}) {
+  if (!finding.sources.length) return null;
+  return (
+    <View style={styles.researchSources}>
+      <Pressable accessibilityRole="button" onPress={onToggle} style={styles.sourcesDisclosure}>
+        <Text style={styles.sourcesDisclosureText}>
+          {expanded ? 'Hide sources' : `${finding.sources.length} source${finding.sources.length === 1 ? '' : 's'}`}
+        </Text>
+        <Text style={styles.sourcesDisclosureIcon}>{expanded ? '−' : '+'}</Text>
+      </Pressable>
+      {expanded && finding.sources.map((source) => (
+        <Link asChild href={externalHref(source.url)} key={source.url} rel="noopener noreferrer" target="_blank">
+          <Pressable accessibilityHint="Open this research source" style={styles.researchSource}>
+            <Text numberOfLines={2} style={styles.researchSourceText}>{source.publisher} · {source.title}</Text>
+            <Text style={styles.researchSourceArrow}>↗</Text>
+          </Pressable>
+        </Link>
+      ))}
+    </View>
+  );
+}
+
 export default function ItemDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [item, setItem] = useState<LearningItem | null>(null);
@@ -42,6 +81,7 @@ export default function ItemDetailScreen() {
   const [showSourceNotes, setShowSourceNotes] = useState(false);
   const [showContextReceipt, setShowContextReceipt] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
+  const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!id) return;
@@ -64,6 +104,9 @@ export default function ItemDetailScreen() {
   const notes = card?.notes ?? [];
   const research = card?.researchBrief ?? null;
   const researchIsSupplement = research?.mode === 'independent_supplement';
+  const inlineResearch = card ? shouldInlineResearch(card) : false;
+  const units = card ? learningUnits(card) : [];
+  const showVerificationQueue = card ? shouldShowVerificationQueue(card) : false;
   const personalization = card?.personalization ?? null;
   const originalSource = item.sourceUrl ? originalSourceLink(item.sourceUrl, item.platform) : null;
   const evidence = [
@@ -86,6 +129,10 @@ export default function ItemDetailScreen() {
     }
   }
 
+  function toggleSources(key: string) {
+    setExpandedSources((current) => ({ ...current, [key]: !current[key] }));
+  }
+
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
       <View style={styles.topbar}>
@@ -105,7 +152,7 @@ export default function ItemDetailScreen() {
             <View style={[styles.heroCard, shadows.card]}>
               <View style={styles.tagRow}>
                 <View style={styles.topicTag}><Text style={styles.topicTagText}>{card.primaryTopic}</Text></View>
-                <Text style={styles.contentType}>{label(card.contentType)}</Text>
+                <Text style={styles.contentType}>{learningFormatLabel(card.presentationType) || label(card.contentType)}</Text>
               </View>
               <Text style={styles.title}>{card.title}</Text>
               <Text style={styles.summary}>{card.summary}</Text>
@@ -113,16 +160,47 @@ export default function ItemDetailScreen() {
 
             {!researchIsSupplement && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Key takeaways</Text>
-                {card.keyTakeaways.map((takeaway, index) => {
-                  const parts = takeawayParts(takeaway);
+                <Text style={styles.sectionTitle}>{learningSectionTitle(card)}</Text>
+                {units.map((unit, index) => {
+                  const sourceKey = `unit-${index}`;
+                  const tone = unit.research ? researchVerdictTone(unit.research.verdict) : null;
                   return (
-                    <View key={`${index}-${takeaway}`} style={styles.takeaway}>
-                      <View style={styles.takeawayNumber}><Text style={styles.takeawayNumberText}>{index + 1}</Text></View>
-                      <View style={styles.takeawayCopy}>
-                        {parts.heading && <Text style={styles.takeawayHeading}>{parts.heading}</Text>}
-                        <Text style={[styles.takeawayText, parts.heading && styles.takeawayDetail]}>{parts.detail}</Text>
+                    <View key={`${index}-${card.keyTakeaways[index]}`} style={[styles.learningUnit, shadows.card]}>
+                      <View style={styles.takeaway}>
+                        <View style={styles.takeawayNumber}><Text style={styles.takeawayNumberText}>{index + 1}</Text></View>
+                        <View style={styles.takeawayCopy}>
+                          {unit.heading && <Text style={styles.takeawayHeading}>{unit.heading}</Text>}
+                          <Text style={[styles.takeawayText, unit.heading && styles.takeawayDetail]}>{unit.detail}</Text>
+                        </View>
                       </View>
+                      {unit.research && (
+                        <View style={styles.inlineResearch}>
+                          <View style={styles.inlineResearchHeader}>
+                            <Text style={styles.inlineResearchLabel}>CURIO CHECK</Text>
+                            <View style={[
+                              styles.verdictPill,
+                              tone === 'positive' && styles.verdictPositive,
+                              tone === 'context' && styles.verdictContext,
+                              tone === 'warning' && styles.verdictWarning,
+                              tone === 'neutral' && styles.verdictNeutral,
+                            ]}>
+                              <Text style={styles.verdictPillText}>{researchVerdictLabel(unit.research.verdict)}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.researchExplanation}>{unit.research.explanation}</Text>
+                          {unit.research.correction && (
+                            <View style={styles.correctionBlock}>
+                              <Text style={styles.correctionLabel}>IMPORTANT CONTEXT</Text>
+                              <Text style={styles.correctionText}>{unit.research.correction}</Text>
+                            </View>
+                          )}
+                          <FindingSources
+                            expanded={Boolean(expandedSources[sourceKey])}
+                            finding={unit.research}
+                            onToggle={() => toggleSources(sourceKey)}
+                          />
+                        </View>
+                      )}
                     </View>
                   );
                 })}
@@ -152,7 +230,7 @@ export default function ItemDetailScreen() {
               </View>
             )}
 
-            {research && (
+            {research && !inlineResearch && (
               <View style={[styles.researchSection, researchIsSupplement && styles.researchSupplementSection]}>
                 {researchIsSupplement && <Text style={styles.researchModeLabel}>CURIO RESEARCH · NOT FROM THE REEL</Text>}
                 <Text style={styles.sectionTitle}>{researchIsSupplement ? `${research.findings.length} researched tip${research.findings.length === 1 ? '' : 's'}` : 'What the research adds'}</Text>
@@ -170,18 +248,11 @@ export default function ItemDetailScreen() {
                         <Text style={styles.correctionText}>{finding.correction}</Text>
                       </View>
                     )}
-                    {finding.sources.length > 0 && (
-                      <View style={styles.researchSources}>
-                        {finding.sources.map((source) => (
-                          <Link asChild href={externalHref(source.url)} key={source.url} rel="noopener noreferrer" target="_blank">
-                            <Pressable accessibilityHint="Open this research source" style={styles.researchSource}>
-                              <Text numberOfLines={2} style={styles.researchSourceText}>{source.publisher} · {source.title}</Text>
-                              <Text style={styles.researchSourceArrow}>↗</Text>
-                            </Pressable>
-                          </Link>
-                        ))}
-                      </View>
-                    )}
+                    <FindingSources
+                      expanded={Boolean(expandedSources[`research-${index}`])}
+                      finding={finding}
+                      onToggle={() => toggleSources(`research-${index}`)}
+                    />
                   </View>
                 ))}
               </View>
@@ -247,7 +318,7 @@ export default function ItemDetailScreen() {
               </View>
             )}
 
-            {card.claimsToVerify.length > 0 && (
+            {showVerificationQueue && (
               <View style={styles.verifyCard}>
                 <Text style={styles.verifyLabel}>△ VERIFY BEFORE RELYING ON IT</Text>
                 {card.claimsToVerify.map((claim, index) => (
@@ -348,13 +419,23 @@ const styles = StyleSheet.create({
   disclosureButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '800' },
   disclosureButtonMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700' },
   sourceNotes: { marginTop: 2 },
-  takeaway: { alignItems: 'flex-start', borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: 13, paddingVertical: 17 },
+  learningUnit: { backgroundColor: colors.surface, borderRadius: 22, marginBottom: 13, padding: 18 },
+  takeaway: { alignItems: 'flex-start', flexDirection: 'row', gap: 13 },
   takeawayNumber: { alignItems: 'center', backgroundColor: colors.dark, borderRadius: 13, height: 26, justifyContent: 'center', width: 26 },
   takeawayNumberText: { color: colors.surface, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
   takeawayCopy: { flex: 1 },
   takeawayHeading: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: '700', lineHeight: 23 },
   takeawayText: { color: colors.ink, fontFamily: fonts.body, fontSize: 14, lineHeight: 20 },
   takeawayDetail: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 5 },
+  inlineResearch: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 16, paddingTop: 14 },
+  inlineResearchHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  inlineResearchLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.9 },
+  verdictPill: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 5 },
+  verdictPositive: { backgroundColor: '#DCE9D8' },
+  verdictContext: { backgroundColor: colors.sky },
+  verdictWarning: { backgroundColor: colors.butter },
+  verdictNeutral: { backgroundColor: '#E8E3D8' },
+  verdictPillText: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.4 },
   researchSection: { paddingBottom: 30 },
   researchSupplementSection: { paddingTop: 34 },
   researchModeLabel: { color: colors.success, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
@@ -367,7 +448,10 @@ const styles = StyleSheet.create({
   correctionBlock: { backgroundColor: colors.butter, borderRadius: 15, marginTop: 14, padding: 13 },
   correctionLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   correctionText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 5 },
-  researchSources: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 15, paddingTop: 7 },
+  researchSources: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 15, paddingTop: 5 },
+  sourcesDisclosure: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
+  sourcesDisclosureText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
+  sourcesDisclosureIcon: { color: colors.ink, fontFamily: fonts.body, fontSize: 15, fontWeight: '700' },
   researchSource: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
   researchSourceText: { color: colors.ink, flex: 1, fontFamily: fonts.body, fontSize: 10, fontWeight: '700', lineHeight: 14, marginRight: 10 },
   researchSourceArrow: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '800' },

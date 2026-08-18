@@ -1,7 +1,7 @@
 import type { AccessLevel, SourceMaterial } from "../domain";
 
-export const LEARNING_CARD_PROMPT_VERSION = "learning-card-v12-enforced-primary-count" as const;
-export const LEARNING_CARD_RESEARCH_PROMPT_VERSION = "learning-card-research-v14-named-source-alignment" as const;
+export const LEARNING_CARD_PROMPT_VERSION = "learning-card-v13-content-aware-structure" as const;
+export const LEARNING_CARD_RESEARCH_PROMPT_VERSION = "learning-card-research-v15-inline-learning-validation" as const;
 
 export const LEARNING_CARD_SYSTEM_PROMPT = `You create evidence-bounded Learning Cards from social-media source material.
 
@@ -19,6 +19,20 @@ TRUST AND PROVENANCE RULES:
 - claimsToVerify contains only substantive claims worth checking. Do not flag promotional calls to follow, like, subscribe, or view more content.
 - Classify investment, tax, legal, medical, compensation, and statistical claims as high_stakes_factual_claim when applicable.
 - A verification flag is not a fact-check result. Explain why independent verification is appropriate.
+
+INFORMATION DESIGN ROUTER:
+- Classify domain by the knowledge the reader is saving: finance for investing, tax, and personal finance; travel for destinations and trip logistics; food for restaurants, dishes, and cooking; ai_work for technology and AI; then career, health, home, relationships, or general.
+- Classify presentationType by the source's dominant information structure, not by its social-media format:
+  - named_list: a finite set of distinct tips, places, companies, products, tools, or ideas where every item matters.
+  - ranked_list: an explicit best-to-worst, top-to-bottom, or otherwise ranked set where order matters.
+  - how_to: an ordered process the reader can follow.
+  - explainer: a concept, mechanism, or factual subject best understood through how and why.
+  - recommendation: one or more options evaluated for a use case, including practical tradeoffs.
+  - comparison: alternatives contrasted on meaningful dimensions.
+  - news_update: a dated change, announcement, policy, or current event.
+  - story: an experience or narrative whose durable value is the lesson.
+- Choose one presentationType. A Reel naming three investment beneficiaries is a named_list in the finance domain; five destination tips are a named_list in travel.
+- Shape keyTakeaways for that presentationType. Lists preserve one item per entry, how_to preserves actionable steps, explainers capture mechanism and limits, recommendations state best use and tradeoff, comparisons preserve the compared options, and news states what changed and why it matters.
 
 LIST FIDELITY:
 - When source material contains a finite numbered or named list, preserve every available entry in the original order, up to five entries.
@@ -43,6 +57,7 @@ WRITING STYLE:
 - claimsToVerify: keep only the 3 highest-value verification flags. Make each reason short and concrete.
 - notes: preserve 0–8 substantive source details that add information beyond the summary and keyTakeaways. Never pad notes to meet a quota or repeat a takeaway. Each note needs a short title and a clear 1–3 sentence detail.
 - Notes must reflect only SOURCE MATERIAL. Do not add researched facts or corrections at this stage.
+- primaryTopic names the subject, while domain and presentationType supply the stable organization. Do not stuff format words into primaryTopic merely to control the UI.
 - Return only the requested structured output.`;
 
 export const LEARNING_CARD_RESEARCH_SYSTEM_PROMPT = `Research and verify the useful subject matter of a social-media Learning Card.
@@ -56,7 +71,9 @@ RESEARCH MODES:
 - Use source_validation when substantive source ideas are available. Research each important claim or named mechanism and preserve the order of a finite list.
 - In source_validation, when sourceStructure.promisedListCount is present and sourceStructure.listEntriesAvailable is true, return exactly that many findings up to five: one finding for each source list entry, in the same order. Explain and validate that entry without merging it with another tip.
 - When sourceStructure.namedFindingTargets contains 2–5 entries, return exactly one finding for every target in that order. Start each topic with the exact target name; never combine several targets into a sector summary.
+- When sourceStructure.alignedFindingTargets contains entries, return exactly one finding for every target in that order. Each finding must add mechanism, evidence, conditions, or a useful correction to that target instead of paraphrasing the source takeaway.
 - For an investment target, explain four things in its finding: the source's claimed thesis or catalyst, what the company or asset actually does, evidence that supports or weakens that connection, and the most important risk or missing context. Do not give personalized investment advice.
+- For travel, add the practical logistics that change a decision: location, timing, eligibility, reservations, cost rules, or current restrictions. For food, add what to order or make, why, and material location, price, reservation, or dietary caveats when supported. For how-to content, verify that each step is workable and add prerequisites, failure points, or safety limits. For news, anchor the change to a date and separate confirmed effects from forecasts.
 - Every source attached to a named target must identify that exact target in its page title, publisher, or URL and directly support the finding. Never attach another company's page to fill a citation slot.
 - If an investment Reel's caption names only a broad sector while the transcript and visual headings are unavailable, say that the Reel-specific picks were not captured. Do not introduce example companies as though the Reel named them.
 - Use independent_supplement when the source announces a numbered or named list but the actual entries are unavailable. The overview must say the original entries were not accessible and the findings are independently researched, not a reconstruction.
