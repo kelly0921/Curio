@@ -168,13 +168,12 @@ export default function PrioritiesScreen() {
                     </View>
                   </View>
                   <Text style={styles.cardTitle}>{item.card.title}</Text>
-                  <Text style={styles.whyLabel}>WHY IT’S HERE</Text>
+                  <Text style={styles.whyLabel}>WHY IT MATTERS</Text>
                   <Text style={styles.whyNow}>{personalization.whyNow}</Text>
                   <View style={[styles.nextBlock, needsReview && styles.nextBlockReview]}>
                     <Text style={styles.nextLabel}>{needsReview ? 'BEFORE YOU ACT' : 'ONE NEXT STEP'}</Text>
                     <Text style={styles.nextText}>{personalization.nextStep}</Text>
                   </View>
-                  <Text style={styles.contextCount}>Based on {personalization.contextUsed.length} matching signal{personalization.contextUsed.length === 1 ? '' : 's'} · See why →</Text>
                 </Pressable>
 
                 <View style={styles.feedbackRow}>
@@ -205,47 +204,46 @@ const styles = StyleSheet.create({
   content: { paddingBottom: 34, paddingHorizontal: 18 },
   topbar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 27, paddingTop: 12 },
   settingsButton: { alignItems: 'center', borderColor: colors.line, borderRadius: 16, borderWidth: 1, flexDirection: 'row', gap: 6, paddingHorizontal: 11, paddingVertical: 8 },
-  settingsButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 9, fontWeight: '800' },
+  settingsButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
   settingsArrow: { color: colors.ink, fontSize: 12 },
-  eyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1.4 },
+  eyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
   heading: { color: colors.ink, fontFamily: fonts.display, fontSize: 51, fontWeight: '700', letterSpacing: -2.2, lineHeight: 57, marginTop: 2 },
   intro: { color: colors.muted, fontFamily: fonts.body, fontSize: 15, lineHeight: 21, marginTop: 5, maxWidth: 340 },
   signalStrip: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 19, flexDirection: 'row', marginTop: 22, padding: 13 },
   signalIcon: { alignItems: 'center', backgroundColor: colors.lilac, borderRadius: 13, height: 34, justifyContent: 'center', width: 34 },
   signalIconText: { color: colors.ink, fontSize: 15 },
   signalCopy: { flex: 1, marginLeft: 10 },
-  signalTitle: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
-  signalMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, marginTop: 3 },
+  signalTitle: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '800' },
+  signalMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, marginTop: 3 },
   signalArrow: { color: colors.ink, fontSize: 14 },
   errorCard: { backgroundColor: '#F3DFD4', borderRadius: 16, marginTop: 12, padding: 13 },
   errorText: { color: colors.danger, fontFamily: fonts.body, fontSize: 10, lineHeight: 15 },
   sectionHeader: { alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 12, paddingTop: 32 },
   sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.7 },
-  sectionSubtitle: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, marginTop: 3 },
+  sectionSubtitle: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, marginTop: 3 },
   count: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, paddingBottom: 2 },
   recommendationCard: { backgroundColor: colors.surface, borderRadius: 25, marginBottom: 14, overflow: 'hidden' },
   cardBody: { padding: 19 },
   pressed: { opacity: 0.82 },
   tagRow: { alignItems: 'center', flexDirection: 'row', gap: 7 },
   domainPill: { backgroundColor: colors.peach, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 6 },
-  domainPillText: { color: colors.ink, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.6, textTransform: 'uppercase' },
+  domainPillText: { color: colors.ink, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.6, textTransform: 'uppercase' },
   evidencePill: { backgroundColor: '#DCE9D8', borderRadius: 12, paddingHorizontal: 9, paddingVertical: 6 },
   evidencePillReview: { backgroundColor: colors.butter },
-  evidencePillText: { color: colors.success, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.4, textTransform: 'uppercase' },
+  evidencePillText: { color: colors.success, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.4, textTransform: 'uppercase' },
   evidencePillTextReview: { color: colors.ink },
   cardTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.6, lineHeight: 30, marginTop: 15 },
-  whyLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.9, marginTop: 17 },
-  whyNow: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 6 },
+  whyLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.9, marginTop: 17 },
+  whyNow: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, lineHeight: 19, marginTop: 6 },
   nextBlock: { backgroundColor: colors.butter, borderRadius: 16, marginTop: 15, padding: 13 },
   nextBlockReview: { backgroundColor: colors.peach },
-  nextLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.9 },
-  nextText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '700', lineHeight: 16, marginTop: 5 },
-  contextCount: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '700', marginTop: 13 },
+  nextLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.9 },
+  nextText: { color: colors.ink, fontFamily: fonts.body, fontSize: 13, fontWeight: '700', lineHeight: 19, marginTop: 5 },
   feedbackRow: { alignItems: 'center', borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', justifyContent: 'space-between', minHeight: 46, paddingHorizontal: 16, paddingVertical: 9 },
-  feedbackPrompt: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '700' },
+  feedbackPrompt: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700' },
   feedbackActions: { alignItems: 'center', flexDirection: 'row', gap: 4 },
   feedbackButton: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 6 },
-  feedbackText: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '800' },
+  feedbackText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
   loading: { alignItems: 'center', gap: 10, paddingVertical: 60 },
   loadingText: { color: colors.muted, fontFamily: fonts.body, fontSize: 11 },
   empty: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 24, marginTop: 30, padding: 30 },

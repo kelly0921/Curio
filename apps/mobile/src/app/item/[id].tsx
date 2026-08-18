@@ -38,6 +38,9 @@ export default function ItemDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [showSourceNotes, setShowSourceNotes] = useState(false);
+  const [showContextReceipt, setShowContextReceipt] = useState(false);
+  const [showEvidence, setShowEvidence] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -92,7 +95,7 @@ export default function ItemDetailScreen() {
         <View style={styles.sourceRow}>
           <View style={styles.sourceAvatar}><Text style={styles.sourceAvatarText}>{sourceName(item).slice(0, 1).toUpperCase()}</Text></View>
           <View style={styles.sourceCopy}><Text style={styles.sourceLabel}>LEARNED FROM</Text><Text numberOfLines={1} style={styles.sourceName}>{sourceName(item)}</Text></View>
-          <View style={[styles.status, !card && styles.statusWaiting]}><Text style={[styles.statusText, !card && styles.statusWaitingText]}>{card ? 'READY' : label(item.accessLevel).toUpperCase()}</Text></View>
+          {!card && <View style={[styles.status, styles.statusWaiting]}><Text style={[styles.statusText, styles.statusWaitingText]}>{label(item.accessLevel).toUpperCase()}</Text></View>}
         </View>
 
         {card ? (
@@ -106,35 +109,42 @@ export default function ItemDetailScreen() {
               <Text style={styles.summary}>{card.summary}</Text>
             </View>
 
-            {notes.length > 0 && (
-              <View style={styles.notesSection}>
-                <Text style={styles.eyebrow}>NOTES FROM THE SOURCE</Text>
-                <Text style={styles.sectionTitle}>What was worth capturing</Text>
-                {notes.map((note, index) => (
-                  <View key={`${note.type}-${note.title}-${index}`} style={styles.noteRow}>
-                    <Text style={styles.noteType}>{label(note.type).toUpperCase()}</Text>
-                    <Text style={styles.noteTitle}>{note.title}</Text>
-                    <Text style={styles.noteDetail}>{note.detail}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-
             <View style={styles.section}>
-              <Text style={styles.eyebrow}>THE SIGNAL</Text>
-              <Text style={styles.sectionTitle}>Worth remembering</Text>
+              <Text style={styles.sectionTitle}>Key takeaways</Text>
               {card.keyTakeaways.map((takeaway, index) => (
                 <View key={`${index}-${takeaway}`} style={styles.takeaway}>
                   <View style={styles.takeawayNumber}><Text style={styles.takeawayNumberText}>{index + 1}</Text></View>
                   <Text style={styles.takeawayText}>{takeaway}</Text>
                 </View>
               ))}
+              {notes.length > 0 && (
+                <>
+                  <Pressable
+                    accessibilityHint="Show or hide the detailed notes extracted from the source"
+                    accessibilityRole="button"
+                    onPress={() => setShowSourceNotes((visible) => !visible)}
+                    style={styles.disclosureButton}>
+                    <Text style={styles.disclosureButtonText}>More from the source</Text>
+                    <Text style={styles.disclosureButtonMeta}>{showSourceNotes ? 'Hide −' : `${notes.length} note${notes.length === 1 ? '' : 's'} +`}</Text>
+                  </Pressable>
+                  {showSourceNotes && (
+                    <View style={styles.sourceNotes}>
+                      {notes.map((note, index) => (
+                        <View key={`${note.type}-${note.title}-${index}`} style={styles.noteRow}>
+                          <Text style={styles.noteType}>{label(note.type).toUpperCase()}</Text>
+                          <Text style={styles.noteTitle}>{note.title}</Text>
+                          <Text style={styles.noteDetail}>{note.detail}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </>
+              )}
             </View>
 
             {research && (
               <View style={styles.researchSection}>
-                <Text style={styles.eyebrow}>RESEARCH & CONTEXT</Text>
-                <Text style={styles.sectionTitle}>What holds up</Text>
+                <Text style={styles.sectionTitle}>What the research says</Text>
                 <Text style={styles.researchOverview}>{research.overview}</Text>
                 {research.findings.map((finding, index) => (
                   <View key={`${finding.topic}-${index}`} style={[styles.researchFinding, shadows.card]}>
@@ -169,50 +179,61 @@ export default function ItemDetailScreen() {
             {personalization ? (
               <View style={styles.personalizationSection}>
                 <View style={styles.personalizationHeading}>
-                  <View><Text style={styles.eyebrow}>PERSONALIZED FOR YOU</Text><Text style={styles.sectionTitle}>Why this matters now</Text></View>
+                  <Text style={styles.sectionTitle}>For you</Text>
                   <View style={styles.priorityPill}><Text style={styles.priorityPillText}>{recommendationLabel(personalization)}</Text></View>
                 </View>
                 <View style={[styles.contextCard, { backgroundColor: colors.sage }]}>
                   <Text style={styles.contextIcon}>◇</Text>
-                  <Text style={styles.contextLabel}>WHY NOW</Text>
+                  <Text style={styles.contextLabel}>WHY IT MATTERS</Text>
                   <Text style={styles.contextText}>{personalization.whyNow}</Text>
                 </View>
                 <View style={[styles.contextCard, { backgroundColor: colors.butter }]}>
                   <Text style={styles.contextIcon}>→</Text>
-                  <Text style={styles.contextLabel}>HOW TO USE THIS</Text>
                   <Text style={styles.contextText}>{personalization.personalizedUse}</Text>
-                  <View style={styles.personalizedNext}><Text style={styles.personalizedNextLabel}>NEXT STEP</Text><Text style={styles.personalizedNextText}>{personalization.nextStep}</Text></View>
+                  <View style={styles.personalizedNext}><Text style={styles.personalizedNextLabel}>ONE NEXT STEP</Text><Text style={styles.personalizedNextText}>{personalization.nextStep}</Text></View>
                 </View>
                 {personalization.contextUsed.length > 0 && (
-                  <View style={styles.contextReceipt}>
-                    <Text style={styles.contextReceiptLabel}>CONTEXT CURIO USED</Text>
-                    <Text style={styles.contextReceiptIntro}>Only matching {label(personalization.domain).toLocaleLowerCase()} context was included.</Text>
-                    {personalization.contextUsed.map((entry) => (
-                      <View key={entry.recordId} style={styles.contextSignal}>
-                        <View style={styles.contextSignalTop}>
-                          <Text style={styles.contextSignalKind}>{label(entry.kind).toUpperCase()}</Text>
-                          {entry.isDemo && <Text style={styles.demoContext}>DEMO</Text>}
-                        </View>
-                        <Text style={styles.contextSignalText}>{entry.statement}</Text>
-                        <Text style={styles.contextSignalSource}>{entry.sourceLabel}</Text>
+                  <>
+                    <Pressable
+                      accessibilityHint="Show or hide the context used for this recommendation"
+                      accessibilityRole="button"
+                      onPress={() => setShowContextReceipt((visible) => !visible)}
+                      style={styles.disclosureButton}>
+                      <Text style={styles.disclosureButtonText}>Why this recommendation</Text>
+                      <Text style={styles.disclosureButtonMeta}>{showContextReceipt ? 'Hide −' : `${personalization.contextUsed.length} signal${personalization.contextUsed.length === 1 ? '' : 's'} +`}</Text>
+                    </Pressable>
+                    {showContextReceipt && (
+                      <View style={styles.contextReceipt}>
+                        <Text style={styles.contextReceiptIntro}>Only matching {label(personalization.domain).toLocaleLowerCase()} context was included.</Text>
+                        {personalization.contextUsed.map((entry) => (
+                          <View key={entry.recordId} style={styles.contextSignal}>
+                            <View style={styles.contextSignalTop}>
+                              <Text style={styles.contextSignalKind}>{label(entry.kind).toUpperCase()}</Text>
+                              {entry.isDemo && <Text style={styles.demoContext}>DEMO</Text>}
+                            </View>
+                            <Text style={styles.contextSignalText}>{entry.statement}</Text>
+                            <Text style={styles.contextSignalSource}>{entry.sourceLabel}</Text>
+                          </View>
+                        ))}
                       </View>
-                    ))}
-                  </View>
+                    )}
+                  </>
                 )}
               </View>
             ) : (
-              <>
+              <View style={styles.personalizationSection}>
+                <Text style={styles.sectionTitle}>For you</Text>
                 <View style={[styles.contextCard, { backgroundColor: colors.sage }]}>
                   <Text style={styles.contextIcon}>◇</Text>
-                  <Text style={styles.contextLabel}>WHY THIS MIGHT MATTER TO YOU</Text>
+                  <Text style={styles.contextLabel}>WHY IT MATTERS</Text>
                   <Text style={styles.contextText}>{card.relevanceReason}</Text>
                 </View>
                 <View style={[styles.contextCard, { backgroundColor: colors.butter }]}>
                   <Text style={styles.contextIcon}>→</Text>
-                  <Text style={styles.contextLabel}>ONE THING TO TRY</Text>
+                  <Text style={styles.contextLabel}>ONE NEXT STEP</Text>
                   <Text style={styles.contextText}>{card.suggestedAction}</Text>
                 </View>
-              </>
+              </View>
             )}
 
             {card.claimsToVerify.length > 0 && (
@@ -244,15 +265,28 @@ export default function ItemDetailScreen() {
         )}
 
         <View style={styles.evidenceSection}>
-          <Text style={styles.eyebrow}>SOURCE RECEIPT</Text>
-          <Text style={styles.sectionTitle}>What Curio actually analyzed</Text>
-          <Text style={styles.evidenceIntro}>{evidence.length ? `${evidence.length} evidence channel${evidence.length === 1 ? '' : 's'} supported this card.` : 'No caption, transcript, or visible text was available from this link.'}</Text>
-          {evidence.map((entry) => (
-            <View key={entry.label} style={styles.evidenceBlock}>
-              <Text style={styles.evidenceLabel}>{entry.label.toUpperCase()}</Text>
-              <Text numberOfLines={8} style={styles.evidenceText}>{entry.value}</Text>
+          <Pressable
+            accessibilityHint="Show or hide the material Curio analyzed"
+            accessibilityRole="button"
+            onPress={() => setShowEvidence((visible) => !visible)}
+            style={styles.evidenceDisclosure}>
+            <View style={styles.evidenceDisclosureCopy}>
+              <Text style={styles.evidenceTitle}>Source & evidence</Text>
+              <Text style={styles.evidenceMeta}>{evidence.length ? `${evidence.length} evidence channel${evidence.length === 1 ? '' : 's'}` : 'No source text available'}</Text>
             </View>
-          ))}
+            <Text style={styles.evidenceToggle}>{showEvidence ? '−' : '+'}</Text>
+          </Pressable>
+          {showEvidence && (
+            <View style={styles.evidenceContent}>
+              <Text style={styles.evidenceIntro}>{evidence.length ? 'This is the source material Curio used for the card.' : 'No caption, transcript, or visible text was available from this link.'}</Text>
+              {evidence.map((entry) => (
+                <View key={entry.label} style={styles.evidenceBlock}>
+                  <Text style={styles.evidenceLabel}>{entry.label.toUpperCase()}</Text>
+                  <Text numberOfLines={8} style={styles.evidenceText}>{entry.value}</Text>
+                </View>
+              ))}
+            </View>
+          )}
           {originalSource ? (
             <Link asChild href={externalHref(originalSource.href)} rel="noopener noreferrer" target={originalSource.target}>
               <Pressable accessibilityHint={`Open the original ${label(item.platform)} source`} style={styles.sourceButton}>
@@ -279,27 +313,30 @@ const styles = StyleSheet.create({
   sourceAvatar: { alignItems: 'center', backgroundColor: colors.peach, borderRadius: 20, height: 40, justifyContent: 'center', width: 40 },
   sourceAvatarText: { color: colors.ink, fontFamily: fonts.display, fontSize: 18, fontWeight: '700' },
   sourceCopy: { flex: 1, marginLeft: 11 },
-  sourceLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '800', letterSpacing: 1.2 },
+  sourceLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
   sourceName: { color: colors.ink, fontFamily: fonts.body, fontSize: 13, fontWeight: '800', marginTop: 2 },
   status: { backgroundColor: '#DCE9D8', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 7 },
   statusWaiting: { backgroundColor: '#E8E3D8' },
-  statusText: { color: colors.success, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+  statusText: { color: colors.success, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   statusWaitingText: { color: colors.muted },
   heroCard: { backgroundColor: colors.surface, borderRadius: 28, padding: 23 },
   tagRow: { alignItems: 'center', flexDirection: 'row', gap: 10 },
   topicTag: { backgroundColor: colors.peach, borderRadius: 18, paddingHorizontal: 10, paddingVertical: 6 },
-  topicTagText: { color: colors.ink, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', textTransform: 'uppercase' },
-  contentType: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
+  topicTagText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  contentType: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
   title: { color: colors.ink, fontFamily: fonts.display, fontSize: 34, fontWeight: '700', letterSpacing: -1.3, lineHeight: 37, marginTop: 19 },
   summary: { color: colors.muted, fontFamily: fonts.body, fontSize: 14, lineHeight: 21, marginTop: 15 },
-  notesSection: { paddingTop: 34 },
   noteRow: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 17 },
-  noteType: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  noteType: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   noteTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: '700', marginTop: 5 },
   noteDetail: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, lineHeight: 19, marginTop: 7 },
   section: { paddingVertical: 34 },
-  eyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1.4 },
+  eyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
   sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.8, marginBottom: 16, marginTop: 4 },
+  disclosureButton: { alignItems: 'center', borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', justifyContent: 'space-between', marginTop: 5, paddingVertical: 15 },
+  disclosureButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '800' },
+  disclosureButtonMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700' },
+  sourceNotes: { marginTop: 2 },
   takeaway: { alignItems: 'flex-start', borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: 13, paddingVertical: 17 },
   takeawayNumber: { alignItems: 'center', backgroundColor: colors.dark, borderRadius: 13, height: 26, justifyContent: 'center', width: 26 },
   takeawayNumberText: { color: colors.surface, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
@@ -308,11 +345,11 @@ const styles = StyleSheet.create({
   researchOverview: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, lineHeight: 20, marginBottom: 15, marginTop: -7 },
   researchFinding: { backgroundColor: colors.surface, borderRadius: 22, marginBottom: 13, padding: 19 },
   researchFindingHeader: { gap: 5 },
-  researchVerdict: { color: colors.success, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
+  researchVerdict: { color: colors.success, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.9 },
   researchTopic: { color: colors.ink, fontFamily: fonts.display, fontSize: 21, fontWeight: '700', lineHeight: 25 },
   researchExplanation: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, lineHeight: 19, marginTop: 11 },
   correctionBlock: { backgroundColor: colors.butter, borderRadius: 15, marginTop: 14, padding: 13 },
-  correctionLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.8 },
+  correctionLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   correctionText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 5 },
   researchSources: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 15, paddingTop: 7 },
   researchSource: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
@@ -322,20 +359,19 @@ const styles = StyleSheet.create({
   personalizationSection: { paddingTop: 4 },
   personalizationHeading: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' },
   priorityPill: { backgroundColor: '#DCE9D8', borderRadius: 14, marginTop: 3, paddingHorizontal: 9, paddingVertical: 7 },
-  priorityPillText: { color: colors.success, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.7 },
+  priorityPillText: { color: colors.success, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.7 },
   contextIcon: { color: colors.ink, fontSize: 22 },
-  contextLabel: { color: 'rgba(23,23,19,0.65)', fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1.1, marginTop: 17 },
+  contextLabel: { color: 'rgba(23,23,19,0.65)', fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.1, marginTop: 17 },
   contextText: { color: colors.ink, fontFamily: fonts.display, fontSize: 21, fontWeight: '700', lineHeight: 27, marginTop: 8 },
   personalizedNext: { borderTopColor: 'rgba(23,23,19,0.16)', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 16, paddingTop: 13 },
-  personalizedNextLabel: { color: 'rgba(23,23,19,0.6)', fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.9 },
+  personalizedNextLabel: { color: 'rgba(23,23,19,0.6)', fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.9 },
   personalizedNextText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '700', lineHeight: 17, marginTop: 5 },
-  contextReceipt: { borderColor: colors.line, borderRadius: 22, borderWidth: 1, marginBottom: 23, padding: 18 },
-  contextReceiptLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
-  contextReceiptIntro: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 5 },
+  contextReceipt: { borderColor: colors.line, borderRadius: 22, borderWidth: 1, marginBottom: 23, marginTop: 2, padding: 18 },
+  contextReceiptIntro: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, lineHeight: 16 },
   contextSignal: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 13, paddingTop: 13 },
   contextSignalTop: { alignItems: 'center', flexDirection: 'row', gap: 7 },
-  contextSignalKind: { color: colors.success, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.8 },
-  demoContext: { backgroundColor: colors.lilac, borderRadius: 8, color: colors.ink, fontFamily: fonts.body, fontSize: 6, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 6, paddingVertical: 3 },
+  contextSignalKind: { color: colors.success, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
+  demoContext: { backgroundColor: colors.lilac, borderRadius: 8, color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 6, paddingVertical: 3 },
   contextSignalText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 6 },
   contextSignalSource: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, marginTop: 5 },
   verifyCard: { borderColor: '#C89E92', borderRadius: 24, borderWidth: 1, marginTop: 8, padding: 20 },
@@ -353,9 +389,15 @@ const styles = StyleSheet.create({
   contextButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '800', textDecorationLine: 'underline' },
   retryError: { color: colors.danger, fontFamily: fonts.body, fontSize: 11, lineHeight: 16, marginTop: 13 },
   evidenceSection: { paddingTop: 38 },
-  evidenceIntro: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, lineHeight: 17, marginBottom: 16, marginTop: -7 },
+  evidenceDisclosure: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 23, flexDirection: 'row', padding: 18 },
+  evidenceDisclosureCopy: { flex: 1 },
+  evidenceTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 25, fontWeight: '700', letterSpacing: -0.7 },
+  evidenceMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, marginTop: 4 },
+  evidenceToggle: { color: colors.ink, fontFamily: fonts.body, fontSize: 22, marginLeft: 14 },
+  evidenceContent: { marginTop: 16 },
+  evidenceIntro: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, lineHeight: 17, marginBottom: 16 },
   evidenceBlock: { backgroundColor: 'rgba(255,252,246,0.62)', borderRadius: 18, marginBottom: 10, padding: 16 },
-  evidenceLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  evidenceLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   evidenceText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 7 },
   sourceButton: { alignItems: 'center', borderColor: colors.ink, borderRadius: 15, borderWidth: 1, flexDirection: 'row', justifyContent: 'space-between', marginTop: 9, paddingHorizontal: 16, paddingVertical: 14 },
   sourceButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '800' },

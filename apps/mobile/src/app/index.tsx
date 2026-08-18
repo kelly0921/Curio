@@ -27,6 +27,10 @@ function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
 }
 
+function saveCountLabel(count: number): string {
+  return `${count} save${count === 1 ? '' : 's'}`;
+}
+
 function searchableText(item: LearningItem): string {
   return [item.card?.title, item.card?.summary, item.card?.primaryTopic, item.creator, item.platform]
     .filter(Boolean)
@@ -74,7 +78,8 @@ export default function HomeScreen() {
     });
   }, [items, query, topic]);
 
-  const readyCount = items.filter((item) => Boolean(item.card)).length;
+  const showCollections = collections.length > 1;
+  const hasQuery = Boolean(query.trim());
 
   return (
     <View style={styles.screen}>
@@ -121,35 +126,35 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              <View style={styles.sectionHeading}>
-                <View>
-                  <Text style={styles.eyebrow}>BROWSE</Text>
-                  <Text style={styles.sectionTitle}>Collections</Text>
-                </View>
-                <Text style={styles.sectionMeta}>{collections.length || 'No'} topics</Text>
-              </View>
-              <ScrollView contentContainerStyle={styles.collectionRow} horizontal showsHorizontalScrollIndicator={false}>
-                <Pressable onPress={() => setTopic('all')} style={[styles.collection, topic === 'all' && styles.collectionActive]}>
-                  <View style={[styles.collectionDot, { backgroundColor: colors.dark }]}><Text style={styles.collectionDotLight}>✦</Text></View>
-                  <View><Text style={styles.collectionName}>Everything</Text><Text style={styles.collectionCount}>{items.length} saves</Text></View>
-                </Pressable>
-                {collections.map(([key, count], index) => (
-                  <Pressable key={key} onPress={() => setTopic(key)} style={[styles.collection, topic === key && styles.collectionActive]}>
-                    <View style={[styles.collectionDot, { backgroundColor: [colors.peach, colors.sage, colors.sky, colors.lilac][index % 4] }]}>
-                      <Text style={styles.collectionLetter}>{label(key).slice(0, 1)}</Text>
-                    </View>
-                    <View><Text numberOfLines={1} style={styles.collectionName}>{label(key)}</Text><Text style={styles.collectionCount}>{count} save{count === 1 ? '' : 's'}</Text></View>
-                  </Pressable>
-                ))}
-              </ScrollView>
+              {showCollections && (
+                <>
+                  <View style={styles.sectionHeading}>
+                    <Text style={styles.sectionTitle}>Collections</Text>
+                    <Text style={styles.sectionMeta}>{collections.length} topic{collections.length === 1 ? '' : 's'}</Text>
+                  </View>
+                  <ScrollView contentContainerStyle={styles.collectionRow} horizontal showsHorizontalScrollIndicator={false}>
+                    <Pressable onPress={() => setTopic('all')} style={[styles.collection, topic === 'all' && styles.collectionActive]}>
+                      <View style={[styles.collectionDot, { backgroundColor: colors.dark }]}><Text style={styles.collectionDotLight}>✦</Text></View>
+                      <View><Text style={styles.collectionName}>Everything</Text><Text style={styles.collectionCount}>{saveCountLabel(items.length)}</Text></View>
+                    </Pressable>
+                    {collections.map(([key, count], index) => (
+                      <Pressable key={key} onPress={() => setTopic(key)} style={[styles.collection, topic === key && styles.collectionActive]}>
+                        <View style={[styles.collectionDot, { backgroundColor: [colors.peach, colors.sage, colors.sky, colors.lilac][index % 4] }]}>
+                          <Text style={styles.collectionLetter}>{label(key).slice(0, 1)}</Text>
+                        </View>
+                        <View><Text numberOfLines={1} style={styles.collectionName}>{label(key)}</Text><Text style={styles.collectionCount}>{saveCountLabel(count)}</Text></View>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
 
-              <View style={[styles.sectionHeading, styles.libraryHeading]}>
-                <View>
-                  <Text style={styles.eyebrow}>LIBRARY</Text>
-                  <Text style={styles.sectionTitle}>{topic === 'all' ? 'All saves' : label(topic)}</Text>
+              {(showCollections || hasQuery) && (
+                <View style={[styles.sectionHeading, styles.libraryHeading]}>
+                  <Text style={styles.sectionTitle}>{hasQuery ? 'Results' : topic === 'all' ? 'All saves' : label(topic)}</Text>
+                  <Text style={styles.sectionMeta}>{saveCountLabel(visibleItems.length)}</Text>
                 </View>
-                <Text style={styles.sectionMeta}>{readyCount} ready · {items.length - readyCount} waiting</Text>
-              </View>
+              )}
             </View>
           )}
           ListEmptyComponent={loading ? (
@@ -158,7 +163,7 @@ export default function HomeScreen() {
             <View style={styles.empty}>
               <View style={styles.emptyMark}><Text style={styles.emptyMarkText}>✦</Text></View>
               <Text style={styles.emptyTitle}>{query ? 'Nothing found yet' : 'Start with one curiosity'}</Text>
-              <Text style={styles.emptyCopy}>{query ? 'Try a broader word or another collection.' : 'Share a useful Instagram or TikTok link to Curio, or paste one here.'}</Text>
+              <Text style={styles.emptyCopy}>{query ? 'Try a broader word or clear the search.' : 'Share a useful Instagram or TikTok link to Curio, or paste one here.'}</Text>
               {!query && <Pressable onPress={() => router.push('/capture')} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Save your first find</Text></Pressable>}
             </View>
           )}
