@@ -388,6 +388,7 @@ export async function processLearningItem(
         card: {
           ...item.card,
           researchBrief: {
+            mode: research.mode,
             overview: research.overview,
             findings: research.findings,
             researchedAt: now(),

@@ -128,6 +128,7 @@ describe("Learning Item pipeline", () => {
     };
     const researcher: LearningCardResearcher = {
       research: vi.fn().mockResolvedValue({
+        mode: "source_validation",
         overview: "The central claim is supported, with an important eligibility condition.",
         model: "test-researcher",
         promptVersion: "test-research-v1",
@@ -157,6 +158,7 @@ describe("Learning Item pipeline", () => {
 
     expect(result.item.card?.notes).toHaveLength(4);
     expect(result.item.card?.researchBrief).toEqual(expect.objectContaining({
+      mode: "source_validation",
       model: "test-researcher",
       findings: [expect.objectContaining({ verdict: "supported_with_context" })],
     }));

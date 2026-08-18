@@ -62,6 +62,7 @@ export default function ItemDetailScreen() {
   const card = item.card;
   const notes = card?.notes ?? [];
   const research = card?.researchBrief ?? null;
+  const researchIsSupplement = research?.mode === 'independent_supplement';
   const personalization = card?.personalization ?? null;
   const originalSource = item.sourceUrl ? originalSourceLink(item.sourceUrl, item.platform) : null;
   const evidence = [
@@ -109,42 +110,45 @@ export default function ItemDetailScreen() {
               <Text style={styles.summary}>{card.summary}</Text>
             </View>
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Key takeaways</Text>
-              {card.keyTakeaways.map((takeaway, index) => (
-                <View key={`${index}-${takeaway}`} style={styles.takeaway}>
-                  <View style={styles.takeawayNumber}><Text style={styles.takeawayNumberText}>{index + 1}</Text></View>
-                  <Text style={styles.takeawayText}>{takeaway}</Text>
-                </View>
-              ))}
-              {notes.length > 0 && (
-                <>
-                  <Pressable
-                    accessibilityHint="Show or hide the detailed notes extracted from the source"
-                    accessibilityRole="button"
-                    onPress={() => setShowSourceNotes((visible) => !visible)}
-                    style={styles.disclosureButton}>
-                    <Text style={styles.disclosureButtonText}>More from the source</Text>
-                    <Text style={styles.disclosureButtonMeta}>{showSourceNotes ? 'Hide −' : `${notes.length} note${notes.length === 1 ? '' : 's'} +`}</Text>
-                  </Pressable>
-                  {showSourceNotes && (
-                    <View style={styles.sourceNotes}>
-                      {notes.map((note, index) => (
-                        <View key={`${note.type}-${note.title}-${index}`} style={styles.noteRow}>
-                          <Text style={styles.noteType}>{label(note.type).toUpperCase()}</Text>
-                          <Text style={styles.noteTitle}>{note.title}</Text>
-                          <Text style={styles.noteDetail}>{note.detail}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </>
-              )}
-            </View>
+            {!researchIsSupplement && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Key takeaways</Text>
+                {card.keyTakeaways.map((takeaway, index) => (
+                  <View key={`${index}-${takeaway}`} style={styles.takeaway}>
+                    <View style={styles.takeawayNumber}><Text style={styles.takeawayNumberText}>{index + 1}</Text></View>
+                    <Text style={styles.takeawayText}>{takeaway}</Text>
+                  </View>
+                ))}
+                {notes.length > 0 && (
+                  <>
+                    <Pressable
+                      accessibilityHint="Show or hide the detailed notes extracted from the source"
+                      accessibilityRole="button"
+                      onPress={() => setShowSourceNotes((visible) => !visible)}
+                      style={styles.disclosureButton}>
+                      <Text style={styles.disclosureButtonText}>More from the source</Text>
+                      <Text style={styles.disclosureButtonMeta}>{showSourceNotes ? 'Hide −' : `${notes.length} note${notes.length === 1 ? '' : 's'} +`}</Text>
+                    </Pressable>
+                    {showSourceNotes && (
+                      <View style={styles.sourceNotes}>
+                        {notes.map((note, index) => (
+                          <View key={`${note.type}-${note.title}-${index}`} style={styles.noteRow}>
+                            <Text style={styles.noteType}>{label(note.type).toUpperCase()}</Text>
+                            <Text style={styles.noteTitle}>{note.title}</Text>
+                            <Text style={styles.noteDetail}>{note.detail}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+            )}
 
             {research && (
-              <View style={styles.researchSection}>
-                <Text style={styles.sectionTitle}>What the research says</Text>
+              <View style={[styles.researchSection, researchIsSupplement && styles.researchSupplementSection]}>
+                {researchIsSupplement && <Text style={styles.researchModeLabel}>CURIO RESEARCH · NOT FROM THE REEL</Text>}
+                <Text style={styles.sectionTitle}>{researchIsSupplement ? `${research.findings.length} researched tip${research.findings.length === 1 ? '' : 's'}` : 'What the research adds'}</Text>
                 <Text style={styles.researchOverview}>{research.overview}</Text>
                 {research.findings.map((finding, index) => (
                   <View key={`${finding.topic}-${index}`} style={[styles.researchFinding, shadows.card]}>
@@ -342,6 +346,8 @@ const styles = StyleSheet.create({
   takeawayNumberText: { color: colors.surface, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
   takeawayText: { color: colors.ink, flex: 1, fontFamily: fonts.body, fontSize: 14, lineHeight: 20 },
   researchSection: { paddingBottom: 30 },
+  researchSupplementSection: { paddingTop: 34 },
+  researchModeLabel: { color: colors.success, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
   researchOverview: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, lineHeight: 20, marginBottom: 15, marginTop: -7 },
   researchFinding: { backgroundColor: colors.surface, borderRadius: 22, marginBottom: 13, padding: 19 },
   researchFindingHeader: { gap: 5 },

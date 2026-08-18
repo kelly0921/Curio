@@ -160,6 +160,7 @@ export const learningPersonalizationSchema = z.object({
 }).strict();
 
 export const researchBriefSchema = z.object({
+  mode: z.enum(["source_validation", "independent_supplement"]).default("source_validation"),
   overview: z.string().min(1).max(1_200),
   findings: z.array(researchFindingSchema).min(1).max(5),
   researchedAt: isoDateTimeSchema,

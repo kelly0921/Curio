@@ -13,8 +13,11 @@ import {
 } from "../domain";
 import {
   buildLearningCardPrompt,
+  detectPromisedListCount,
+  detectSupplementResearchAngles,
   LEARNING_CARD_PROMPT_VERSION,
   LEARNING_CARD_RESEARCH_PROMPT_VERSION,
+  LEARNING_CARD_RESEARCH_SYSTEM_PROMPT,
   LEARNING_CARD_SYSTEM_PROMPT,
 } from "./prompt";
 
@@ -26,7 +29,7 @@ const publicSourceEvidenceSchema = z.object({
 }).strict();
 
 const sourceLearningCardOutputSchema = learningCardSchema.omit({ personalization: true, researchBrief: true }).extend({
-  notes: z.array(learningNoteSchema).min(4).max(8),
+  notes: z.array(learningNoteSchema).max(8),
 }).strict();
 
 const researchSourceOutputSchema = researchSourceSchema.extend({
@@ -38,6 +41,7 @@ const researchFindingOutputSchema = researchFindingSchema.extend({
 }).strict();
 
 const researchOutputSchema = z.object({
+  mode: z.enum(["source_validation", "independent_supplement"]),
   overview: z.string().min(1).max(1_200),
   findings: z.array(researchFindingOutputSchema).min(1).max(5),
 }).strict();
@@ -63,6 +67,7 @@ export interface LearningCardAnalyzer {
 }
 
 export interface CardResearchResult {
+  mode: "source_validation" | "independent_supplement";
   overview: string;
   findings: ResearchFinding[];
   model: string;
@@ -218,23 +223,18 @@ export class OpenAILearningServices implements MediaTranscriber, LearningCardAna
   async research(input: { card: LearningCard; sourceMaterials: SourceMaterial[] }): Promise<CardResearchResult> {
     const response = await this.client.responses.parse({
       model: this.retrievalModel,
-      instructions: [
-        "Research and verify the substantive ideas extracted from a social-media source.",
-        "Use web search and prioritize current primary or authoritative sources: government guidance, laws and regulations, official product documentation, standards, and original research.",
-        "For each important factual claim or named concept, explain how it actually works, add missing conditions or tradeoffs, and correct material inaccuracies.",
-        "Prioritize named mechanisms over broad opinions. When the source highlights an account, law, product, or technical tool, include a how-it-works finding covering eligibility or prerequisites, mechanics, current limits when relevant, benefits, and restrictions.",
-        "Do not merely repeat the source. Distinguish a confirmed fact from a qualified claim, correction, unverified assertion, or opinion.",
-        "For financial, tax, legal, or medical topics, prefer official government sources and do not give personalized advice.",
-        "Return 2–5 high-value findings. A citation must directly support that specific finding; never attach a merely related page.",
-        "Confirmed, supported-with-context, and corrected findings require 1–3 exact URLs consulted through web search. Opinion or not-verified findings may have no sources when no direct authoritative evidence was found.",
-        "Keep explanations useful and concrete rather than defensive or verbose.",
-      ].join(" "),
+      instructions: LEARNING_CARD_RESEARCH_SYSTEM_PROMPT,
       input: JSON.stringify({
         sourceCard: {
           title: input.card.title,
           summary: input.card.summary,
+          keyTakeaways: input.card.keyTakeaways,
           notes: input.card.notes,
           claimsToVerify: input.card.claimsToVerify,
+        },
+        sourceStructure: {
+          promisedListCount: detectPromisedListCount(input.sourceMaterials),
+          requiredFindingAngles: detectSupplementResearchAngles(input.sourceMaterials),
         },
         sourceMaterials: input.sourceMaterials,
       }),
@@ -263,6 +263,7 @@ export class OpenAILearningServices implements MediaTranscriber, LearningCardAna
     });
     if (!findings.length) throw new Error("OpenAI research returned no source-validated findings.");
     return {
+      mode: parsed.mode,
       overview: parsed.overview,
       findings,
       model: response.model,

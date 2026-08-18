@@ -95,6 +95,7 @@ export interface LearningCard {
     detail: string;
   }[];
   researchBrief?: {
+    mode?: 'source_validation' | 'independent_supplement';
     overview: string;
     findings: {
       topic: string;
