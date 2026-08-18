@@ -25,6 +25,7 @@ import {
   LEARNING_CARD_RESEARCH_SYSTEM_PROMPT,
   LEARNING_CARD_SYSTEM_PROMPT,
   prioritizeSourceMaterials,
+  requiresEntityAlignedSources,
   researchSourceMatchesNamedTarget,
 } from "./prompt";
 import type { ReelFrame } from "../retrieval/instagram-reel";
@@ -335,6 +336,9 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
       : hasDetailedSourceEvidence(prioritizedMaterials) && supportsAlignedLearningUnits
         ? input.card.keyTakeaways
         : [];
+    const strictSourceTargets = requiresEntityAlignedSources(input.card)
+      ? namedFindingTargets
+      : [];
     const expectedFindingCount = promisedListCount && promisedListCount <= 5
       && (hasDetailedSourceEvidence(prioritizedMaterials) || requiredFindingAngles.length === promisedListCount)
       ? promisedListCount
@@ -377,6 +381,7 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
           listEntriesAvailable: hasDetailedSourceEvidence(prioritizedMaterials),
           namedFindingTargets,
           alignedFindingTargets,
+          strictSourceTargets,
           requiredFindingAngles,
         },
         sourceMaterials: prioritizedMaterials,
@@ -404,7 +409,7 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
     const consultedKeys = new Set(consultedUrls.map(evidenceUrlKey).filter((key): key is string => Boolean(key)));
     const findings = parsed.findings.map((finding, index) => {
       const seenSourceKeys = new Set<string>();
-      const namedTarget = namedFindingTargets[index] ?? null;
+      const namedTarget = strictSourceTargets[index] ?? null;
       const sources = finding.sources.filter((source) => {
         const key = evidenceUrlKey(source.url);
         if (key === null || !consultedKeys.has(key) || seenSourceKeys.has(key)) return false;

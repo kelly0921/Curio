@@ -10,8 +10,9 @@ import {
   learningFormatLabel,
   learningSectionTitle,
   learningUnits,
-  researchVerdictLabel,
-  researchVerdictTone,
+  researchDisclosureLabel,
+  researchRollupLabel,
+  shouldExpandResearchByDefault,
   shouldInlineResearch,
   shouldShowVerificationQueue,
   type ResearchFindingLike,
@@ -81,6 +82,7 @@ export default function ItemDetailScreen() {
   const [showSourceNotes, setShowSourceNotes] = useState(false);
   const [showContextReceipt, setShowContextReceipt] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
+  const [expandedResearch, setExpandedResearch] = useState<Record<string, boolean>>({});
   const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -133,6 +135,10 @@ export default function ItemDetailScreen() {
     setExpandedSources((current) => ({ ...current, [key]: !current[key] }));
   }
 
+  function toggleResearch(key: string) {
+    setExpandedResearch((current) => ({ ...current, [key]: !current[key] }));
+  }
+
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
       <View style={styles.topbar}>
@@ -161,9 +167,17 @@ export default function ItemDetailScreen() {
             {!researchIsSupplement && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>{learningSectionTitle(card)}</Text>
+                {inlineResearch && research && (
+                  <View style={styles.researchRollup}>
+                    <Text style={styles.researchRollupLabel}>RESEARCH</Text>
+                    <Text style={styles.researchRollupText}>{researchRollupLabel(research.findings)}</Text>
+                  </View>
+                )}
                 {units.map((unit, index) => {
                   const sourceKey = `unit-${index}`;
-                  const tone = unit.research ? researchVerdictTone(unit.research.verdict) : null;
+                  const disclosureLabel = unit.research ? researchDisclosureLabel(unit.research) : null;
+                  const expandedByDefault = unit.research ? shouldExpandResearchByDefault(unit.research) : false;
+                  const detailIsOpen = expandedByDefault || Boolean(expandedResearch[sourceKey]);
                   return (
                     <View key={`${index}-${card.keyTakeaways[index]}`} style={[styles.learningUnit, shadows.card]}>
                       <View style={styles.takeaway}>
@@ -173,20 +187,18 @@ export default function ItemDetailScreen() {
                           <Text style={[styles.takeawayText, unit.heading && styles.takeawayDetail]}>{unit.detail}</Text>
                         </View>
                       </View>
-                      {unit.research && (
+                      {unit.research && disclosureLabel && !expandedByDefault && (
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => toggleResearch(sourceKey)}
+                          style={styles.researchDisclosure}>
+                          <Text style={styles.researchDisclosureText}>{detailIsOpen ? 'Hide details' : disclosureLabel}</Text>
+                          <Text style={styles.researchDisclosureIcon}>{detailIsOpen ? '−' : '+'}</Text>
+                        </Pressable>
+                      )}
+                      {unit.research && detailIsOpen && (
                         <View style={styles.inlineResearch}>
-                          <View style={styles.inlineResearchHeader}>
-                            <Text style={styles.inlineResearchLabel}>CURIO CHECK</Text>
-                            <View style={[
-                              styles.verdictPill,
-                              tone === 'positive' && styles.verdictPositive,
-                              tone === 'context' && styles.verdictContext,
-                              tone === 'warning' && styles.verdictWarning,
-                              tone === 'neutral' && styles.verdictNeutral,
-                            ]}>
-                              <Text style={styles.verdictPillText}>{researchVerdictLabel(unit.research.verdict)}</Text>
-                            </View>
-                          </View>
+                          {expandedByDefault && <Text style={styles.correctionStatus}>CORRECTED</Text>}
                           <Text style={styles.researchExplanation}>{unit.research.explanation}</Text>
                           {unit.research.correction && (
                             <View style={styles.correctionBlock}>
@@ -427,15 +439,14 @@ const styles = StyleSheet.create({
   takeawayHeading: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: '700', lineHeight: 23 },
   takeawayText: { color: colors.ink, fontFamily: fonts.body, fontSize: 14, lineHeight: 20 },
   takeawayDetail: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 5 },
-  inlineResearch: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 16, paddingTop: 14 },
-  inlineResearchHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  inlineResearchLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.9 },
-  verdictPill: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 5 },
-  verdictPositive: { backgroundColor: '#DCE9D8' },
-  verdictContext: { backgroundColor: colors.sky },
-  verdictWarning: { backgroundColor: colors.butter },
-  verdictNeutral: { backgroundColor: '#E8E3D8' },
-  verdictPillText: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.4 },
+  researchRollup: { alignItems: 'center', flexDirection: 'row', gap: 8, marginBottom: 14, marginTop: -8 },
+  researchRollupLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
+  researchRollupText: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700' },
+  researchDisclosure: { alignItems: 'center', borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingTop: 12 },
+  researchDisclosureText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
+  researchDisclosureIcon: { color: colors.ink, fontFamily: fonts.body, fontSize: 15, fontWeight: '700' },
+  inlineResearch: { backgroundColor: colors.canvas, borderRadius: 15, marginTop: 13, padding: 14 },
+  correctionStatus: { color: colors.danger, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.8, marginBottom: 4 },
   researchSection: { paddingBottom: 30 },
   researchSupplementSection: { paddingTop: 34 },
   researchModeLabel: { color: colors.success, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },

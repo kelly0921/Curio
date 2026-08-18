@@ -6,6 +6,7 @@ import {
   detectSupplementResearchAngles,
   LEARNING_CARD_RESEARCH_SYSTEM_PROMPT,
   LEARNING_CARD_SYSTEM_PROMPT,
+  requiresEntityAlignedSources,
   researchSourceMatchesNamedTarget,
 } from "@/lib/ai/prompt";
 
@@ -114,6 +115,18 @@ describe("Learning Card prompt boundary", () => {
     expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("exactly one finding for every target");
     expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("the source's claimed thesis or catalyst");
     expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("Never attach another company's page");
+    expect(requiresEntityAlignedSources({
+      domain: "finance",
+      title: "U.S. optical transceiver beneficiaries",
+      primaryTopic: "optical transceivers",
+      summary: "Three public companies may benefit from a supply-chain change.",
+    })).toBe(true);
+    expect(requiresEntityAlignedSources({
+      domain: "finance",
+      title: "Finance terms in plain language",
+      primaryTopic: "financial vocabulary",
+      summary: "Three definitions explained with everyday analogies.",
+    })).toBe(false);
     expect(detectNamedTakeawayTargets([
       "Coherent — Optical components connect it to AI data-center demand.",
       "Lumentum — High-speed optics are the source's stated catalyst.",
@@ -142,6 +155,12 @@ describe("Learning Card prompt boundary", () => {
       publisher: "Lumentum",
       url: "https://www.lumentum.com/en/products/eml-200g",
     })).toBe(false);
+  });
+
+  it("keeps glossary validation concise without applying company-source filtering", () => {
+    expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("glossary or plain-language term lists");
+    expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("do not turn every familiar term into a long research essay");
+    expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("strictSourceTargets");
   });
 
   it("requires a useful independent supplement when a promised list is inaccessible", () => {

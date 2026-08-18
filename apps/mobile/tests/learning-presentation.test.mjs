@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  researchDisclosureLabel,
+  researchRollupLabel,
   learningSectionTitle,
   learningUnits,
   researchVerdictLabel,
@@ -27,6 +29,9 @@ const findings = [
 ];
 
 const investmentCard = {
+  title: 'Optical transceiver beneficiaries',
+  primaryTopic: 'optical transceivers',
+  summary: 'Three companies may benefit from a policy change.',
   domain: 'finance',
   presentationType: 'named_list',
   keyTakeaways: [
@@ -39,6 +44,12 @@ const investmentCard = {
 
 test('labels a structured finance card by its useful information shape', () => {
   assert.equal(learningSectionTitle(investmentCard), '2 investment ideas');
+  assert.equal(learningSectionTitle({
+    ...investmentCard,
+    title: 'Finance terms in plain language',
+    primaryTopic: 'financial vocabulary',
+    summary: 'Simple definitions for common terms.',
+  }), '2 finance terms');
 });
 
 test('pairs each source lesson with its matching validation', () => {
@@ -70,4 +81,13 @@ test('does not repeat a verification queue after source validation', () => {
   assert.equal(shouldShowVerificationQueue(investmentCard), false);
   assert.equal(researchVerdictLabel('supported_with_context'), 'Supported with context');
   assert.equal(researchVerdictLabel('not_verified'), 'Not verified');
+});
+
+test('summarizes research once and hides generic no-source repetition', () => {
+  assert.equal(researchRollupLabel(findings), '1 checked · 1 not yet verified');
+  assert.equal(researchDisclosureLabel(findings[0]), 'Added context');
+  assert.equal(researchDisclosureLabel({
+    ...findings[1],
+    explanation: 'Curio did not retain a directly supporting source for this list item, so it is not presented as validated.',
+  }), null);
 });

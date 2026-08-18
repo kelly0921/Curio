@@ -1,7 +1,7 @@
-import type { AccessLevel, SourceMaterial } from "../domain";
+import type { AccessLevel, LearningCard, SourceMaterial } from "../domain";
 
 export const LEARNING_CARD_PROMPT_VERSION = "learning-card-v13-content-aware-structure" as const;
-export const LEARNING_CARD_RESEARCH_PROMPT_VERSION = "learning-card-research-v15-inline-learning-validation" as const;
+export const LEARNING_CARD_RESEARCH_PROMPT_VERSION = "learning-card-research-v16-concept-source-retention" as const;
 
 export const LEARNING_CARD_SYSTEM_PROMPT = `You create evidence-bounded Learning Cards from social-media source material.
 
@@ -74,7 +74,8 @@ RESEARCH MODES:
 - When sourceStructure.alignedFindingTargets contains entries, return exactly one finding for every target in that order. Each finding must add mechanism, evidence, conditions, or a useful correction to that target instead of paraphrasing the source takeaway.
 - For an investment target, explain four things in its finding: the source's claimed thesis or catalyst, what the company or asset actually does, evidence that supports or weakens that connection, and the most important risk or missing context. Do not give personalized investment advice.
 - For travel, add the practical logistics that change a decision: location, timing, eligibility, reservations, cost rules, or current restrictions. For food, add what to order or make, why, and material location, price, reservation, or dietary caveats when supported. For how-to content, verify that each step is workable and add prerequisites, failure points, or safety limits. For news, anchor the change to a date and separate confirmed effects from forecasts.
-- Every source attached to a named target must identify that exact target in its page title, publisher, or URL and directly support the finding. Never attach another company's page to fill a citation slot.
+- For glossary or plain-language term lists, verify each concise definition with an authoritative reference. Add context only when it prevents a common misunderstanding; do not turn every familiar term into a long research essay.
+- Every source attached to a sourceStructure.strictSourceTargets entry must identify that exact entity in its page title, publisher, or URL and directly support the finding. Never attach another company's page to fill a citation slot.
 - If an investment Reel's caption names only a broad sector while the transcript and visual headings are unavailable, say that the Reel-specific picks were not captured. Do not introduce example companies as though the Reel named them.
 - Use independent_supplement when the source announces a numbered or named list but the actual entries are unavailable. The overview must say the original entries were not accessible and the findings are independently researched, not a reconstruction.
 - In independent_supplement mode, match the promised list count up to five. Make every finding a distinct, practical, authoritative tip about the subject—not an explanation of the evidence gap.
@@ -171,6 +172,17 @@ export function researchSourceMatchesNamedTarget(
   const evidence = `${source.title} ${source.publisher} ${source.url}`.normalize("NFKC").toLocaleLowerCase();
   const compactEvidence = evidence.replace(/[^\p{L}\p{N}]+/gu, "");
   return tokens.some((token) => evidence.includes(token) || compactEvidence.includes(token));
+}
+
+export function requiresEntityAlignedSources(
+  card: Pick<LearningCard, "domain" | "primaryTopic" | "summary" | "title">,
+): boolean {
+  if (card.domain !== "finance") return false;
+  const subject = `${card.title} ${card.primaryTopic} ${card.summary}`.normalize("NFKC").toLocaleLowerCase();
+  if (/\b(?:term|terms|definition|definitions|glossary|vocabulary|plain language|plain english)\b/iu.test(subject)) {
+    return false;
+  }
+  return /\b(?:companies|company|stocks?|investment|investing|beneficiar(?:y|ies)|tickers?|securities|suppliers?|manufacturers?|portfolio)\b/iu.test(subject);
 }
 
 export function buildLearningCardPrompt(input: PromptInput): string {

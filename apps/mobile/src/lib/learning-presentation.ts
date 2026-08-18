@@ -35,6 +35,9 @@ export interface ResearchFindingLike {
 }
 
 export interface LearningCardPresentationInput {
+  title?: string;
+  primaryTopic?: string;
+  summary?: string;
   domain?: LearningDomain;
   presentationType?: LearningPresentationType;
   keyTakeaways: string[];
@@ -90,7 +93,14 @@ export function learningSectionTitle(card: LearningCardPresentationInput): strin
   const count = card.keyTakeaways.length;
   const counted = (singular: string, plural: string) => `${count} ${count === 1 ? singular : plural}`;
   if (card.domain === 'finance' && ['named_list', 'ranked_list', 'recommendation'].includes(card.presentationType ?? '')) {
-    return counted('investment idea', 'investment ideas');
+    const subject = `${card.title ?? ''} ${card.primaryTopic ?? ''} ${card.summary ?? ''}`.toLocaleLowerCase();
+    if (/\b(?:term|terms|definition|definitions|glossary|vocabulary|plain language|plain english)\b/u.test(subject)) {
+      return counted('finance term', 'finance terms');
+    }
+    if (/\b(?:invest|investment|stock|stocks|security|securities|beneficiary|beneficiaries|ticker|portfolio)\b/u.test(subject)) {
+      return counted('investment idea', 'investment ideas');
+    }
+    return counted('finance takeaway', 'finance takeaways');
   }
   if (card.domain === 'travel' && ['named_list', 'ranked_list', 'recommendation'].includes(card.presentationType ?? '')) {
     return counted('trip tip', 'trip tips');
@@ -129,6 +139,40 @@ export function researchVerdictTone(verdict: ResearchVerdict): 'positive' | 'con
   if (verdict === 'supported_with_context') return 'context';
   if (verdict === 'corrected' || verdict === 'not_verified') return 'warning';
   return 'neutral';
+}
+
+export function researchRollupLabel(findings: ResearchFindingLike[]): string {
+  const counts = findings.reduce((result, finding) => ({
+    ...result,
+    [finding.verdict]: result[finding.verdict] + 1,
+  }), {
+    confirmed: 0,
+    supported_with_context: 0,
+    corrected: 0,
+    not_verified: 0,
+    opinion: 0,
+  });
+  const parts: string[] = [];
+  const supported = counts.confirmed + counts.supported_with_context;
+  if (supported) parts.push(`${supported} checked`);
+  if (counts.corrected) parts.push(`${counts.corrected} corrected`);
+  if (counts.not_verified) parts.push(`${counts.not_verified} not yet verified`);
+  if (counts.opinion) parts.push(`${counts.opinion} perspective${counts.opinion === 1 ? '' : 's'}`);
+  return parts.join(' · ');
+}
+
+export function researchDisclosureLabel(finding: ResearchFindingLike): string | null {
+  if (finding.verdict === 'corrected') return null;
+  if (finding.verdict === 'supported_with_context') return 'Added context';
+  if (finding.verdict === 'confirmed') return finding.sources.length ? 'Sources' : null;
+  if (finding.verdict === 'opinion') return 'Perspective';
+  const genericNoSourceMessage = finding.sources.length === 0
+    && finding.explanation.startsWith('Curio did not retain a directly supporting source');
+  return genericNoSourceMessage ? null : 'Needs verification';
+}
+
+export function shouldExpandResearchByDefault(finding: ResearchFindingLike): boolean {
+  return finding.verdict === 'corrected';
 }
 
 export function shouldShowVerificationQueue(card: LearningCardPresentationInput): boolean {
