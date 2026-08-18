@@ -56,6 +56,8 @@ export interface LearningPersonalization {
   domain: ContextDomain;
   priority: 'high' | 'medium' | 'low';
   priorityScore: number;
+  recommendationTier: 'do_now' | 'useful_for_goals' | 'worth_remembering';
+  evidenceStatus: 'validated' | 'mixed' | 'unresearched' | 'opinion';
   whyNow: string;
   personalizedUse: string;
   nextStep: string;
@@ -122,6 +124,11 @@ export interface LearningItem {
   intent: Intent;
   card: LearningCard | null;
   issues: { code: string; message: string; recoverable: boolean }[];
+  recommendationFeedback: {
+    state: 'done' | 'later' | 'not_relevant';
+    updatedAt: string;
+    revisitAt: string | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -144,6 +151,11 @@ interface ItemEnvelope {
 interface ContextEnvelope {
   ok: true;
   data: { context: ContextSnapshot };
+}
+
+interface FeedbackEnvelope {
+  ok: true;
+  data: { item: LearningItem };
 }
 
 export class CurioApiError extends Error {
@@ -244,6 +256,18 @@ export async function getPersonalContext(): Promise<ContextSnapshot> {
 export async function syncPersonalContext(): Promise<ContextSnapshot> {
   const body = await readEnvelope<ContextEnvelope>(await apiFetch('/api/context', { method: 'POST' }));
   return body.data.context;
+}
+
+export async function updateRecommendationFeedback(
+  id: string,
+  action: 'done' | 'later' | 'not_relevant',
+): Promise<LearningItem> {
+  const body = await readEnvelope<FeedbackEnvelope>(await apiFetch(`/api/items/${encodeURIComponent(id)}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action }),
+  }));
+  return remember(body.data.item);
 }
 
 async function submitForm(form: FormData): Promise<{ item: LearningItem; duplicate: boolean }> {

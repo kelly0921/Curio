@@ -30,7 +30,7 @@ function platformMark(item: LearningItem): string {
 
 export function SavedTile({ item, index, onPress }: { item: LearningItem; index: number; onPress: () => void }) {
   const topic = item.card?.primaryTopic || (item.card ? 'Curiosity' : 'Needs source');
-  const priority = item.card?.personalization?.priority;
+  const isRecommended = Boolean(item.card?.personalization);
   return (
     <Pressable
       accessibilityHint="Open the saved Learning Card"
@@ -45,7 +45,7 @@ export function SavedTile({ item, index, onPress }: { item: LearningItem; index:
         <Text numberOfLines={1} style={styles.topic}>{label(topic)}</Text>
         <Text numberOfLines={3} style={styles.title}>{itemTitle(item)}</Text>
         <Text style={[styles.state, !item.card && styles.waiting]}>
-          {item.card ? priority ? `${label(priority)} priority` : 'Ready to use' : item.accessLevel === 'link_only' ? 'Saved · needs source' : label(item.processingStatus)}
+          {item.card ? isRecommended ? 'In For you' : 'Ready to use' : item.accessLevel === 'link_only' ? 'Saved · needs source' : label(item.processingStatus)}
         </Text>
       </View>
     </Pressable>

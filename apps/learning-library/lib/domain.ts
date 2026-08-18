@@ -132,10 +132,18 @@ export const contextSnapshotSchema = z.object({
   syncedAt: isoDateTimeSchema,
 }).strict();
 
+export const recommendationFeedbackSchema = z.object({
+  state: z.enum(["done", "later", "not_relevant"]),
+  updatedAt: isoDateTimeSchema,
+  revisitAt: isoDateTimeSchema.nullable(),
+}).strict();
+
 export const learningPersonalizationSchema = z.object({
   domain: contextDomainSchema,
   priority: z.enum(["high", "medium", "low"]),
   priorityScore: z.number().int().min(0).max(100),
+  recommendationTier: z.enum(["do_now", "useful_for_goals", "worth_remembering"]),
+  evidenceStatus: z.enum(["validated", "mixed", "unresearched", "opinion"]),
   whyNow: z.string().min(1).max(800),
   personalizedUse: z.string().min(1).max(800),
   nextStep: z.string().min(1).max(500),
@@ -211,6 +219,7 @@ export const learningItemSchema = z.object({
   analysisPromptVersion: z.string().max(120).nullable().default(null),
   transcriptionModel: z.string().max(120).nullable(),
   issues: z.array(processingIssueSchema),
+  recommendationFeedback: recommendationFeedbackSchema.nullable().default(null),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 }).strict();
@@ -240,6 +249,7 @@ export type ContextConnection = z.infer<typeof contextConnectionSchema>;
 export type ContextRecord = z.infer<typeof contextRecordSchema>;
 export type ContextSnapshot = z.infer<typeof contextSnapshotSchema>;
 export type LearningPersonalization = z.infer<typeof learningPersonalizationSchema>;
+export type RecommendationFeedback = z.infer<typeof recommendationFeedbackSchema>;
 export type LearningItem = z.infer<typeof learningItemSchema>;
 export type ProcessingIssue = z.infer<typeof processingIssueSchema>;
 export type Intent = z.infer<typeof intentSchema>;

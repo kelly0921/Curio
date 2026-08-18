@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CurioBottomBar } from '@/components/curio-bottom-bar';
@@ -9,17 +9,43 @@ import { colors, fonts, shadows } from '@/constants/curio-theme';
 import {
   getPersonalContext,
   listLearningItems,
+  updateRecommendationFeedback,
   type ContextSnapshot,
   type LearningItem,
+  type LearningPersonalization,
 } from '@/lib/curio-api';
+
+type RecommendationTier = LearningPersonalization['recommendationTier'];
+type FeedbackAction = 'done' | 'later' | 'not_relevant';
+
+const SECTION_DETAILS: Record<RecommendationTier, { title: string; subtitle: string }> = {
+  do_now: { title: 'Do now', subtitle: 'Timely and ready to use' },
+  useful_for_goals: { title: 'Useful for your goals', subtitle: 'Relevant to something in progress' },
+  worth_remembering: { title: 'Worth remembering', subtitle: 'Keep close, or review before acting' },
+};
+
+const TIER_ORDER: RecommendationTier[] = ['do_now', 'useful_for_goals', 'worth_remembering'];
 
 function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
 }
 
-function relativeSync(value: string | null): string {
-  if (!value) return 'Waiting for first sync';
-  return 'Synced automatically';
+function evidenceLabel(status: LearningPersonalization['evidenceStatus']): string {
+  if (status === 'validated') return 'Research checked';
+  if (status === 'mixed') return 'Review first';
+  if (status === 'opinion') return 'Perspective';
+  return 'Source note';
+}
+
+function tierFor(personalization: LearningPersonalization): RecommendationTier {
+  return personalization.recommendationTier
+    ?? (personalization.priority === 'high' ? 'do_now' : personalization.priority === 'medium' ? 'useful_for_goals' : 'worth_remembering');
+}
+
+function evidenceFor(item: LearningItem, personalization: LearningPersonalization): LearningPersonalization['evidenceStatus'] {
+  if (personalization.evidenceStatus) return personalization.evidenceStatus;
+  if (item.card?.researchBrief) return 'validated';
+  return item.card?.contentType === 'opinion' || item.card?.contentType === 'personal_experience' ? 'opinion' : 'unresearched';
 }
 
 export default function PrioritiesScreen() {
@@ -27,6 +53,7 @@ export default function PrioritiesScreen() {
   const [context, setContext] = useState<ContextSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (pullToRefresh = false) => {
@@ -37,7 +64,7 @@ export default function PrioritiesScreen() {
       setContext(nextContext);
       setError(null);
     } catch {
-      setError('Curio could not load connected context right now.');
+      setError('Curio could not refresh your recommendations right now.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -48,76 +75,123 @@ export default function PrioritiesScreen() {
     void load();
   }, [load]));
 
-  const domains = useMemo(() => [...new Set(context?.records.map((record) => record.domain) ?? [])], [context]);
+  const sections = useMemo(() => TIER_ORDER.map((tier) => ({
+    tier,
+    ...SECTION_DETAILS[tier],
+    data: items.filter((item) => item.card?.personalization && tierFor(item.card.personalization) === tier),
+  })).filter((section) => section.data.length > 0), [items]);
+
   const connection = context?.connections[0] ?? null;
+
+  async function saveFeedback(id: string, action: FeedbackAction) {
+    if (updatingId) return;
+    setUpdatingId(id);
+    setError(null);
+    try {
+      await updateRecommendationFeedback(id, action);
+      setItems((current) => current.filter((item) => item.id !== id));
+    } catch {
+      setError('Curio could not save that choice. Try again.');
+    } finally {
+      setUpdatingId(null);
+    }
+  }
 
   return (
     <View style={styles.screen}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
-        <FlatList
+        <SectionList
           contentContainerStyle={styles.content}
-          data={items}
+          sections={sections}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={(
             <View>
-              <View style={styles.topbar}><CurioBrand compact /></View>
+              <View style={styles.topbar}>
+                <CurioBrand compact />
+                <Pressable accessibilityLabel="Personalization settings" onPress={() => router.push('/settings')} style={styles.settingsButton}>
+                  <Text style={styles.settingsButtonText}>Context</Text>
+                  <Text style={styles.settingsArrow}>→</Text>
+                </Pressable>
+              </View>
               <Text style={styles.eyebrow}>CURIO, PERSONALLY</Text>
               <Text style={styles.heading}>For you</Text>
-              <Text style={styles.intro}>Your saves, ranked against what is happening across your connected life.</Text>
+              <Text style={styles.intro}>A short list from what you saved, matched to what matters now.</Text>
 
-              {connection && context && (
-                <View style={[styles.connectionCard, shadows.card]}>
-                  <View style={styles.connectionHeader}>
-                    <View>
-                      <Text style={styles.connectionLabel}>{connection.isDemo ? 'DEMO CONNECTION' : 'CONNECTED'}</Text>
-                      <Text style={styles.connectionName}>{connection.displayName}</Text>
-                    </View>
-                    <View style={styles.connectedPill}><Text style={styles.connectedPillText}>LIVE</Text></View>
+              {context && (
+                <Pressable onPress={() => router.push('/settings')} style={styles.signalStrip}>
+                  <View style={styles.signalIcon}><Text style={styles.signalIconText}>✦</Text></View>
+                  <View style={styles.signalCopy}>
+                    <Text style={styles.signalTitle}>Personalized from {context.records.length} connected signals</Text>
+                    <Text style={styles.signalMeta}>{connection?.isDemo ? 'Demo context · tap to review' : 'Synced automatically · tap to review'}</Text>
                   </View>
-                  <Text style={styles.connectionMeta}>{context.records.length} context signals · {relativeSync(connection.lastSyncedAt)}</Text>
-                  <View style={styles.domainRow}>
-                    {domains.map((domain) => <View key={domain} style={styles.domainPill}><Text style={styles.domainPillText}>{label(domain)}</Text></View>)}
-                  </View>
-                  <Text style={styles.demoNote}>{connection.isDemo ? 'These example records let us test automatic personalization before connecting Notion.' : 'Curio selects only the relevant domain for each save.'}</Text>
-                </View>
+                  <Text style={styles.signalArrow}>→</Text>
+                </Pressable>
               )}
 
               {error && <View style={styles.errorCard}><Text style={styles.errorText}>{error}</Text></View>}
-              <View style={styles.sectionHeader}>
-                <View><Text style={styles.eyebrow}>CURRENT PRIORITIES</Text><Text style={styles.sectionTitle}>What matters now</Text></View>
-                <Text style={styles.count}>{items.length}</Text>
-              </View>
             </View>
           )}
           ListEmptyComponent={loading ? (
-            <View style={styles.loading}><ActivityIndicator color={colors.ink} /><Text style={styles.loadingText}>Connecting the dots…</Text></View>
+            <View style={styles.loading}><ActivityIndicator color={colors.ink} /><Text style={styles.loadingText}>Finding what matters…</Text></View>
           ) : (
-            <View style={styles.empty}><Text style={styles.emptyTitle}>No priorities yet</Text><Text style={styles.emptyCopy}>Save a learning card and Curio will match it against connected context automatically.</Text></View>
+            <View style={[styles.empty, shadows.card]}>
+              <Text style={styles.emptyMark}>✦</Text>
+              <Text style={styles.emptyTitle}>You’re caught up</Text>
+              <Text style={styles.emptyCopy}>New recommendations will appear when a save meaningfully connects to your goals or plans.</Text>
+            </View>
           )}
           refreshControl={<RefreshControl onRefresh={() => void load(true)} refreshing={refreshing} tintColor={colors.ink} />}
-          renderItem={({ item, index }) => {
+          renderSectionHeader={({ section }) => (
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>{section.title}</Text>
+                <Text style={styles.sectionSubtitle}>{section.subtitle}</Text>
+              </View>
+              <Text style={styles.count}>{section.data.length}</Text>
+            </View>
+          )}
+          renderItem={({ item }) => {
             const personalization = item.card?.personalization;
             if (!item.card || !personalization) return null;
+            const isUpdating = updatingId === item.id;
+            const evidenceStatus = evidenceFor(item, personalization);
+            const needsReview = evidenceStatus === 'mixed';
             return (
-              <Pressable
-                onPress={() => router.push({ pathname: '/item/[id]', params: { id: item.id } })}
-                style={({ pressed }) => [styles.priorityCard, shadows.card, pressed && styles.pressed]}>
-                <View style={styles.priorityTop}>
-                  <View style={[styles.rank, { backgroundColor: [colors.peach, colors.sage, colors.sky][index % 3] }]}><Text style={styles.rankText}>{index + 1}</Text></View>
-                  <View style={styles.priorityTags}>
-                    <Text style={styles.priorityLabel}>{personalization.priority.toUpperCase()} PRIORITY</Text>
-                    <Text style={styles.domainLabel}>{label(personalization.domain)}</Text>
+              <View style={[styles.recommendationCard, shadows.card]}>
+                <Pressable
+                  onPress={() => router.push({ pathname: '/item/[id]', params: { id: item.id } })}
+                  style={({ pressed }) => [styles.cardBody, pressed && styles.pressed]}>
+                  <View style={styles.tagRow}>
+                    <View style={styles.domainPill}><Text style={styles.domainPillText}>{label(personalization.domain)}</Text></View>
+                    <View style={[styles.evidencePill, needsReview && styles.evidencePillReview]}>
+                      <Text style={[styles.evidencePillText, needsReview && styles.evidencePillTextReview]}>{evidenceLabel(evidenceStatus)}</Text>
+                    </View>
                   </View>
-                  <Text style={styles.score}>{personalization.priorityScore}</Text>
+                  <Text style={styles.cardTitle}>{item.card.title}</Text>
+                  <Text style={styles.whyLabel}>WHY IT’S HERE</Text>
+                  <Text style={styles.whyNow}>{personalization.whyNow}</Text>
+                  <View style={[styles.nextBlock, needsReview && styles.nextBlockReview]}>
+                    <Text style={styles.nextLabel}>{needsReview ? 'BEFORE YOU ACT' : 'ONE NEXT STEP'}</Text>
+                    <Text style={styles.nextText}>{personalization.nextStep}</Text>
+                  </View>
+                  <Text style={styles.contextCount}>Based on {personalization.contextUsed.length} matching signal{personalization.contextUsed.length === 1 ? '' : 's'} · See why →</Text>
+                </Pressable>
+
+                <View style={styles.feedbackRow}>
+                  <Text style={styles.feedbackPrompt}>Tune this list</Text>
+                  {isUpdating ? <ActivityIndicator color={colors.ink} size="small" /> : (
+                    <View style={styles.feedbackActions}>
+                      <Pressable onPress={() => void saveFeedback(item.id, 'done')} style={styles.feedbackButton}><Text style={styles.feedbackText}>Done</Text></Pressable>
+                      <Pressable onPress={() => void saveFeedback(item.id, 'later')} style={styles.feedbackButton}><Text style={styles.feedbackText}>Later</Text></Pressable>
+                      <Pressable onPress={() => void saveFeedback(item.id, 'not_relevant')} style={styles.feedbackButton}><Text style={styles.feedbackText}>Not relevant</Text></Pressable>
+                    </View>
+                  )}
                 </View>
-                <Text style={styles.cardTitle}>{item.card.title}</Text>
-                <Text style={styles.whyNow}>{personalization.whyNow}</Text>
-                <View style={styles.nextBlock}><Text style={styles.nextLabel}>NEXT STEP</Text><Text style={styles.nextText}>{personalization.nextStep}</Text></View>
-                <Text style={styles.contextCount}>{personalization.contextUsed.length} connected signal{personalization.contextUsed.length === 1 ? '' : 's'} used →</Text>
-              </Pressable>
+              </View>
             );
           }}
           showsVerticalScrollIndicator={false}
+          stickySectionHeadersEnabled={false}
         />
       </SafeAreaView>
       <CurioBottomBar active="priorities" />
@@ -128,45 +202,54 @@ export default function PrioritiesScreen() {
 const styles = StyleSheet.create({
   screen: { backgroundColor: colors.canvas, flex: 1 },
   safeArea: { flex: 1 },
-  content: { paddingBottom: 32, paddingHorizontal: 18 },
+  content: { paddingBottom: 34, paddingHorizontal: 18 },
   topbar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 27, paddingTop: 12 },
+  settingsButton: { alignItems: 'center', borderColor: colors.line, borderRadius: 16, borderWidth: 1, flexDirection: 'row', gap: 6, paddingHorizontal: 11, paddingVertical: 8 },
+  settingsButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 9, fontWeight: '800' },
+  settingsArrow: { color: colors.ink, fontSize: 12 },
   eyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1.4 },
   heading: { color: colors.ink, fontFamily: fonts.display, fontSize: 51, fontWeight: '700', letterSpacing: -2.2, lineHeight: 57, marginTop: 2 },
   intro: { color: colors.muted, fontFamily: fonts.body, fontSize: 15, lineHeight: 21, marginTop: 5, maxWidth: 340 },
-  connectionCard: { backgroundColor: colors.dark, borderRadius: 25, marginTop: 24, padding: 20 },
-  connectionHeader: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' },
-  connectionLabel: { color: '#C6C3B8', fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
-  connectionName: { color: colors.surface, fontFamily: fonts.display, fontSize: 21, fontWeight: '700', marginTop: 4 },
-  connectedPill: { backgroundColor: '#DCE9D8', borderRadius: 12, paddingHorizontal: 9, paddingVertical: 6 },
-  connectedPillText: { color: colors.success, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.8 },
-  connectionMeta: { color: '#C6C3B8', fontFamily: fonts.body, fontSize: 10, marginTop: 9 },
-  domainRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 16 },
-  domainPill: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12, paddingHorizontal: 9, paddingVertical: 6 },
-  domainPillText: { color: colors.surface, fontFamily: fonts.body, fontSize: 8, fontWeight: '800' },
-  demoNote: { color: '#C6C3B8', fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 14 },
-  errorCard: { backgroundColor: '#F3DFD4', borderRadius: 16, marginTop: 14, padding: 14 },
-  errorText: { color: colors.danger, fontFamily: fonts.body, fontSize: 11 },
-  sectionHeader: { alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14, marginTop: 35 },
-  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.7, marginTop: 3 },
-  count: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, paddingBottom: 4 },
-  priorityCard: { backgroundColor: colors.surface, borderRadius: 24, marginBottom: 14, padding: 20 },
-  pressed: { opacity: 0.84, transform: [{ scale: 0.99 }] },
-  priorityTop: { alignItems: 'center', flexDirection: 'row' },
-  rank: { alignItems: 'center', borderRadius: 15, height: 31, justifyContent: 'center', width: 31 },
-  rankText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '900' },
-  priorityTags: { flex: 1, marginLeft: 10 },
-  priorityLabel: { color: colors.success, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
-  domainLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, marginTop: 2 },
-  score: { color: colors.muted, fontFamily: fonts.display, fontSize: 18, fontWeight: '700' },
-  cardTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 25, fontWeight: '700', letterSpacing: -0.5, lineHeight: 29, marginTop: 16 },
-  whyNow: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 9 },
-  nextBlock: { backgroundColor: colors.butter, borderRadius: 16, marginTop: 16, padding: 13 },
+  signalStrip: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 19, flexDirection: 'row', marginTop: 22, padding: 13 },
+  signalIcon: { alignItems: 'center', backgroundColor: colors.lilac, borderRadius: 13, height: 34, justifyContent: 'center', width: 34 },
+  signalIconText: { color: colors.ink, fontSize: 15 },
+  signalCopy: { flex: 1, marginLeft: 10 },
+  signalTitle: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
+  signalMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, marginTop: 3 },
+  signalArrow: { color: colors.ink, fontSize: 14 },
+  errorCard: { backgroundColor: '#F3DFD4', borderRadius: 16, marginTop: 12, padding: 13 },
+  errorText: { color: colors.danger, fontFamily: fonts.body, fontSize: 10, lineHeight: 15 },
+  sectionHeader: { alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 12, paddingTop: 32 },
+  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.7 },
+  sectionSubtitle: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, marginTop: 3 },
+  count: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, paddingBottom: 2 },
+  recommendationCard: { backgroundColor: colors.surface, borderRadius: 25, marginBottom: 14, overflow: 'hidden' },
+  cardBody: { padding: 19 },
+  pressed: { opacity: 0.82 },
+  tagRow: { alignItems: 'center', flexDirection: 'row', gap: 7 },
+  domainPill: { backgroundColor: colors.peach, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 6 },
+  domainPillText: { color: colors.ink, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.6, textTransform: 'uppercase' },
+  evidencePill: { backgroundColor: '#DCE9D8', borderRadius: 12, paddingHorizontal: 9, paddingVertical: 6 },
+  evidencePillReview: { backgroundColor: colors.butter },
+  evidencePillText: { color: colors.success, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.4, textTransform: 'uppercase' },
+  evidencePillTextReview: { color: colors.ink },
+  cardTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.6, lineHeight: 30, marginTop: 15 },
+  whyLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.9, marginTop: 17 },
+  whyNow: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 6 },
+  nextBlock: { backgroundColor: colors.butter, borderRadius: 16, marginTop: 15, padding: 13 },
+  nextBlockReview: { backgroundColor: colors.peach },
   nextLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.9 },
   nextText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '700', lineHeight: 16, marginTop: 5 },
-  contextCount: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '700', marginTop: 14 },
-  loading: { alignItems: 'center', gap: 10, paddingVertical: 50 },
+  contextCount: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '700', marginTop: 13 },
+  feedbackRow: { alignItems: 'center', borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', justifyContent: 'space-between', minHeight: 46, paddingHorizontal: 16, paddingVertical: 9 },
+  feedbackPrompt: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '700' },
+  feedbackActions: { alignItems: 'center', flexDirection: 'row', gap: 4 },
+  feedbackButton: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 6 },
+  feedbackText: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '800' },
+  loading: { alignItems: 'center', gap: 10, paddingVertical: 60 },
   loadingText: { color: colors.muted, fontFamily: fonts.body, fontSize: 11 },
-  empty: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 22, padding: 28 },
-  emptyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 23, fontWeight: '700' },
-  emptyCopy: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 7, textAlign: 'center' },
+  empty: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 24, marginTop: 30, padding: 30 },
+  emptyMark: { color: colors.ink, fontSize: 23 },
+  emptyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 25, fontWeight: '700', marginTop: 10 },
+  emptyCopy: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 7, textAlign: 'center' },
 });

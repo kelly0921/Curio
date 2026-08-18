@@ -1,4 +1,4 @@
-import { Link, router, useLocalSearchParams } from 'expo-router';
+import { Link, router, useLocalSearchParams, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,11 +12,24 @@ function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
 }
 
+function recommendationLabel(value: NonNullable<LearningItem['card']>['personalization']): string {
+  if (!value) return '';
+  const tier = value.recommendationTier
+    ?? (value.priority === 'high' ? 'do_now' : value.priority === 'medium' ? 'useful_for_goals' : 'worth_remembering');
+  if (tier === 'do_now') return 'DO NOW';
+  if (tier === 'useful_for_goals') return 'USEFUL FOR YOUR GOALS';
+  return 'WORTH REMEMBERING';
+}
+
 function sourceName(item: LearningItem): string {
   if (item.creator) return item.creator;
   if (item.sourceType === 'uploaded_media') return 'Shared recording';
   if (item.sourceType === 'demo_fixture') return 'Curio sample';
   return `${label(item.platform)} source`;
+}
+
+function externalHref(value: string): Href {
+  return value as Href;
 }
 
 function originalSourceLink(sourceUrl: string, platform: LearningItem['platform']): { href: string; inline: boolean; label: string; target: '_blank' | '_self' } {
@@ -165,7 +178,7 @@ export default function ItemDetailScreen() {
                     {finding.sources.length > 0 && (
                       <View style={styles.researchSources}>
                         {finding.sources.map((source) => (
-                          <Link asChild href={source.url} key={source.url} rel="noopener noreferrer" target="_blank">
+                          <Link asChild href={externalHref(source.url)} key={source.url} rel="noopener noreferrer" target="_blank">
                             <Pressable accessibilityHint="Open this research source" style={styles.researchSource}>
                               <Text numberOfLines={2} style={styles.researchSourceText}>{source.publisher} · {source.title}</Text>
                               <Text style={styles.researchSourceArrow}>↗</Text>
@@ -183,7 +196,7 @@ export default function ItemDetailScreen() {
               <View style={styles.personalizationSection}>
                 <View style={styles.personalizationHeading}>
                   <View><Text style={styles.eyebrow}>PERSONALIZED FOR YOU</Text><Text style={styles.sectionTitle}>Why this matters now</Text></View>
-                  <View style={styles.priorityPill}><Text style={styles.priorityPillText}>{personalization.priority.toUpperCase()} · {personalization.priorityScore}</Text></View>
+                  <View style={styles.priorityPill}><Text style={styles.priorityPillText}>{recommendationLabel(personalization)}</Text></View>
                 </View>
                 <View style={[styles.contextCard, { backgroundColor: colors.sage }]}>
                   <Text style={styles.contextIcon}>◇</Text>
@@ -278,7 +291,7 @@ export default function ItemDetailScreen() {
               {showSource && <InstagramSourceViewer onDismiss={() => setShowSource(false)} sourceUrl={originalSource.href} />}
             </>
           ) : originalSource ? (
-            <Link asChild href={originalSource.href} rel="noopener noreferrer" target={originalSource.target}>
+            <Link asChild href={externalHref(originalSource.href)} rel="noopener noreferrer" target={originalSource.target}>
               <Pressable accessibilityHint={`Open the original ${label(item.platform)} source`} style={styles.sourceButton}>
                 <Text style={styles.sourceButtonText}>{originalSource.label}</Text><Text style={styles.sourceButtonText}>↗</Text>
               </Pressable>

@@ -39,6 +39,17 @@ export class SupabaseLearningItemRepository implements LearningItemRepository {
     return ((result.data ?? []) as LearningItemRow[]).map((row) => learningItemSchema.parse(row.record_json));
   }
 
+  async findById(id: string): Promise<LearningItem | null> {
+    const result = await this.client
+      .from("learning_item")
+      .select("id,source_fingerprint,record_json")
+      .eq("id", id)
+      .maybeSingle();
+    if (result.error) throw new Error(`Supabase find learning item failed: ${result.error.message}`);
+    const row = result.data as LearningItemRow | null;
+    return row ? learningItemSchema.parse(row.record_json) : null;
+  }
+
   async findByFingerprint(fingerprint: string): Promise<LearningItem | null> {
     const result = await this.client
       .from("learning_item")

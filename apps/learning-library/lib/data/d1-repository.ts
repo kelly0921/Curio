@@ -19,6 +19,14 @@ export class D1LearningItemRepository implements LearningItemRepository {
     return result.results.map(parseRow);
   }
 
+  async findById(id: string): Promise<LearningItem | null> {
+    const row = await this.database
+      .prepare("SELECT record_json FROM learning_item WHERE id = ? LIMIT 1")
+      .bind(id)
+      .first<LearningItemRow>();
+    return row ? parseRow(row) : null;
+  }
+
   async findByFingerprint(fingerprint: string): Promise<LearningItem | null> {
     const row = await this.database
       .prepare("SELECT record_json FROM learning_item WHERE source_fingerprint = ? LIMIT 1")

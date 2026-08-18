@@ -16,6 +16,7 @@ export default function RootLayout() {
         }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="priorities" options={{ animation: 'fade' }} />
+        <Stack.Screen name="settings" />
         <Stack.Screen name="capture" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         <Stack.Screen name="handle-share" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="item/[id]" />

@@ -10,6 +10,11 @@ export class MemoryLearningItemRepository implements LearningItemRepository {
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
+  async findById(id: string): Promise<LearningItem | null> {
+    const item = this.items.get(id);
+    return item ? learningItemSchema.parse(item) : null;
+  }
+
   async findByFingerprint(fingerprint: string): Promise<LearningItem | null> {
     const item = [...this.items.values()].find((candidate) => candidate.sourceFingerprint === fingerprint);
     return item ? learningItemSchema.parse(item) : null;
