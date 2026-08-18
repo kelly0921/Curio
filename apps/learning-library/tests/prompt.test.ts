@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildLearningCardPrompt,
+  detectNamedTakeawayTargets,
+  detectPromisedListCount,
   detectSupplementResearchAngles,
   LEARNING_CARD_RESEARCH_SYSTEM_PROMPT,
   LEARNING_CARD_SYSTEM_PROMPT,
+  researchSourceMatchesNamedTarget,
 } from "@/lib/ai/prompt";
 
 describe("Learning Card prompt boundary", () => {
@@ -90,6 +93,44 @@ describe("Learning Card prompt boundary", () => {
       }],
     });
     expect(prompt).toContain('"promisedListCount": 5');
+  });
+
+  it("preserves unnumbered named subjects and aligns one research finding to each", () => {
+    expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("Treat 2–5 distinct on-screen headings");
+    expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("Exact visible name — why the source included it");
+    expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("every primary company, ticker, security, asset, or industry thesis");
+    expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("historical examples, competitors, cited suppliers");
+    expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("exactly one finding for every target");
+    expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("the source's claimed thesis or catalyst");
+    expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("Never attach another company's page");
+    expect(detectNamedTakeawayTargets([
+      "Coherent — Optical components connect it to AI data-center demand.",
+      "Lumentum — High-speed optics are the source's stated catalyst.",
+      "Verify the revenue exposure before treating either as a pure-play investment.",
+    ])).toEqual(["Coherent", "Lumentum"]);
+    expect(detectNamedTakeawayTargets([
+      "Optical transceivers are the broad theme.",
+      "Policy language is not an investment recommendation.",
+    ])).toEqual([]);
+
+    expect(detectPromisedListCount([{
+      kind: "transcript",
+      label: "Full Reel transcript",
+      text: "These are three U.S. companies that stand to benefit: AOI, Lumentum, and Viavi.",
+      origin: "instagram_browser_transcription",
+      completeness: "complete_for_channel",
+    }])).toBe(3);
+
+    expect(researchSourceMatchesNamedTarget("AOI", {
+      title: "Applied Optoelectronics 2025 Annual Report",
+      publisher: "SEC",
+      url: "https://www.sec.gov/example/ao-inc",
+    })).toBe(true);
+    expect(researchSourceMatchesNamedTarget("AOI", {
+      title: "EML 200G PAM4 CWDM Laser",
+      publisher: "Lumentum",
+      url: "https://www.lumentum.com/en/products/eml-200g",
+    })).toBe(false);
   });
 
   it("requires a useful independent supplement when a promised list is inaccessible", () => {

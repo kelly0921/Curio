@@ -8,7 +8,7 @@ import type {
 } from "../ai/services";
 import type { SourceMaterial } from "../domain";
 
-export const PUBLIC_SOURCE_RETRIEVAL_VERSION = "public-source-v2-full-reel" as const;
+export const PUBLIC_SOURCE_RETRIEVAL_VERSION = "public-source-v3-named-reel-evidence" as const;
 
 const MAX_PUBLIC_AUDIO_BYTES = 12 * 1024 * 1024;
 const MAX_REEL_DURATION_SECONDS = 20 * 60;

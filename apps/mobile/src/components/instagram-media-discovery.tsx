@@ -12,18 +12,37 @@ const discoveryScript = String.raw`
     if (window.__curioMediaDiscoveryStarted) return true;
     window.__curioMediaDiscoveryStarted = true;
     var attempts = 0;
+    var decodeCandidate = function (value) {
+      return value
+        .replace(/\\u0026/gi, '&')
+        .replace(/\\u003d/gi, '=')
+        .replace(/\\\//g, '/')
+        .replace(/&amp;/gi, '&');
+    };
     var collect = function () {
       try {
         var urls = [];
         performance.getEntriesByType('resource').forEach(function (entry) { urls.push(entry.name); });
-        document.querySelectorAll('video, video source').forEach(function (element) {
+        document.querySelectorAll('video, video source, [src], [href], meta[content]').forEach(function (element) {
           if (element.currentSrc) urls.push(element.currentSrc);
           if (element.src) urls.push(element.src);
+          if (element.href) urls.push(element.href);
+          if (element.content) urls.push(element.content);
         });
-        var mediaUrls = Array.from(new Set(urls)).filter(function (value) {
+        var html = document.documentElement ? document.documentElement.innerHTML : '';
+        (html.match(/https:[^"'\s<>{}]+/gi) || []).forEach(function (value) { urls.push(value); });
+        var mediaUrls = Array.from(new Set(urls.map(decodeCandidate))).filter(function (value) {
           return typeof value === 'string'
             && value.indexOf('https://') === 0
-            && /(cdninstagram\.com|fbcdn\.net)/i.test(value);
+            && /(cdninstagram\.com|fbcdn\.net)/i.test(value)
+            && (/\.mp4(?:[?#]|$)/i.test(value) || /[?&]efg=/i.test(value));
+        }).sort(function (left, right) {
+          var score = function (value) {
+            return (/\.mp4(?:[?#]|$)/i.test(value) ? 4 : 0)
+              + (/[?&]efg=/i.test(value) ? 2 : 0)
+              + (/audio/i.test(value) ? 1 : 0);
+          };
+          return score(right) - score(left);
         }).slice(0, 30);
         if (mediaUrls.length) {
           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'curio-instagram-media', mediaUrls: mediaUrls }));
@@ -45,21 +64,21 @@ const discoveryScript = String.raw`
   true;
 `;
 
-function publicEmbedUrl(sourceUrl: string): string | null {
+function publicReelUrl(sourceUrl: string): string | null {
   try {
     const url = new URL(sourceUrl.trim());
     const hostname = url.hostname.toLowerCase();
     if (!['instagram.com', 'www.instagram.com', 'instagr.am'].includes(hostname)) return null;
     const match = url.pathname.match(/^\/(?:reel|reels)\/([A-Za-z0-9_-]+)/u);
-    return match ? `https://www.instagram.com/reel/${match[1]}/embed/captioned/` : null;
+    return match ? `https://www.instagram.com/reel/${match[1]}/` : null;
   } catch {
     return null;
   }
 }
 
 export function InstagramMediaDiscovery({ onMediaUrls, sourceUrl }: InstagramMediaDiscoveryProps) {
-  const embedUrl = useMemo(() => publicEmbedUrl(sourceUrl), [sourceUrl]);
-  if (!embedUrl) return null;
+  const reelUrl = useMemo(() => publicReelUrl(sourceUrl), [sourceUrl]);
+  if (!reelUrl) return null;
 
   function receiveMessage(event: WebViewMessageEvent) {
     try {
@@ -80,7 +99,7 @@ export function InstagramMediaDiscovery({ onMediaUrls, sourceUrl }: InstagramMed
         injectedJavaScript={discoveryScript}
         injectedJavaScriptBeforeContentLoaded={discoveryScript}
         javaScriptEnabled
-        key={embedUrl}
+        key={reelUrl}
         mediaPlaybackRequiresUserAction={false}
         onMessage={receiveMessage}
         onShouldStartLoadWithRequest={(request) => (
@@ -88,7 +107,7 @@ export function InstagramMediaDiscovery({ onMediaUrls, sourceUrl }: InstagramMed
           || /^https:\/\/([^.]+\.)?(instagram\.com|cdninstagram\.com|fbcdn\.net)(?:\/|$)/iu.test(request.url)
         )}
         originWhitelist={['https://*']}
-        source={{ uri: embedUrl }}
+        source={{ uri: reelUrl }}
         style={styles.hiddenWebView}
       />
     </View>

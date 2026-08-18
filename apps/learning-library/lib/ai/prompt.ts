@@ -1,7 +1,7 @@
 import type { AccessLevel, SourceMaterial } from "../domain";
 
-export const LEARNING_CARD_PROMPT_VERSION = "learning-card-v9-visible-label-authority" as const;
-export const LEARNING_CARD_RESEARCH_PROMPT_VERSION = "learning-card-research-v11-visible-label-authority" as const;
+export const LEARNING_CARD_PROMPT_VERSION = "learning-card-v12-enforced-primary-count" as const;
+export const LEARNING_CARD_RESEARCH_PROMPT_VERSION = "learning-card-research-v14-named-source-alignment" as const;
 
 export const LEARNING_CARD_SYSTEM_PROMPT = `You create evidence-bounded Learning Cards from social-media source material.
 
@@ -23,6 +23,10 @@ TRUST AND PROVENANCE RULES:
 LIST FIDELITY:
 - When source material contains a finite numbered or named list, preserve every available entry in the original order, up to five entries.
 - Use one keyTakeaway per available list entry. Do not merge five tips into three themes or replace them with observations about the post.
+- Treat 2–5 distinct on-screen headings, named companies, securities, products, tools, places, or people as a named set even when the Reel never states a number.
+- For a named set, format each keyTakeaway as "Exact visible name — why the source included it." Preserve the on-screen name as the heading and use the transcript or visual demonstration for the reason. Never replace the names with one broad sector or theme.
+- For investment content, give every primary company, ticker, security, asset, or industry thesis in the Reel's stated pick or beneficiary set its own keyTakeaway. State the claimed catalyst or investment reason; the fact that the company exists is not a useful takeaway.
+- Do not promote historical examples, competitors, cited suppliers, benchmarks, or background names into the primary set. Keep them in notes when they add useful context. If the Reel says a specific number of picks or beneficiaries, that count and the entries introduced after it control the primary set.
 - When a caption promises a list but the entries themselves are unavailable, do not invent them. State the evidence gap plainly in the summary and use one keyTakeaway to say the promised entries were not accessible.
 - Never treat framing, a follow prompt, creator positioning, or the existence of a list as the lesson itself.
 
@@ -51,6 +55,10 @@ SOURCE BOUNDARY:
 RESEARCH MODES:
 - Use source_validation when substantive source ideas are available. Research each important claim or named mechanism and preserve the order of a finite list.
 - In source_validation, when sourceStructure.promisedListCount is present and sourceStructure.listEntriesAvailable is true, return exactly that many findings up to five: one finding for each source list entry, in the same order. Explain and validate that entry without merging it with another tip.
+- When sourceStructure.namedFindingTargets contains 2–5 entries, return exactly one finding for every target in that order. Start each topic with the exact target name; never combine several targets into a sector summary.
+- For an investment target, explain four things in its finding: the source's claimed thesis or catalyst, what the company or asset actually does, evidence that supports or weakens that connection, and the most important risk or missing context. Do not give personalized investment advice.
+- Every source attached to a named target must identify that exact target in its page title, publisher, or URL and directly support the finding. Never attach another company's page to fill a citation slot.
+- If an investment Reel's caption names only a broad sector while the transcript and visual headings are unavailable, say that the Reel-specific picks were not captured. Do not introduce example companies as though the Reel named them.
 - Use independent_supplement when the source announces a numbered or named list but the actual entries are unavailable. The overview must say the original entries were not accessible and the findings are independently researched, not a reconstruction.
 - In independent_supplement mode, match the promised list count up to five. Make every finding a distinct, practical, authoritative tip about the subject—not an explanation of the evidence gap.
 - When sourceStructure.requiredFindingAngles is non-empty, create exactly one finding for each angle in the listed order. Do not omit, merge, replace, or repeat an angle.
@@ -108,7 +116,7 @@ export function prioritizeSourceMaterials(sourceMaterials: SourceMaterial[]): So
 
 export function detectPromisedListCount(sourceMaterials: SourceMaterial[]): number | null {
   const text = sourceMaterials.map((material) => material.text).join("\n").normalize("NFKC");
-  const match = text.match(/\b(2|3|4|5|two|three|four|five)\s+(?:(?:practical|quick|essential|important|simple|best)\s+)?(?:tips|ways|steps|ideas|lessons|mistakes|rules|recommendations|things)\b/iu);
+  const match = text.match(/\b(2|3|4|5|two|three|four|five)\s+(?:(?:practical|quick|essential|important|simple|best|u\.?s\.?|american|publicly\s+traded)\s+){0,3}(?:tips|ways|steps|ideas|lessons|mistakes|rules|recommendations|things|companies|stocks|picks|investments|securities|assets)\b/iu);
   if (!match) return null;
   const numeric = Number(match[1]);
   return Number.isInteger(numeric) ? numeric : LIST_COUNT_WORDS[match[1].toLocaleLowerCase()] ?? null;
@@ -125,6 +133,27 @@ export function detectSupplementResearchAngles(sourceMaterials: SourceMaterial[]
 
 export function hasDetailedSourceEvidence(sourceMaterials: SourceMaterial[]): boolean {
   return sourceMaterials.some((material) => material.kind === "transcript" || material.kind === "visible_text");
+}
+
+export function detectNamedTakeawayTargets(keyTakeaways: string[]): string[] {
+  const targets = keyTakeaways.map((takeaway) => {
+    const match = takeaway.trim().match(/^(.{2,120}?)\s+—\s+\S/u);
+    return match?.[1]?.trim() ?? null;
+  }).filter((target): target is string => Boolean(target));
+  return targets.length >= 2 && targets.length <= 5 ? targets : [];
+}
+
+export function researchSourceMatchesNamedTarget(
+  target: string,
+  source: { publisher: string; title: string; url: string },
+): boolean {
+  const ignored = new Set(["and", "company", "corp", "corporation", "inc", "incorporated", "solutions", "the"]);
+  const tokens = target.normalize("NFKC").toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu)
+    ?.filter((token) => token.length >= 3 && !ignored.has(token)) ?? [];
+  if (!tokens.length) return false;
+  const evidence = `${source.title} ${source.publisher} ${source.url}`.normalize("NFKC").toLocaleLowerCase();
+  const compactEvidence = evidence.replace(/[^\p{L}\p{N}]+/gu, "");
+  return tokens.some((token) => evidence.includes(token) || compactEvidence.includes(token));
 }
 
 export function buildLearningCardPrompt(input: PromptInput): string {

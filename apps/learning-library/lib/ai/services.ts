@@ -14,6 +14,7 @@ import {
 } from "../domain";
 import {
   buildLearningCardPrompt,
+  detectNamedTakeawayTargets,
   detectPromisedListCount,
   detectSupplementResearchAngles,
   hasDetailedSourceEvidence,
@@ -22,6 +23,7 @@ import {
   LEARNING_CARD_RESEARCH_SYSTEM_PROMPT,
   LEARNING_CARD_SYSTEM_PROMPT,
   prioritizeSourceMaterials,
+  researchSourceMatchesNamedTarget,
 } from "./prompt";
 import type { ReelFrame } from "../retrieval/instagram-reel";
 
@@ -237,6 +239,7 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
       text: [
         "Inspect these timestamped frames sampled in order across one public Instagram Reel.",
         "Extract all informative on-screen text exactly enough to preserve names, numbers, list items, and instructions.",
+        "Preserve the visual hierarchy: identify large or repeated headings and keep each named item with the smaller reason, catalyst, or explanation shown beside it.",
         "Also describe meaningful visual-only demonstrations or examples, but do not infer speech, intent, or events between sampled frames.",
         "Deduplicate unchanged text across adjacent frames. Use only timestamps supplied beside the images.",
         "Return no observation for a frame that contains only decorative imagery or platform controls.",
@@ -286,11 +289,17 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
   }
 
   async analyze(input: { accessLevel: AccessLevel; sourceMaterials: SourceMaterial[] }): Promise<CardAnalysisResult> {
+    const promisedListCount = detectPromisedListCount(prioritizeSourceMaterials(input.sourceMaterials));
+    const responseSchema = promisedListCount
+      ? sourceLearningCardOutputSchema.extend({
+        keyTakeaways: z.array(z.string().min(1).max(500)).length(promisedListCount),
+      }).strict()
+      : sourceLearningCardOutputSchema;
     const response = await this.client.responses.parse({
       model: this.analysisModel,
       instructions: LEARNING_CARD_SYSTEM_PROMPT,
       input: buildLearningCardPrompt(input),
-      text: { format: zodTextFormat(sourceLearningCardOutputSchema, "learning_card") },
+      text: { format: zodTextFormat(responseSchema, "learning_card") },
     });
     if (response.status !== "completed" || !response.output_parsed) {
       throw new Error(`OpenAI analysis did not complete (${response.status ?? "unknown"}).`);
@@ -307,16 +316,19 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
     const prioritizedMaterials = prioritizeSourceMaterials(input.sourceMaterials);
     const promisedListCount = detectPromisedListCount(prioritizedMaterials);
     const requiredFindingAngles = detectSupplementResearchAngles(prioritizedMaterials);
+    const namedFindingTargets = hasDetailedSourceEvidence(prioritizedMaterials)
+      ? detectNamedTakeawayTargets(input.card.keyTakeaways)
+      : [];
     const expectedFindingCount = promisedListCount && promisedListCount <= 5
       && (hasDetailedSourceEvidence(prioritizedMaterials) || requiredFindingAngles.length === promisedListCount)
       ? promisedListCount
-      : null;
+      : namedFindingTargets.length || null;
     const alignedFindingKeys = expectedFindingCount
       ? Array.from({ length: expectedFindingCount }, (_value, index) => `finding${index + 1}`)
       : [];
     const alignedFindingShape = Object.fromEntries(alignedFindingKeys.map((key, index) => {
       const target = hasDetailedSourceEvidence(prioritizedMaterials)
-        ? input.card.keyTakeaways[index] ?? `Source list item ${index + 1}`
+        ? namedFindingTargets[index] ?? input.card.keyTakeaways[index] ?? `Source list item ${index + 1}`
         : requiredFindingAngles[index] ?? `Independent supplement item ${index + 1}`;
       return [key, researchFindingOutputSchema.describe(
         `Research only list item ${index + 1}: ${target}. Do not split this item or substitute another list item.`,
@@ -334,6 +346,9 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
       input: JSON.stringify({
         sourceCard: {
           title: input.card.title,
+          primaryTopic: input.card.primaryTopic,
+          secondaryTopics: input.card.secondaryTopics,
+          contentType: input.card.contentType,
           summary: input.card.summary,
           keyTakeaways: input.card.keyTakeaways,
           notes: input.card.notes,
@@ -342,6 +357,7 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
         sourceStructure: {
           promisedListCount,
           listEntriesAvailable: hasDetailedSourceEvidence(prioritizedMaterials),
+          namedFindingTargets,
           requiredFindingAngles,
         },
         sourceMaterials: prioritizedMaterials,
@@ -367,11 +383,13 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
       : researchOutputSchema.parse(rawParsed);
     const consultedUrls = consultedUrlsFrom(response);
     const consultedKeys = new Set(consultedUrls.map(evidenceUrlKey).filter((key): key is string => Boolean(key)));
-    const findings = parsed.findings.map((finding) => {
+    const findings = parsed.findings.map((finding, index) => {
       const seenSourceKeys = new Set<string>();
+      const namedTarget = namedFindingTargets[index] ?? null;
       const sources = finding.sources.filter((source) => {
         const key = evidenceUrlKey(source.url);
         if (key === null || !consultedKeys.has(key) || seenSourceKeys.has(key)) return false;
+        if (namedTarget && !researchSourceMatchesNamedTarget(namedTarget, source)) return false;
         seenSourceKeys.add(key);
         return true;
       });

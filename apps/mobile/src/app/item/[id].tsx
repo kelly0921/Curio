@@ -7,6 +7,7 @@ import { CurioBrand } from '@/components/curio-brand';
 import { colors, fonts, shadows } from '@/constants/curio-theme';
 import { getLearningItem, saveLink, type LearningItem } from '@/lib/curio-api';
 import { originalSourceLink } from '@/lib/original-source';
+import { takeawayParts } from '@/lib/takeaway';
 
 function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
@@ -113,12 +114,18 @@ export default function ItemDetailScreen() {
             {!researchIsSupplement && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Key takeaways</Text>
-                {card.keyTakeaways.map((takeaway, index) => (
-                  <View key={`${index}-${takeaway}`} style={styles.takeaway}>
-                    <View style={styles.takeawayNumber}><Text style={styles.takeawayNumberText}>{index + 1}</Text></View>
-                    <Text style={styles.takeawayText}>{takeaway}</Text>
-                  </View>
-                ))}
+                {card.keyTakeaways.map((takeaway, index) => {
+                  const parts = takeawayParts(takeaway);
+                  return (
+                    <View key={`${index}-${takeaway}`} style={styles.takeaway}>
+                      <View style={styles.takeawayNumber}><Text style={styles.takeawayNumberText}>{index + 1}</Text></View>
+                      <View style={styles.takeawayCopy}>
+                        {parts.heading && <Text style={styles.takeawayHeading}>{parts.heading}</Text>}
+                        <Text style={[styles.takeawayText, parts.heading && styles.takeawayDetail]}>{parts.detail}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
                 {notes.length > 0 && (
                   <>
                     <Pressable
@@ -344,7 +351,10 @@ const styles = StyleSheet.create({
   takeaway: { alignItems: 'flex-start', borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: 13, paddingVertical: 17 },
   takeawayNumber: { alignItems: 'center', backgroundColor: colors.dark, borderRadius: 13, height: 26, justifyContent: 'center', width: 26 },
   takeawayNumberText: { color: colors.surface, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
-  takeawayText: { color: colors.ink, flex: 1, fontFamily: fonts.body, fontSize: 14, lineHeight: 20 },
+  takeawayCopy: { flex: 1 },
+  takeawayHeading: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: '700', lineHeight: 23 },
+  takeawayText: { color: colors.ink, fontFamily: fonts.body, fontSize: 14, lineHeight: 20 },
+  takeawayDetail: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 5 },
   researchSection: { paddingBottom: 30 },
   researchSupplementSection: { paddingTop: 34 },
   researchModeLabel: { color: colors.success, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
