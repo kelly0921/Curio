@@ -58,9 +58,11 @@ describe("Learning Card prompt boundary", () => {
 
     expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("PRIMARY SOURCE EVIDENCE");
     expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("caption is supporting context only");
+    expect(LEARNING_CARD_SYSTEM_PROMPT).toContain("proper nouns control their spelling and label");
     expect(LEARNING_CARD_RESEARCH_SYSTEM_PROMPT).toContain("full Reel transcript and timestamped visual evidence");
-    expect(prompt.indexOf("Spoken tip one with details.")).toBeLessThan(prompt.indexOf("[00:05] On-screen text: Tip one"));
-    expect(prompt.indexOf("[00:05] On-screen text: Tip one")).toBeLessThan(prompt.indexOf("Caption headline"));
+    expect(prompt).toContain('"canonicalVisibleLabels"');
+    expect(prompt.indexOf("[00:05] On-screen text: Tip one")).toBeLessThan(prompt.indexOf("Spoken tip one with details."));
+    expect(prompt.indexOf("Spoken tip one with details.")).toBeLessThan(prompt.indexOf("Caption headline"));
   });
 
   it("requires compact lesson-first writing without repetitive attribution", () => {

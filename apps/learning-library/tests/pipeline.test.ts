@@ -269,8 +269,8 @@ describe("Learning Item pipeline", () => {
     expect(upgraded.item.sourceRetrievalVersion).toBe(PUBLIC_SOURCE_RETRIEVAL_VERSION);
     expect(upgraded.item.transcriptionModel).toBe("test-transcriber");
     expect(upgraded.item.sourceMaterials.slice(0, 2).map((material) => material.origin)).toEqual([
-      "instagram_browser_transcription",
       "instagram_browser_visual_analysis",
+      "instagram_browser_transcription",
     ]);
     expect(duplicate.duplicate).toBe(true);
     expect(retriever.retrieve).toHaveBeenCalledOnce();

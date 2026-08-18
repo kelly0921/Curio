@@ -1,7 +1,7 @@
 import type { AccessLevel, SourceMaterial } from "../domain";
 
-export const LEARNING_CARD_PROMPT_VERSION = "learning-card-v7-reel-list-title" as const;
-export const LEARNING_CARD_RESEARCH_PROMPT_VERSION = "learning-card-research-v9-fixed-list-slots" as const;
+export const LEARNING_CARD_PROMPT_VERSION = "learning-card-v9-visible-label-authority" as const;
+export const LEARNING_CARD_RESEARCH_PROMPT_VERSION = "learning-card-research-v11-visible-label-authority" as const;
 
 export const LEARNING_CARD_SYSTEM_PROMPT = `You create evidence-bounded Learning Cards from social-media source material.
 
@@ -10,6 +10,7 @@ TRUST AND PROVENANCE RULES:
 - For an Instagram Reel, a full speech transcript and timestamped visual-frame evidence are PRIMARY SOURCE EVIDENCE. The post caption is supporting context only and must not override, substitute for, or invent missing Reel content.
 - Use both primary Reel channels together. Audio can explain spoken details; visual evidence can contain list headings, labels, demonstrations, and corrections that speech omits.
 - When primary Reel channels conflict, preserve the conflict explicitly instead of choosing the caption or silently reconciling it.
+- Clear timestamped on-screen list headings, app names, product names, prices, and other proper nouns control their spelling and label. Use the transcript for spoken explanation, but do not replace a visibly spelled name with a phonetic transcription or likely homophone.
 - USER CONTEXT is deliberately absent during extraction. Personalization runs later against connected context records. Never attribute it to the creator.
 - GENERATED INTERPRETATION is your synthesis, classification, relevance, and suggested action.
 - Never imply you watched a full video. State conclusions only at the fidelity supported by accessLevel and source material.
@@ -87,8 +88,8 @@ const TRAVEL_RESEARCH_ANGLES = [
 ] as const;
 
 const SOURCE_EVIDENCE_PRIORITY: Record<SourceMaterial["origin"], number> = {
-  instagram_browser_transcription: 0,
-  instagram_browser_visual_analysis: 1,
+  instagram_browser_visual_analysis: 0,
+  instagram_browser_transcription: 1,
   instagram_public_embed_transcription: 2,
   openai_transcription: 3,
   user_supplied: 4,
@@ -137,7 +138,10 @@ export function buildLearningCardPrompt(input: PromptInput): string {
       caution: input.accessLevel === "partial"
         ? "Only the listed channels were available. The complete visual/video meaning may be missing."
         : "Use only the listed source channels.",
-      evidenceOrder: "Primary Reel transcript, then timestamped Reel visuals, then other transcripts/user evidence, then captions and web-page text.",
+      canonicalVisibleLabels: prioritizedMaterials
+        .filter((material) => material.origin === "instagram_browser_visual_analysis")
+        .map((material) => material.text),
+      evidenceOrder: "Canonical timestamped Reel visuals control visible list labels and proper-name spelling; the full transcript supplies spoken detail; captions and web-page text are secondary.",
       promisedListCount: detectPromisedListCount(prioritizedMaterials),
       materials: prioritizedMaterials,
     }, null, 2),
