@@ -135,10 +135,14 @@ The first Living Resources slice is implemented:
 - For You now synthesizes the week across saves instead of repeating per-card relevance: it shows supported themes, one durable point to remember, actual resource changes, repeated evidence, and important unresolved claims.
 - Synthesis modules are evidence-gated. Themes require at least two sources, repeated points require multi-source provenance, and change cards exclude brand-new resources.
 - Theme detection now requires concept overlap across canonical topics, entities, or useful entry headings. A shared broad domain alone is shown as “What you explored,” not misrepresented as a connected pattern.
+- Save intent is now inferred from the complete learning card—including content shape, takeaways, and suggested use—so travel tips become plans, workflows become things to try, changing opportunities become watchlists, and explainers stay focused on understanding.
+- Existing resources stuck on the legacy “understand” default are repaired conservatively when the source provides high-confidence evidence. This repair preserves the original update date and contribution history, so it does not create false “changed” activity.
+- Library tiles and resource details now adapt their language to the inferred purpose: practical steps, trip-planning tips, purchase considerations, watch items, comparison points, or plain-English knowledge.
+- For You can resurface one concrete intent-matched point such as “Ready to try” or “Worth watching,” while keeping general explainers in the quieter “Keep close” module.
 - Sparse libraries fall back to a few existing recommendations, while empty synthesis categories stay hidden rather than filling the screen with generic status text.
 - Demo context may influence ranking but is not presented as a real connected workspace; visible context claims are reserved for an actual connection.
 
-The initial merge, retrieval, and weekly synthesis engines deliberately use high-confidence deterministic matching. Semantic embeddings for fuzzier synonym matching, automatic intent classification, scheduled background refreshes, and AI-written cross-source explanations remain later phases.
+The initial merge, retrieval, intent, and weekly synthesis engines deliberately use high-confidence deterministic matching. Semantic embeddings for fuzzier synonym matching, scheduled background refreshes, and AI-written cross-source explanations remain later phases.
 
 ## North-star behavior
 

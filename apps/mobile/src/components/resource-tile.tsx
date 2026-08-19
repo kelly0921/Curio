@@ -16,6 +16,16 @@ function resourceMark(resource: KnowledgeResource): string {
   return '≡';
 }
 
+function purposeLabel(resource: KnowledgeResource): string {
+  if (resource.intent === 'try') return 'Ready to try';
+  if (resource.intent === 'visit') return 'Plan with this';
+  if (resource.intent === 'buy') return 'Before buying';
+  if (resource.intent === 'track') return 'Worth watching';
+  if (resource.intent === 'compare') return 'Compare options';
+  if (resource.intent === 'reference') return 'Keep for reference';
+  return 'Understand';
+}
+
 function updatedLabel(updatedAt: string): string {
   const value = new Date(updatedAt);
   const today = new Date();
@@ -35,10 +45,10 @@ export function ResourceTile({ resource, index, onPress }: { resource: Knowledge
       style={({ pressed }) => [styles.tile, shadows.card, pressed && styles.pressed]}>
       <View style={[styles.visual, { backgroundColor: tileColors[index % tileColors.length] }]}>
         <Text style={styles.mark}>{resourceMark(resource)}</Text>
-        <Text style={styles.type}>{label(resource.resourceType)}</Text>
+        <Text style={styles.type}>{purposeLabel(resource)}</Text>
       </View>
       <View style={styles.copy}>
-        <Text numberOfLines={1} style={styles.domain}>{label(resource.domain)}</Text>
+        <Text numberOfLines={1} style={styles.domain}>{label(resource.domain)} · {label(resource.resourceType)}</Text>
         <Text numberOfLines={3} style={styles.title}>{resource.title}</Text>
         <View style={styles.metaRow}>
           <Text style={styles.meta}>{resource.sourceItemIds.length} source{resource.sourceItemIds.length === 1 ? '' : 's'}</Text>

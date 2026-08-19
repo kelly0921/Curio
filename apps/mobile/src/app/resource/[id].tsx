@@ -21,10 +21,26 @@ function label(value: string): string {
 
 function sectionTitle(resource: KnowledgeResource): string {
   const count = resource.entries.length;
+  if (resource.intent === 'try') return `${count} step${count === 1 ? '' : 's'} to try`;
+  if (resource.intent === 'visit') return `${count} tip${count === 1 ? '' : 's'} to plan with`;
+  if (resource.intent === 'buy') return `${count} thing${count === 1 ? '' : 's'} to consider`;
+  if (resource.intent === 'track') return `${count} item${count === 1 ? '' : 's'} to watch`;
+  if (resource.intent === 'compare') return `${count} decision point${count === 1 ? '' : 's'}`;
+  if (resource.intent === 'reference') return `${count} useful note${count === 1 ? '' : 's'}`;
   if (resource.resourceType === 'glossary') return `${count} term${count === 1 ? '' : 's'}`;
   if (resource.resourceType === 'playbook') return `${count} step${count === 1 ? '' : 's'}`;
   if (resource.resourceType === 'watchlist') return `${count} item${count === 1 ? '' : 's'} to watch`;
   return `${count} useful insight${count === 1 ? '' : 's'}`;
+}
+
+function sectionEyebrow(resource: KnowledgeResource): string {
+  if (resource.intent === 'try') return 'PRACTICAL STEPS';
+  if (resource.intent === 'visit') return 'PLAN WITH THIS';
+  if (resource.intent === 'buy') return 'BEFORE YOU BUY';
+  if (resource.intent === 'track') return 'WATCH OVER TIME';
+  if (resource.intent === 'compare') return 'WEIGH THE OPTIONS';
+  if (resource.intent === 'reference') return 'QUICK REFERENCE';
+  return resource.resourceType === 'glossary' ? 'IN PLAIN ENGLISH' : 'WHAT TO KNOW';
 }
 
 function sourceTitle(source: LearningItem): string {
@@ -36,8 +52,20 @@ function dateLabel(value: string): string {
 }
 
 function intentLabel(intent: NonNullable<KnowledgeResource['intent']>): string {
-  if (intent === 'reference') return 'For reference';
-  return `To ${intent}`;
+  if (intent === 'try') return 'Ready to try';
+  if (intent === 'visit') return 'Plan with this';
+  if (intent === 'buy') return 'Before buying';
+  if (intent === 'track') return 'Worth watching';
+  if (intent === 'compare') return 'Compare options';
+  if (intent === 'reference') return 'Keep for reference';
+  return 'Understand';
+}
+
+function refreshTitle(resource: KnowledgeResource, status: ResourceFreshness['status']): string {
+  if (resource.intent === 'track') return 'Check what changed';
+  if (resource.intent === 'buy' || resource.intent === 'compare') return 'Recheck before deciding';
+  if (resource.intent === 'visit') return 'Recheck before the trip';
+  return status === 'unresearched' ? 'Check the important claims' : 'Bring this resource up to date';
 }
 
 export default function ResourceDetailScreen() {
@@ -143,7 +171,7 @@ export default function ResourceDetailScreen() {
             <View style={styles.freshnessCallout}>
               <View style={styles.freshnessCalloutCopy}>
                 <Text style={styles.freshnessEyebrow}>{freshness.status === 'unresearched' ? 'RESEARCH NEEDED' : 'RESEARCH DUE'}</Text>
-                <Text style={styles.freshnessTitle}>{freshness.status === 'unresearched' ? 'Check the important claims' : 'Bring this resource up to date'}</Text>
+                <Text style={styles.freshnessTitle}>{refreshTitle(resource, freshness.status)}</Text>
                 <Text style={styles.freshnessReason}>{freshness.reason}</Text>
               </View>
               <Pressable
@@ -170,7 +198,7 @@ export default function ResourceDetailScreen() {
           )}
 
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionEyebrow}>CONSOLIDATED KNOWLEDGE</Text>
+            <Text style={styles.sectionEyebrow}>{sectionEyebrow(resource)}</Text>
             <Text style={styles.sectionTitle}>{sectionTitle(resource)}</Text>
           </View>
 

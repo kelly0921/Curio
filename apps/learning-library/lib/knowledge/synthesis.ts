@@ -5,10 +5,11 @@ import type {
   KnowledgeResourceEntry,
   LearningItem,
   ResourceContribution,
+  SaveIntent,
 } from "../domain";
 import { assessKnowledgeResourceFreshness } from "./freshness";
 
-export const CROSS_SAVE_SYNTHESIS_VERSION = "cross-save-synthesis-v2-concepts" as const;
+export const CROSS_SAVE_SYNTHESIS_VERSION = "cross-save-synthesis-v3-intents" as const;
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1_000;
 
@@ -68,6 +69,16 @@ export interface CrossSaveRemember {
   reason: string;
 }
 
+export interface CrossSaveNextUse {
+  resourceId: string;
+  title: string;
+  intent: Exclude<SaveIntent, "understand" | "reference">;
+  label: string;
+  heading: string | null;
+  point: string;
+  reason: string;
+}
+
 export interface CrossSaveChange {
   resourceId: string;
   title: string;
@@ -113,6 +124,7 @@ export interface CrossSaveSynthesis {
   };
   themes: CrossSaveTheme[];
   interests: CrossSaveInterest[];
+  nextUse: CrossSaveNextUse | null;
   remember: CrossSaveRemember | null;
   changed: CrossSaveChange | null;
   repeated: CrossSaveRepeated | null;
@@ -145,6 +157,13 @@ interface UnresolvedCandidate {
   score: number;
   kind: CrossSaveUnresolved["kind"];
   reason: string;
+}
+
+interface NextUseCandidate {
+  resource: KnowledgeResource;
+  entry: KnowledgeResourceEntry;
+  intent: CrossSaveNextUse["intent"];
+  score: number;
 }
 
 function toMillis(value: string): number {
@@ -439,6 +458,36 @@ function repeatedCandidates(resources: KnowledgeResource[]): ResourceEntryCandid
     .sort((left, right) => right.score - left.score || right.resource.updatedAt.localeCompare(left.resource.updatedAt));
 }
 
+function isActionIntent(intent: SaveIntent): intent is CrossSaveNextUse["intent"] {
+  return intent !== "understand" && intent !== "reference";
+}
+
+function nextUseCandidates(resources: KnowledgeResource[], context?: ContextSnapshot | null): NextUseCandidate[] {
+  return resources.flatMap((resource): NextUseCandidate[] => {
+    const intent = resource.intent;
+    if (!isActionIntent(intent)) return [];
+    return resource.entries
+      .filter((entry) => (entry.status ?? "active") === "active" && !["corrected", "not_verified"].includes(entry.research?.verdict ?? ""))
+      .map((entry) => ({
+        resource,
+        entry,
+        intent,
+        score: (entry.sourceItemIds.length * 10)
+          + researchScore(entry)
+          + contextFitScore(resource, entry, context)
+          + (entry.heading ? 4 : 0),
+      }));
+  }).sort((left, right) => right.score - left.score || right.resource.updatedAt.localeCompare(left.resource.updatedAt));
+}
+
+function nextUseCopy(intent: CrossSaveNextUse["intent"]): { label: string; reason: string } {
+  if (intent === "try") return { label: "Ready to try", reason: "Curio organized this as something practical to use." };
+  if (intent === "visit") return { label: "Plan with this", reason: "Keep this close when planning the visit." };
+  if (intent === "buy") return { label: "Before buying", reason: "Review this point before making the purchase." };
+  if (intent === "track") return { label: "Worth watching", reason: "This can change, so Curio keeps its research date visible." };
+  return { label: "Before deciding", reason: "Use this point while weighing the options." };
+}
+
 function changeCandidates(resources: KnowledgeResource[], startAt: number, endAt: number): ChangeCandidate[] {
   const dispositionScore: Record<ResourceContribution["disposition"], number> = {
     conflict: 100,
@@ -557,9 +606,23 @@ export function buildCrossSaveSynthesis({
   } : null;
   if (changedCandidate) usedResourceIds.add(changedCandidate.resource.id);
 
+  const nextUseCandidate = chooseUnused(nextUseCandidates(synthesisResources, context), usedResourceIds);
+  const nextUseCopyValue = nextUseCandidate ? nextUseCopy(nextUseCandidate.intent) : null;
+  const nextUse: CrossSaveNextUse | null = nextUseCandidate && nextUseCopyValue ? {
+    resourceId: nextUseCandidate.resource.id,
+    title: nextUseCandidate.resource.title,
+    intent: nextUseCandidate.intent,
+    label: nextUseCopyValue.label,
+    heading: nextUseCandidate.entry.heading,
+    point: compact(nextUseCandidate.entry.detail),
+    reason: nextUseCopyValue.reason,
+  } : null;
+  if (nextUseCandidate) usedResourceIds.add(nextUseCandidate.resource.id);
+
   const rememberCandidate = chooseUnused(
     entryCandidates(synthesisResources, context)
-      .filter(({ entry }) => !["corrected", "not_verified"].includes(entry.research?.verdict ?? ""))
+      .filter(({ resource, entry }) => (resource.intent === "understand" || resource.intent === "reference")
+        && !["corrected", "not_verified"].includes(entry.research?.verdict ?? ""))
       .sort((left, right) => right.score - left.score || right.resource.updatedAt.localeCompare(left.resource.updatedAt)),
     usedResourceIds,
   ) ?? (usedResourceIds.size === 0 ? entryCandidates(synthesisResources, context).sort((left, right) => right.score - left.score)[0] ?? null : null);
@@ -604,6 +667,7 @@ export function buildCrossSaveSynthesis({
     overview,
     themes,
     interests,
+    nextUse,
     remember,
     changed,
     repeated,

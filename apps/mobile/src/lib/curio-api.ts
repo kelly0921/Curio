@@ -266,6 +266,15 @@ export interface CrossSaveSynthesis {
   };
   themes: CrossSaveTheme[];
   interests: CrossSaveInterest[];
+  nextUse: {
+    resourceId: string;
+    title: string;
+    intent: Exclude<SaveIntent, 'understand' | 'reference'>;
+    label: string;
+    heading: string | null;
+    point: string;
+    reason: string;
+  } | null;
   remember: {
     resourceId: string;
     title: string;
@@ -508,7 +517,11 @@ export async function getPersonalContext(): Promise<ContextSnapshot> {
 
 export async function getCrossSaveSynthesis(): Promise<CrossSaveSynthesis> {
   const body = await readEnvelope<SynthesisEnvelope>(await apiFetch('/api/synthesis', { headers: { Accept: 'application/json' } }));
-  return { ...body.data.synthesis, interests: body.data.synthesis.interests ?? [] };
+  return {
+    ...body.data.synthesis,
+    interests: body.data.synthesis.interests ?? [],
+    nextUse: body.data.synthesis.nextUse ?? null,
+  };
 }
 
 export async function syncPersonalContext(): Promise<ContextSnapshot> {

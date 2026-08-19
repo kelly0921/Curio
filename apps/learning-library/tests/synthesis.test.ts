@@ -176,6 +176,42 @@ describe("cross-save synthesis", () => {
     expect(buildCrossSaveSynthesis({ items: [item("save-1")], resources: [oneSource], now: NOW }).repeated).toBeNull();
   });
 
+  it("resurfaces one intent-specific point without turning it into a generic next step", () => {
+    const practical = resource("content-audit", "ai_work", ["save-1"], {
+      resourceType: "playbook",
+      intent: "try",
+      title: "Use actors for content audits",
+      entries: [entry("audit-step", ["save-1"], {
+        heading: "Map the audit",
+        detail: "List the pages and checks before assigning each repeatable task to an actor.",
+      })],
+    });
+    const explainer = resource("career-terms", "career", ["save-2"], {
+      resourceType: "glossary",
+      intent: "understand",
+      title: "Career terms in plain English",
+      entries: [entry("career-term", ["save-2"], {
+        heading: "Scope of impact",
+        detail: "The breadth and importance of the outcomes someone influences at work.",
+      })],
+    });
+
+    const result = buildCrossSaveSynthesis({
+      items: [item("save-1"), item("save-2")],
+      resources: [practical, explainer],
+      now: NOW,
+    });
+
+    expect(result.nextUse).toEqual(expect.objectContaining({
+      resourceId: "content-audit",
+      intent: "try",
+      label: "Ready to try",
+      heading: "Map the audit",
+    }));
+    expect(result.nextUse?.point).toContain("assigning each repeatable task");
+    expect(result.remember?.resourceId).toBe("career-terms");
+  });
+
   it("prioritizes source conflicts and unverified claims without treating corrections as unresolved", () => {
     const corrected = resource("corrected", "finance", ["save-1"], {
       entries: [entry("corrected-point", ["save-1"], {

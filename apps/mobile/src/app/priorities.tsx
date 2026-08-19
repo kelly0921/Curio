@@ -35,6 +35,14 @@ function openResource(id: string) {
   router.push({ pathname: '/resource/[id]', params: { id } });
 }
 
+function nextUseSubtitle(intent: NonNullable<CrossSaveSynthesis['nextUse']>['intent']): string {
+  if (intent === 'try') return 'A practical step pulled from something you saved.';
+  if (intent === 'visit') return 'A useful detail for a future plan.';
+  if (intent === 'buy') return 'A decision point to revisit before spending.';
+  if (intent === 'track') return 'A time-sensitive point worth keeping current.';
+  return 'A useful point for weighing the options.';
+}
+
 function SectionHeading({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <View style={styles.sectionHeader}>
@@ -120,6 +128,7 @@ export default function PrioritiesScreen() {
   const hasSynthesis = Boolean(synthesis && (
     synthesis.themes.length
     || synthesis.interests.length
+    || synthesis.nextUse
     || synthesis.remember
     || synthesis.changed
     || synthesis.repeated
@@ -240,6 +249,21 @@ export default function PrioritiesScreen() {
                   </View>
                 </View>
               ))}
+            </View>
+          ) : null}
+
+          {synthesis?.nextUse ? (
+            <View>
+              <SectionHeading title={synthesis.nextUse.label} subtitle={nextUseSubtitle(synthesis.nextUse.intent)} />
+              <InsightCard
+                body={synthesis.nextUse.point}
+                label={synthesis.nextUse.label.toLocaleUpperCase()}
+                note={synthesis.nextUse.reason}
+                resourceId={synthesis.nextUse.resourceId}
+                resourceTitle={synthesis.nextUse.title}
+                title={synthesis.nextUse.heading ?? synthesis.nextUse.title}
+                tone="sage"
+              />
             </View>
           ) : null}
 

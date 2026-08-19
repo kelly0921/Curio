@@ -6,6 +6,8 @@ import {
   inferKnowledgeResourceType,
   inferResourceDomain,
   inferSaveIntent,
+  inferSaveIntentWithConfidence,
+  synchronizeKnowledgeResources,
   upsertKnowledgeResourceForItem,
 } from "@/lib/knowledge/resources";
 
@@ -93,6 +95,86 @@ describe("Living resources", () => {
     expect(inferSaveIntent(card())).toBe("visit");
     expect(inferSaveIntent(card({ presentationType: "comparison" }))).toBe("compare");
     expect(inferSaveIntent(card({ presentationType: "how_to", contentType: "tutorial" }))).toBe("try");
+    expect(inferSaveIntent(card({
+      title: "U.S. optical transceiver beneficiaries",
+      primaryTopic: "optical transceiver stocks",
+      domain: "finance",
+    }))).toBe("track");
+    expect(inferSaveIntent(card({
+      title: "Three finance terms in plain English",
+      primaryTopic: "finance terms",
+      domain: "finance",
+      presentationType: "named_list",
+      contentType: "tutorial",
+      suggestedAction: "Use these definitions to decode finance articles.",
+    }))).toBe("understand");
+    expect(inferSaveIntent(card({
+      title: "Infinite banking basics and limits",
+      primaryTopic: "Infinite banking",
+      domain: "finance",
+      presentationType: "explainer",
+      contentType: "factual_information",
+      summary: "An explanation of a high-cash-value whole life policy and its tradeoffs.",
+      suggestedAction: "Compare this structure with a fee-only planner's explanation.",
+      keyTakeaways: ["The setup is costly and may take five to eight years to break even."],
+    }))).toBe("understand");
+    expect(inferSaveIntent(card({
+      presentationType: "explainer",
+      contentType: "tactic",
+    }))).toBe("visit");
+    expect(inferSaveIntent(card({
+      title: "The best carry-on chargers compared",
+      primaryTopic: "portable chargers",
+      domain: "general",
+      presentationType: "recommendation",
+      summary: "A side-by-side comparison before you buy a travel charger.",
+    }))).toBe("compare");
+    expect(inferSaveIntentWithConfidence(card({
+      title: "Use actors for content audits",
+      primaryTopic: "content audits",
+      domain: "ai_work",
+      presentationType: "how_to",
+      contentType: "tutorial",
+    })).confidence).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("repairs obvious legacy default intents without making the resource look newly updated", async () => {
+    const repository = new MemoryLearningItemRepository();
+    const source = item("10000000-0000-4000-8000-000000000051", "2026-08-18T10:00:00.000Z", card());
+    await repository.save(source);
+    const created = await upsertKnowledgeResourceForItem(source, repository, {
+      now: () => "2026-08-18T12:00:00.000Z",
+    });
+    expect(created?.resource.intent).toBe("visit");
+    await repository.saveResource({ ...created!.resource, intent: "understand" });
+    await repository.save({ ...created!.item, inferredIntent: "understand" });
+
+    const currentItem = await repository.findById(source.id);
+    const repaired = await synchronizeKnowledgeResources([currentItem!], repository);
+    const savedItem = await repository.findById(source.id);
+
+    expect(repaired[0].intent).toBe("visit");
+    expect(repaired[0].updatedAt).toBe("2026-08-18T12:00:00.000Z");
+    expect(repaired[0].contributions).toEqual(created?.resource.contributions);
+    expect(savedItem?.inferredIntent).toBe("visit");
+  });
+
+  it("repairs a stale specific intent when the source shape does not support it", async () => {
+    const repository = new MemoryLearningItemRepository();
+    const source = item("10000000-0000-4000-8000-000000000052", "2026-08-18T10:00:00.000Z", card({
+      title: "Use actors for content audits",
+      primaryTopic: "content audits",
+      domain: "ai_work",
+      presentationType: "how_to",
+      contentType: "tutorial",
+    }));
+    await repository.save(source);
+    const created = await upsertKnowledgeResourceForItem(source, repository);
+    await repository.saveResource({ ...created!.resource, intent: "reference" });
+
+    const synchronized = await synchronizeKnowledgeResources([created!.item], repository);
+
+    expect(synchronized[0].intent).toBe("try");
   });
 
   it("merges related sources, removes repeated notes, and retains entry provenance", async () => {

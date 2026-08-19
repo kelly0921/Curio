@@ -49,6 +49,15 @@ function cardSubject(card: LearningCard): string {
   return [card.title, card.primaryTopic, ...card.secondaryTopics, card.summary].join(" ").toLocaleLowerCase();
 }
 
+function intentSubject(card: LearningCard): string {
+  return [
+    cardSubject(card),
+    card.suggestedAction,
+    ...card.keyTakeaways,
+    ...card.notes.flatMap((note) => [note.title, note.detail]),
+  ].join(" ").toLocaleLowerCase();
+}
+
 export function inferResourceDomain(card: LearningCard): ContextDomain {
   if (card.domain !== "general") return card.domain;
   const subject = cardSubject(card);
@@ -100,16 +109,81 @@ function resourceCandidates(resources: KnowledgeResource[], card: LearningCard):
     .map(({ resource }) => resource);
 }
 
+export interface SaveIntentInference {
+  intent: SaveIntent;
+  confidence: number;
+  reason: string;
+}
+
+export function inferSaveIntentWithConfidence(card: LearningCard): SaveIntentInference {
+  const subject = intentSubject(card);
+  const coreSubject = cardSubject(card);
+  const domain = inferResourceDomain(card);
+  const resourceType = inferKnowledgeResourceType(card);
+  if (resourceType === "glossary") {
+    return { intent: "understand", confidence: 0.99, reason: "The source explains terms or definitions." };
+  }
+  if (card.presentationType === "comparison") {
+    return { intent: "compare", confidence: 0.99, reason: "The source is structured as a comparison." };
+  }
+  if (/\b(?:versus|vs\.?|pros and cons|side[-\s]by[-\s]side|compare|comparison|which (?:one|option)|differences? between|alternatives? to)\b/u.test(coreSubject)) {
+    return { intent: "compare", confidence: 0.9, reason: "The source weighs alternatives or decision points." };
+  }
+  if (
+    card.presentationType === "recommendation"
+    && domain !== "finance"
+    && /\b(?:product|products|buy|purchase|device|devices|gear|price|priced|worth buying|before you buy)\b/u.test(coreSubject)
+  ) {
+    return { intent: "buy", confidence: 0.92, reason: "The source recommends a product for a purchase decision." };
+  }
+  if (resourceType === "watchlist") {
+    return { intent: "track", confidence: 0.98, reason: "The source names opportunities or entities whose status can change." };
+  }
+  if (card.presentationType === "news_update") {
+    return { intent: "track", confidence: 0.96, reason: "The source is a time-sensitive update." };
+  }
+  if (card.presentationType === "how_to" || card.contentType === "tutorial") {
+    return { intent: "try", confidence: 0.98, reason: "The source teaches a method or practical tactic." };
+  }
+  if (
+    domain === "travel"
+    && /\b(?:place|places|destination|destinations|visit|restaurant|hotel|japan|tokyo|trip|itinerary|flight|tourist|vacation)\b/u.test(coreSubject)
+  ) {
+    return { intent: "visit", confidence: 0.94, reason: "The source is useful while planning a trip or visit." };
+  }
+  if (domain === "food" && /\b(?:restaurant|restaurants|cafe|cafes|bakery|bar|place|places|visit|where to eat|what to order)\b/u.test(coreSubject)) {
+    return { intent: "visit", confidence: 0.93, reason: "The source recommends a place to visit or order from." };
+  }
+  if (card.contentType === "tactic") {
+    return { intent: "try", confidence: 0.94, reason: "The source contains a practical tactic to use." };
+  }
+  if (
+    domain !== "finance"
+    && domain !== "health"
+    && /\b(?:step[-\s]by[-\s]step|checklist|workflow|set up|setup|implement|template|recipe|how to (?:make|build|create|use|start))\b/u.test(subject)
+  ) {
+    return { intent: "try", confidence: 0.88, reason: "The source contains a practical process to try." };
+  }
+  if (card.presentationType === "story" || card.contentType === "personal_experience") {
+    return { intent: "reference", confidence: 0.82, reason: "The source is primarily experience or perspective to keep for reference." };
+  }
+  return { intent: "understand", confidence: 0.78, reason: "The source primarily explains an idea." };
+}
+
 export function inferSaveIntent(card: LearningCard): SaveIntent {
-  const subject = cardSubject(card);
-  if (card.presentationType === "comparison") return "compare";
-  if (card.presentationType === "news_update" || inferKnowledgeResourceType(card) === "watchlist") return "track";
-  if (card.presentationType === "how_to" || card.contentType === "tutorial" || card.contentType === "tactic") return "try";
-  if (inferResourceDomain(card) === "travel" && /\b(?:place|places|destination|destinations|visit|restaurant|hotel|japan|tokyo|trip)\b/u.test(subject)) return "visit";
-  if (inferResourceDomain(card) === "food" && /\b(?:restaurant|cafe|bakery|bar|place|visit)\b/u.test(subject)) return "visit";
-  if (card.presentationType === "recommendation" && /\b(?:product|products|buy|purchase|device|tool|tools|gear)\b/u.test(subject)) return "buy";
-  if (card.presentationType === "story" || card.contentType === "personal_experience") return "reference";
-  return "understand";
+  return inferSaveIntentWithConfidence(card).intent;
+}
+
+function resolvedIntent(
+  card: LearningCard,
+  matched: KnowledgeResource | null | undefined,
+  aiIntent: SaveIntent | null | undefined,
+): SaveIntent {
+  const inferred = inferSaveIntentWithConfidence(card);
+  if (inferred.intent !== "understand" && inferred.confidence >= 0.85) return inferred.intent;
+  if (aiIntent && aiIntent !== "understand") return aiIntent;
+  if (matched?.intent && matched.intent !== "understand") return matched.intent;
+  return aiIntent ?? matched?.intent ?? inferred.intent;
 }
 
 function splitTakeaway(value: string): { heading: string | null; detail: string } {
@@ -382,7 +456,7 @@ export async function upsertKnowledgeResourceForItem(
     profileId: item.profileId,
     resourceType,
     domain: matched?.domain ?? inferResourceDomain(item.card),
-    intent: mergeDecision?.inferredIntent ?? matched?.intent ?? inferSaveIntent(item.card),
+    intent: resolvedIntent(item.card, matched, mergeDecision?.inferredIntent),
     canonicalTopic: matched?.canonicalTopic ?? canonicalResourceTopic(item.card),
     title: matched && mergeDecision?.matchDecision === "merge"
       ? mergeDecision.synthesizedTitle ?? matched.title
@@ -421,5 +495,36 @@ export async function synchronizeKnowledgeResources(
     if (resources.some((resource) => resource.sourceItemIds.includes(item.id))) continue;
     await upsertKnowledgeResourceForItem(item, repository);
   }
-  return repository.listResources(ordered[0]?.profileId ?? "00000000-0000-4000-8000-000000000031");
+  const profileId = ordered[0]?.profileId ?? "00000000-0000-4000-8000-000000000031";
+  const itemById = new Map(ordered.map((item) => [item.id, item]));
+  const resources = await repository.listResources(profileId);
+  for (const resource of resources) {
+    const inferred = resource.sourceItemIds
+      .map((itemId) => itemById.get(itemId)?.card ?? null)
+      .filter((card): card is LearningCard => Boolean(card))
+      .map(inferSaveIntentWithConfidence)
+      .filter((candidate) => candidate.intent !== "understand"
+        && (candidate.confidence >= 0.85 || (candidate.intent === "reference" && candidate.confidence >= 0.8)))
+      .sort((left, right) => right.confidence - left.confidence)[0];
+    const repairedIntent = inferred?.intent ?? "understand";
+    if (resource.intent === repairedIntent) continue;
+
+    await repository.saveResource(knowledgeResourceSchema.parse({
+      ...resource,
+      intent: repairedIntent,
+      version: resource.version + 1,
+    }));
+    for (const itemId of resource.sourceItemIds) {
+      const sourceItem = itemById.get(itemId);
+      if (!sourceItem || (sourceItem.inferredIntent === repairedIntent && sourceItem.resourceIds.includes(resource.id))) continue;
+      const repairedItem = learningItemSchema.parse({
+        ...sourceItem,
+        inferredIntent: repairedIntent,
+        resourceIds: [...new Set([...sourceItem.resourceIds, resource.id])].slice(0, 10),
+      });
+      await repository.save(repairedItem);
+      itemById.set(itemId, repairedItem);
+    }
+  }
+  return repository.listResources(profileId);
 }
