@@ -198,6 +198,30 @@ export interface KnowledgeResource {
   updatedAt: string;
 }
 
+export interface KnowledgeSearchAnswer {
+  resourceId: string;
+  title: string;
+  summary: string;
+  points: {
+    entryId: string;
+    heading: string | null;
+    detail: string;
+    status: ResourceEntryStatus;
+  }[];
+  sourceCount: number;
+}
+
+export interface KnowledgeSearchResult {
+  query: string;
+  answer: KnowledgeSearchAnswer | null;
+  results: {
+    resource: KnowledgeResource;
+    score: number;
+    matchedEntryIds: string[];
+    matchedOn: string[];
+  }[];
+}
+
 interface ErrorEnvelope {
   ok: false;
   error: { code: string; message: string };
@@ -231,6 +255,11 @@ interface ResourcesEnvelope {
 interface ResourceEnvelope {
   ok: true;
   data: { resource: KnowledgeResource; sources: LearningItem[] };
+}
+
+interface SearchEnvelope {
+  ok: true;
+  data: KnowledgeSearchResult;
 }
 
 interface FeedbackEnvelope {
@@ -340,6 +369,16 @@ export async function getKnowledgeResource(id: string): Promise<{ resource: Know
   const body = await readEnvelope<ResourceEnvelope>(await apiFetch(`/api/resources/${encodeURIComponent(id)}`, { headers: { Accept: 'application/json' } }));
   resourceSnapshot = [body.data.resource, ...resourceSnapshot.filter((resource) => resource.id !== id)];
   return { resource: cached ? { ...cached, ...body.data.resource } : body.data.resource, sources: body.data.sources };
+}
+
+export async function searchKnowledgeLibrary(query: string, domain?: ContextDomain | null): Promise<KnowledgeSearchResult> {
+  const params = new URLSearchParams({ q: query.trim() });
+  if (domain) params.set('domain', domain);
+  const body = await readEnvelope<SearchEnvelope>(await apiFetch(`/api/search?${params.toString()}`, { headers: { Accept: 'application/json' } }));
+  body.data.results.forEach(({ resource }) => {
+    resourceSnapshot = [resource, ...resourceSnapshot.filter((entry) => entry.id !== resource.id)];
+  });
+  return body.data;
 }
 
 export async function getPersonalContext(): Promise<ContextSnapshot> {

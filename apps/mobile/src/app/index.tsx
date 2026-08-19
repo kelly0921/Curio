@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,7 +17,15 @@ import { CurioBottomBar } from '@/components/curio-bottom-bar';
 import { CurioBrand } from '@/components/curio-brand';
 import { ResourceTile } from '@/components/resource-tile';
 import { colors, fonts } from '@/constants/curio-theme';
-import { CurioApiError, getCurioApiUrl, listKnowledgeResources, type KnowledgeResource } from '@/lib/curio-api';
+import {
+  CurioApiError,
+  getCurioApiUrl,
+  listKnowledgeResources,
+  searchKnowledgeLibrary,
+  type ContextDomain,
+  type KnowledgeResource,
+  type KnowledgeSearchResult,
+} from '@/lib/curio-api';
 
 function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
@@ -46,6 +54,9 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchResult, setSearchResult] = useState<KnowledgeSearchResult | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   const load = useCallback(async (pullToRefresh = false) => {
     if (pullToRefresh) setRefreshing(true);
@@ -64,6 +75,38 @@ export default function HomeScreen() {
     void load();
   }, [load]));
 
+  useEffect(() => {
+    const normalized = query.trim();
+    if (normalized.length < 2) {
+      setSearchResult(null);
+      setSearchError(null);
+      setSearching(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setSearching(true);
+    setSearchError(null);
+    const timer = setTimeout(() => {
+      void searchKnowledgeLibrary(normalized, domain === 'all' ? null : (domain as ContextDomain))
+        .then((result) => {
+          if (!cancelled) setSearchResult(result);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setSearchResult(null);
+            setSearchError('Curio could not search every source, so these are exact library matches.');
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false);
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [domain, query]);
+
   const collections = useMemo(() => {
     const counts = new Map<string, number>();
     resources.forEach((resource) => counts.set(resource.domain, (counts.get(resource.domain) ?? 0) + 1));
@@ -72,14 +115,22 @@ export default function HomeScreen() {
 
   const visibleResources = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
+    const resolvedSearch = searchResult?.query.toLocaleLowerCase() === normalizedQuery ? searchResult : null;
+    if (normalizedQuery && resolvedSearch) {
+      return resolvedSearch.results
+        .map((result) => result.resource)
+        .filter((resource) => resource.id !== resolvedSearch.answer?.resourceId);
+    }
     return resources.filter((resource) => {
       if (domain !== 'all' && resource.domain !== domain) return false;
       return !normalizedQuery || searchableText(resource).includes(normalizedQuery);
     });
-  }, [domain, query, resources]);
+  }, [domain, query, resources, searchResult]);
 
-  const showCollections = collections.length > 1;
+  const showCollections = collections.length > 1 && !query.trim();
   const hasQuery = Boolean(query.trim());
+  const resolvedSearch = searchResult?.query.toLocaleLowerCase() === query.trim().toLocaleLowerCase() ? searchResult : null;
+  const answer = resolvedSearch?.answer ?? null;
 
   return (
     <View style={styles.screen}>
@@ -115,7 +166,14 @@ export default function HomeScreen() {
                     style={styles.searchInput}
                     value={query}
                   />
+                  {searching && <ActivityIndicator color={colors.muted} size="small" />}
+                  {hasQuery && !searching && (
+                    <Pressable accessibilityLabel="Clear search" onPress={() => setQuery('')} style={styles.clearSearch}>
+                      <Text style={styles.clearSearchText}>×</Text>
+                    </Pressable>
+                  )}
                 </View>
+                {searchError && <Text style={styles.searchFallback}>{searchError}</Text>}
                 <Pressable onPress={() => router.push('/sources')} style={styles.sourceArchiveLink}>
                   <Text style={styles.sourceArchiveText}>View original saves</Text>
                   <Text style={styles.sourceArchiveArrow}>→</Text>
@@ -128,6 +186,29 @@ export default function HomeScreen() {
                   <Text style={styles.offlineCopy}>{error}</Text>
                   <Text selectable style={styles.apiAddress}>{getCurioApiUrl()}</Text>
                 </View>
+              )}
+
+              {answer && (
+                <Pressable
+                  accessibilityLabel={`Open ${answer.title}`}
+                  onPress={() => router.push({ pathname: '/resource/[id]', params: { id: answer.resourceId } })}
+                  style={styles.answerCard}>
+                  <Text style={styles.answerEyebrow}>BEST ANSWER FROM YOUR SAVES</Text>
+                  <Text style={styles.answerTitle}>{answer.title}</Text>
+                  <Text style={styles.answerSummary}>{answer.summary}</Text>
+                  <View style={styles.answerPoints}>
+                    {answer.points.slice(0, 3).map((point) => (
+                      <View key={point.entryId} style={styles.answerPoint}>
+                        <Text style={styles.answerBullet}>•</Text>
+                        <Text style={styles.answerPointText}>{point.heading ? `${point.heading} — ${point.detail}` : point.detail}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={styles.answerFooter}>
+                    <Text style={styles.answerSourceCount}>{answer.sourceCount} source{answer.sourceCount === 1 ? '' : 's'}</Text>
+                    <Text style={styles.answerOpen}>Open resource →</Text>
+                  </View>
+                </Pressable>
               )}
 
               {showCollections && (
@@ -153,16 +234,21 @@ export default function HomeScreen() {
                 </>
               )}
 
-              {(showCollections || hasQuery) && (
+              {(showCollections || (hasQuery && visibleResources.length > 0)) && (
                 <View style={[styles.sectionHeading, styles.libraryHeading]}>
-                  <Text style={styles.sectionTitle}>{hasQuery ? 'Results' : domain === 'all' ? 'Living resources' : label(domain)}</Text>
+                  <Text style={styles.sectionTitle}>{hasQuery ? answer ? 'Related resources' : 'Results' : domain === 'all' ? 'Living resources' : label(domain)}</Text>
                   <Text style={styles.sectionMeta}>{resourceCountLabel(visibleResources.length)}</Text>
                 </View>
               )}
             </View>
           )}
-          ListEmptyComponent={loading ? (
-            <View style={styles.loading}><ActivityIndicator color={colors.ink} /><Text style={styles.loadingText}>Building your knowledge library…</Text></View>
+          ListEmptyComponent={loading || (searching && hasQuery && !answer) ? (
+            <View style={styles.loading}>
+              <ActivityIndicator color={colors.ink} />
+              <Text style={styles.loadingText}>{hasQuery ? 'Searching across your saves…' : 'Building your knowledge library…'}</Text>
+            </View>
+          ) : answer ? (
+            <View />
           ) : (
             <View style={styles.empty}>
               <View style={styles.emptyMark}><Text style={styles.emptyMarkText}>✦</Text></View>
@@ -203,6 +289,9 @@ const styles = StyleSheet.create({
   searchBox: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 17, borderWidth: 1, flexDirection: 'row', gap: 10, marginTop: 22, paddingHorizontal: 14 },
   searchIcon: { color: colors.muted, fontSize: 24, marginTop: -2 },
   searchInput: { color: colors.ink, flex: 1, fontFamily: fonts.body, fontSize: 14, height: 51 },
+  clearSearch: { alignItems: 'center', height: 30, justifyContent: 'center', width: 30 },
+  clearSearchText: { color: colors.muted, fontFamily: fonts.body, fontSize: 22, lineHeight: 24 },
+  searchFallback: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 8 },
   sourceArchiveLink: { alignItems: 'center', flexDirection: 'row', gap: 6, marginTop: 13, paddingVertical: 5, width: 150 },
   sourceArchiveText: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, fontWeight: '800' },
   sourceArchiveArrow: { color: colors.muted, fontSize: 12 },
@@ -210,6 +299,17 @@ const styles = StyleSheet.create({
   offlineTitle: { color: colors.ink, fontFamily: fonts.body, fontSize: 13, fontWeight: '800' },
   offlineCopy: { color: '#735C51', fontFamily: fonts.body, fontSize: 12, lineHeight: 17, marginTop: 4 },
   apiAddress: { color: '#735C51', fontFamily: 'monospace', fontSize: 10, marginTop: 8 },
+  answerCard: { backgroundColor: colors.dark, borderRadius: 25, marginBottom: 6, padding: 20 },
+  answerEyebrow: { color: colors.butter, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
+  answerTitle: { color: colors.surface, fontFamily: fonts.display, fontSize: 28, fontWeight: '700', letterSpacing: -0.6, lineHeight: 32, marginTop: 7 },
+  answerSummary: { color: '#D7D4CA', fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 8 },
+  answerPoints: { borderTopColor: '#4A4B43', borderTopWidth: StyleSheet.hairlineWidth, gap: 8, marginTop: 15, paddingTop: 14 },
+  answerPoint: { alignItems: 'flex-start', flexDirection: 'row', gap: 8 },
+  answerBullet: { color: colors.butter, fontSize: 13, lineHeight: 18 },
+  answerPointText: { color: colors.surface, flex: 1, fontFamily: fonts.body, fontSize: 11, fontWeight: '700', lineHeight: 17 },
+  answerFooter: { alignItems: 'center', borderTopColor: '#4A4B43', borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingTop: 13 },
+  answerSourceCount: { color: '#B8B5AB', fontFamily: fonts.body, fontSize: 9, fontWeight: '700' },
+  answerOpen: { color: colors.butter, fontFamily: fonts.body, fontSize: 10, fontWeight: '900' },
   sectionHeading: { alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
   libraryHeading: { marginTop: 34 },
   sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.8, marginTop: 2 },
