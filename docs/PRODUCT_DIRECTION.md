@@ -118,7 +118,7 @@ Continue the automatic fallback chain for public links and shared media. When Cu
 7. Cross-save weekly synthesis in For You.
 8. Source thumbnails and final visual polish.
 
-## Implementation checkpoint — August 18, 2026
+## Implementation checkpoint — August 19, 2026
 
 The first Living Resources slice is implemented:
 
@@ -132,8 +132,12 @@ The first Living Resources slice is implemented:
 - Natural-language retrieval searches resources, research, transcripts, and visible Reel text, then returns one concise answer from the strongest matching resource.
 - Research freshness is consequence-aware: watchlists and tracked resources expire fastest, finance and health resources use shorter review windows, and evergreen or subjective knowledge stays visually quiet.
 - A due resource can rerun source-grounded web research and receives a concise receipt that highlights corrections, added context, unresolved points, or no material change.
+- For You now synthesizes the week across saves instead of repeating per-card relevance: it shows supported themes, one durable point to remember, actual resource changes, repeated evidence, and important unresolved claims.
+- Synthesis modules are evidence-gated. Themes require at least two sources, repeated points require multi-source provenance, and change cards exclude brand-new resources.
+- Sparse libraries fall back to a few existing recommendations, while empty synthesis categories stay hidden rather than filling the screen with generic status text.
+- Demo context may influence ranking but is not presented as a real connected workspace; visible context claims are reserved for an actual connection.
 
-The initial merge and retrieval engines deliberately use high-confidence deterministic matching. Semantic embeddings, AI-written cross-source summaries, automatic intent classification, scheduled background refreshes, and weekly cross-resource synthesis remain later phases.
+The initial merge, retrieval, and weekly synthesis engines deliberately use high-confidence deterministic matching. Semantic embeddings, narrower concept-level theme clustering, automatic intent classification, scheduled background refreshes, and AI-written cross-source explanations remain later phases.
 
 ## North-star behavior
 

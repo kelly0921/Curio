@@ -223,6 +223,69 @@ export interface ResourceResearchReceipt {
   }[];
 }
 
+export interface CrossSaveTheme {
+  id: string;
+  domain: ContextDomain;
+  title: string;
+  description: string;
+  resourceIds: string[];
+  resourceTitles: string[];
+  resourceCount: number;
+  sourceCount: number;
+  contextReason: string | null;
+}
+
+export interface CrossSaveSynthesis {
+  generatedAt: string;
+  engineVersion: string;
+  period: {
+    mode: 'this_week' | 'library';
+    label: string;
+    startAt: string;
+    endAt: string;
+  };
+  overview: {
+    savedSourceCount: number;
+    newResourceCount: number;
+    changedResourceCount: number;
+    librarySourceCount: number;
+    headline: string;
+    detail: string;
+  };
+  themes: CrossSaveTheme[];
+  remember: {
+    resourceId: string;
+    title: string;
+    heading: string | null;
+    point: string;
+    reason: string;
+  } | null;
+  changed: {
+    resourceId: string;
+    title: string;
+    kind: ResourceContributionDisposition;
+    label: string;
+    summary: string;
+    occurredAt: string;
+  } | null;
+  repeated: {
+    resourceId: string;
+    title: string;
+    heading: string | null;
+    point: string;
+    supportCount: number;
+  } | null;
+  unresolved: {
+    resourceId: string;
+    title: string;
+    heading: string | null;
+    claim: string;
+    reason: string;
+    kind: 'contested' | 'not_verified' | 'research_due' | 'unresearched';
+  } | null;
+  fallbackResourceIds: string[];
+}
+
 export interface KnowledgeSearchAnswer {
   resourceId: string;
   title: string;
@@ -270,6 +333,11 @@ interface ItemEnvelope {
 interface ContextEnvelope {
   ok: true;
   data: { context: ContextSnapshot };
+}
+
+interface SynthesisEnvelope {
+  ok: true;
+  data: { synthesis: CrossSaveSynthesis };
 }
 
 interface ResourcesEnvelope {
@@ -423,6 +491,11 @@ export async function searchKnowledgeLibrary(query: string, domain?: ContextDoma
 export async function getPersonalContext(): Promise<ContextSnapshot> {
   const body = await readEnvelope<ContextEnvelope>(await apiFetch('/api/context', { headers: { Accept: 'application/json' } }));
   return body.data.context;
+}
+
+export async function getCrossSaveSynthesis(): Promise<CrossSaveSynthesis> {
+  const body = await readEnvelope<SynthesisEnvelope>(await apiFetch('/api/synthesis', { headers: { Accept: 'application/json' } }));
+  return body.data.synthesis;
 }
 
 export async function syncPersonalContext(): Promise<ContextSnapshot> {
