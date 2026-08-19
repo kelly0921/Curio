@@ -159,6 +159,25 @@ describe("Living resources", () => {
     expect(savedItem?.inferredIntent).toBe("visit");
   });
 
+  it("uses an available source frame as the stable resource cover", async () => {
+    const repository = new MemoryLearningItemRepository();
+    const source = learningItemSchema.parse({
+      ...item("10000000-0000-4000-8000-000000000052", "2026-08-18T10:00:00.000Z", card()),
+      sourceVisual: {
+        kind: "reel_frame",
+        objectKey: "profiles/profile/items/item/cover.jpg",
+        mimeType: "image/jpeg",
+        timestampSeconds: 1.5,
+        capturedAt: "2026-08-18T10:01:00.000Z",
+      },
+    });
+    await repository.save(source);
+
+    const created = await upsertKnowledgeResourceForItem(source, repository);
+
+    expect(created?.resource.coverSourceItemId).toBe(source.id);
+  });
+
   it("repairs a stale specific intent when the source shape does not support it", async () => {
     const repository = new MemoryLearningItemRepository();
     const source = item("10000000-0000-4000-8000-000000000052", "2026-08-18T10:00:00.000Z", card({

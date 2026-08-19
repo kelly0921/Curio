@@ -23,6 +23,7 @@ import {
   prioritizeSourceMaterials,
 } from "../ai/prompt";
 import { PUBLIC_SOURCE_RETRIEVAL_VERSION } from "../retrieval/instagram-reel";
+import type { SourceVisualStore } from "../media/source-visual-store";
 
 export const DEMO_TRANSCRIPT = `Most people make their work visible by creating more status updates. Try documenting instead of reporting. When you make a decision, write down the decision, the outcome, and one lesson while the context is still fresh. That small work log can become evidence for a performance review, an example for someone you mentor, or the seed of a useful post. The goal is not to count activity. It is to preserve the outcomes that would otherwise disappear.`;
 
@@ -32,6 +33,7 @@ export interface PipelineDependencies {
   retriever?: PublicSourceRetriever | null;
   analyzer: LearningCardAnalyzer | null;
   researcher?: LearningCardResearcher | null;
+  sourceVisualStore?: SourceVisualStore | null;
   demoAnalyzer?: LearningCardAnalyzer;
   id?: () => string;
   now?: () => string;
@@ -284,11 +286,29 @@ export async function processLearningItem(
         material.origin === "instagram_browser_transcription"
         || material.origin === "instagram_public_embed_transcription"
       ));
+      let sourceVisual = item.sourceVisual;
+      if (retrieval.sourceVisual && dependencies.sourceVisualStore) {
+        try {
+          sourceVisual = await dependencies.sourceVisualStore.put({
+            profileId: item.profileId,
+            itemId: item.id,
+            candidate: retrieval.sourceVisual,
+            capturedAt: now(),
+          });
+        } catch (error) {
+          console.warn(JSON.stringify({
+            event: "source_visual_storage_failed",
+            itemId: item.id,
+            errorType: error instanceof Error ? error.name : "unknown",
+          }));
+        }
+      }
       item = replace(item, {
         creator: retrieval.creator ?? item.creator,
         sourceCaption: retrievedCaption?.text ?? item.sourceCaption,
         transcript: retrievedTranscript?.text ?? item.transcript,
         extractedVisualText: retrievedVisualText?.text ?? item.extractedVisualText,
+        sourceVisual,
         sourceRetrievalVersion: PUBLIC_SOURCE_RETRIEVAL_VERSION,
         transcriptionModel: hasRetrievedTranscription
           ? retrieval.transcriptionModel ?? retrieval.model

@@ -25,6 +25,12 @@
       "migrations_dir": "d1/migrations"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "CURIO_SOURCE_MEDIA",
+      "bucket_name": "curio-source-media"
+    }
+  ],
   "vars": {
     "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-mini-transcribe",
     "OPENAI_ANALYSIS_MODEL": "gpt-5.4-mini",

@@ -5,6 +5,7 @@ import type {
   PublicSourceRetrievalResult,
   PublicSourceRetriever,
   ReelFrameAnalyzer,
+  SourceVisualCandidate,
 } from "../ai/services";
 import type { SourceMaterial } from "../domain";
 
@@ -18,11 +19,7 @@ const INSTAGRAM_HOSTS = new Set(["instagram.com", "www.instagram.com", "instagr.
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
-export interface ReelFrame {
-  timestampSeconds: number;
-  mimeType: "image/jpeg";
-  base64: string;
-}
+export type ReelFrame = SourceVisualCandidate;
 
 export interface InstagramReelCaptureResult {
   sourceUrl: string;
@@ -35,6 +32,15 @@ export interface InstagramReelCaptureResult {
 
 export interface InstagramReelCapture {
   capture(sourceUrl: string, discoveredMediaUrls?: string[]): Promise<InstagramReelCaptureResult>;
+}
+
+export function selectRepresentativeReelFrame(frames: ReelFrame[]): ReelFrame | null {
+  if (!frames.length) return null;
+  return [...frames].sort((left, right) => left.timestampSeconds - right.timestampSeconds)[0] ?? null;
+}
+
+function reelCoverTimestamp(durationSeconds: number): number {
+  return Number(Math.min(1.5, Math.max(0, durationSeconds - 0.05), durationSeconds / 2).toFixed(2));
 }
 
 interface MediaEncodingMetadata {
@@ -199,6 +205,18 @@ export class CloudflareInstagramReelCapture implements InstagramReelCapture {
   constructor(private readonly browserWorker: BrowserWorker) {}
 
   async capture(sourceUrl: string, discoveredMediaUrls: string[] = []): Promise<InstagramReelCaptureResult> {
+    return this.captureWithFrameMode(sourceUrl, discoveredMediaUrls, "analysis");
+  }
+
+  async captureCover(sourceUrl: string, discoveredMediaUrls: string[] = []): Promise<InstagramReelCaptureResult> {
+    return this.captureWithFrameMode(sourceUrl, discoveredMediaUrls, "cover");
+  }
+
+  private async captureWithFrameMode(
+    sourceUrl: string,
+    discoveredMediaUrls: string[],
+    frameMode: "analysis" | "cover",
+  ): Promise<InstagramReelCaptureResult> {
     const canonicalUrl = canonicalInstagramReelUrl(sourceUrl);
     if (!canonicalUrl) throw new Error("The source is not a supported public Instagram Reel URL.");
 
@@ -222,6 +240,8 @@ export class CloudflareInstagramReelCapture implements InstagramReelCapture {
 
       const directVideoUrl = selectInstagramVideoUrl(discoveredMediaUrls);
       let video: ElementHandle<HTMLVideoElement> | null;
+      let fallbackDescription = "";
+      let fallbackPosterUrl: string | null = null;
       if (directVideoUrl) {
         console.info(JSON.stringify({ event: "instagram_reel_using_client_discovered_media" }));
         await page.goto("about:blank");
@@ -240,12 +260,66 @@ export class CloudflareInstagramReelCapture implements InstagramReelCapture {
         video = await page.waitForSelector("video", { timeout: 20_000 }).catch(() => null);
       } else {
         await page.goto(canonicalUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
+        const canonicalMetadata = await page.evaluate(() => ({
+          description: document.querySelector<HTMLMetaElement>('meta[property="og:description"]')?.content
+            ?? document.querySelector<HTMLMetaElement>('meta[name="description"]')?.content
+            ?? "",
+          posterUrl: document.querySelector<HTMLVideoElement>("video")?.poster
+            ?? document.querySelector<HTMLMetaElement>('meta[property="og:image"]')?.content
+            ?? null,
+        }));
+        fallbackDescription = canonicalMetadata.description;
+        fallbackPosterUrl = canonicalMetadata.posterUrl;
         video = await page.waitForSelector("video", { timeout: 15_000 }).catch(() => null);
         if (!video) {
           const embedUrl = `${canonicalUrl}embed/captioned/`;
           console.info(JSON.stringify({ event: "instagram_reel_using_public_embed_player" }));
           await page.goto(embedUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
           video = await page.waitForSelector("video", { timeout: 20_000 }).catch(() => null);
+          const embedMetadata = await page.evaluate(() => ({
+            description: document.querySelector<HTMLMetaElement>('meta[property="og:description"]')?.content
+              ?? document.querySelector<HTMLMetaElement>('meta[name="description"]')?.content
+              ?? "",
+            posterUrl: document.querySelector<HTMLVideoElement>("video")?.poster
+              ?? document.querySelector<HTMLMetaElement>('meta[property="og:image"]')?.content
+              ?? null,
+          }));
+          fallbackDescription ||= embedMetadata.description;
+          fallbackPosterUrl ??= embedMetadata.posterUrl;
+        }
+      }
+      if (!video && frameMode === "cover") {
+        const posterUrl = fallbackPosterUrl ? normalizeMetaMediaUrl(fallbackPosterUrl) : null;
+        if (posterUrl) {
+          console.info(JSON.stringify({ event: "instagram_reel_using_public_poster_cover" }));
+          await page.goto("about:blank");
+          await page.evaluate((imageUrl) => {
+            document.documentElement.style.background = "black";
+            document.body.style.margin = "0";
+            const element = document.createElement("img");
+            element.src = imageUrl;
+            element.alt = "";
+            element.style.width = "100vw";
+            element.style.height = "100vh";
+            element.style.objectFit = "cover";
+            document.body.appendChild(element);
+          }, posterUrl);
+          const image = await page.waitForSelector("img", { timeout: 20_000 });
+          if (!image) throw new Error("Instagram's public Reel poster did not load.");
+          await page.waitForFunction(() => {
+            const element = document.querySelector("img");
+            return element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0;
+          }, { timeout: 20_000 });
+          const screenshot = await image.screenshot({ type: "jpeg", quality: 72 });
+          const metadata = metadataFromDescription(fallbackDescription);
+          return {
+            sourceUrl: canonicalUrl,
+            durationSeconds: 0,
+            caption: metadata.caption,
+            username: metadata.username,
+            frames: [{ timestampSeconds: 0, mimeType: "image/jpeg", base64: bytesToBase64(screenshot) }],
+            mediaUrls: [...mediaUrls],
+          };
         }
       }
       if (!video) throw new Error("Instagram did not expose a playable Reel element.");
@@ -273,13 +347,13 @@ export class CloudflareInstagramReelCapture implements InstagramReelCapture {
           && element.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
       }, { timeout: 30_000 });
 
-      const pageMetadata = await page.evaluate(() => {
+      const pageMetadata = await page.evaluate((storedDescription) => {
         const description = document.querySelector<HTMLMetaElement>('meta[property="og:description"]')?.content
           ?? document.querySelector<HTMLMetaElement>('meta[name="description"]')?.content
           ?? "";
         const duration = document.querySelector("video")?.duration ?? 0;
-        return { description, duration };
-      });
+        return { description: description || storedDescription, duration };
+      }, fallbackDescription);
       if (!Number.isFinite(pageMetadata.duration) || pageMetadata.duration <= 0) {
         throw new Error("Instagram did not expose a finite Reel duration.");
       }
@@ -288,7 +362,10 @@ export class CloudflareInstagramReelCapture implements InstagramReelCapture {
       }
 
       const frames: ReelFrame[] = [];
-      for (const timestampSeconds of reelFrameTimestamps(pageMetadata.duration)) {
+      const frameTimestamps = frameMode === "cover"
+        ? [reelCoverTimestamp(pageMetadata.duration)]
+        : reelFrameTimestamps(pageMetadata.duration);
+      for (const timestampSeconds of frameTimestamps) {
         try {
           await page.evaluate(async (targetTime) => {
             const element = document.querySelector("video");
@@ -449,6 +526,7 @@ export class InstagramFullReelRetriever implements PublicSourceRetriever {
       model: models.join("+") || "instagram-full-reel",
       transcriptionModel,
       consultedUrls: [captured.sourceUrl],
+      sourceVisual: selectRepresentativeReelFrame(captured.frames),
     };
   }
 }

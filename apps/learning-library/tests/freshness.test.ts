@@ -129,6 +129,7 @@ function resourcePatch(patch: Partial<KnowledgeResource>): KnowledgeResource {
     createdAt,
     updatedAt: createdAt,
     ...patch,
+    coverSourceItemId: patch.coverSourceItemId ?? null,
   };
 }
 

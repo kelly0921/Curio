@@ -138,6 +138,13 @@ export interface PublicSourceRetrievalResult {
   model: string;
   transcriptionModel?: string | null;
   consultedUrls: string[];
+  sourceVisual?: SourceVisualCandidate | null;
+}
+
+export interface SourceVisualCandidate {
+  timestampSeconds: number;
+  mimeType: "image/jpeg";
+  base64: string;
 }
 
 export interface PublicSourceRetrievalHints {

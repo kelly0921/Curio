@@ -88,6 +88,7 @@ function resource(
     createdAt: RECENT,
     updatedAt: RECENT,
     ...patch,
+    coverSourceItemId: patch.coverSourceItemId ?? null,
   };
 }
 

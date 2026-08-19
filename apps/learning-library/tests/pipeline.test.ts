@@ -5,6 +5,7 @@ import type { IngestionInput, LearningCard } from "@/lib/domain";
 import { LEARNING_CARD_PROMPT_VERSION } from "@/lib/ai/prompt";
 import { processLearningItem, sourceFingerprint } from "@/lib/processing/pipeline";
 import { PUBLIC_SOURCE_RETRIEVAL_VERSION } from "@/lib/retrieval/instagram-reel";
+import type { SourceVisualStore } from "@/lib/media/source-visual-store";
 
 const card: LearningCard = {
   title: "A grounded card",
@@ -97,7 +98,18 @@ describe("Learning Item pipeline", () => {
         creator: "@public_teacher",
         model: "test-retriever",
         consultedUrls: ["https://www.instagram.com/reel/ABC123/"],
+        sourceVisual: { timestampSeconds: 1.5, mimeType: "image/jpeg", base64: "aW1hZ2U=" },
       }),
+    };
+    const sourceVisualStore: SourceVisualStore = {
+      put: vi.fn().mockResolvedValue({
+        kind: "reel_frame",
+        objectKey: "profiles/profile/items/item/cover.jpg",
+        mimeType: "image/jpeg",
+        timestampSeconds: 1.5,
+        capturedAt: "2026-08-19T12:00:00.000Z",
+      }),
+      get: vi.fn(),
     };
     const result = await processLearningItem({
       sourceType: "external_url",
@@ -112,6 +124,7 @@ describe("Learning Item pipeline", () => {
       transcriber: null,
       retriever,
       analyzer,
+      sourceVisualStore,
     });
 
     expect(result.item.accessLevel).toBe("partial");
@@ -121,6 +134,8 @@ describe("Learning Item pipeline", () => {
       expect.objectContaining({ kind: "caption", origin: "openai_web_search", completeness: "partial" }),
     ]);
     expect(result.item.card?.title).toBe("A grounded card");
+    expect(result.item.sourceVisual).toEqual(expect.objectContaining({ kind: "reel_frame", timestampSeconds: 1.5 }));
+    expect(sourceVisualStore.put).toHaveBeenCalledWith(expect.objectContaining({ itemId: result.item.id }));
     expect(retriever.retrieve).toHaveBeenCalledWith("https://www.instagram.com/reel/ABC123/");
     expect(analyzer.analyze).toHaveBeenCalledOnce();
   });

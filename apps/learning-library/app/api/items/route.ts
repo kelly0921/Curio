@@ -19,6 +19,7 @@ import {
   CloudflareInstagramReelCapture,
   InstagramFullReelRetriever,
 } from "@/lib/retrieval/instagram-reel";
+import { getSourceVisualStore } from "@/lib/media/source-visual-store";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,7 @@ export async function POST(request: Request) {
     const repository = await getLearningItemRepository();
     const services = openAIServices();
     const browserWorker = services ? await cloudflareBrowserWorker() : null;
+    const sourceVisualStore = browserWorker ? await getSourceVisualStore() : null;
     const retriever = services
       ? new PublicSourceRetrieverChain([
         ...(browserWorker ? [new InstagramFullReelRetriever(
@@ -96,6 +98,7 @@ export async function POST(request: Request) {
       retriever,
       analyzer: services,
       researcher: services,
+      sourceVisualStore,
     });
     const resourceMerger = process.env.RESOURCE_MERGE_AI_ENABLED === "true" ? services : null;
     const resourceUpdate = result.item.card && (!result.duplicate || result.item.resourceIds.length === 0)

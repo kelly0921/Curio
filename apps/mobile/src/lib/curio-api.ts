@@ -128,6 +128,13 @@ export interface LearningItem {
   sourceCaption: string | null;
   transcript: string | null;
   extractedVisualText: string | null;
+  sourceVisual?: {
+    kind: 'reel_frame';
+    objectKey: string;
+    mimeType: 'image/jpeg';
+    timestampSeconds: number;
+    capturedAt: string;
+  } | null;
   accessLevel: AccessLevel;
   processingStatus: ProcessingStatus;
   intent: Intent;
@@ -190,6 +197,7 @@ export interface KnowledgeResource {
   entities: string[];
   entries: KnowledgeResourceEntry[];
   sourceItemIds: string[];
+  coverSourceItemId?: string | null;
   contributions: ResourceContribution[];
   lastResearchedAt: string | null;
   mergeModel?: string | null;
@@ -422,6 +430,14 @@ function inferredDevelopmentUrl(): string {
 
 export function getCurioApiUrl(): string {
   return (process.env.EXPO_PUBLIC_CURIO_API_URL?.trim() || inferredDevelopmentUrl()).replace(/\/$/, '');
+}
+
+export function getSourceCoverImageSource(itemId: string): { uri: string; headers?: Record<string, string> } {
+  const personalAccessToken = process.env.EXPO_PUBLIC_CURIO_API_TOKEN?.trim();
+  return {
+    uri: `${getCurioApiUrl()}/api/items/${encodeURIComponent(itemId)}/cover`,
+    ...(personalAccessToken ? { headers: { Authorization: `Bearer ${personalAccessToken}` } } : {}),
+  };
 }
 
 let itemSnapshot: LearningItem[] = [];

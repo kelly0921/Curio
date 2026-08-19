@@ -467,6 +467,7 @@ export async function upsertKnowledgeResourceForItem(
     entities: [...new Set([...(matched?.entities ?? []), ...resourceEntities(item.card, baseEntries)])].slice(0, 30),
     entries: baseEntries,
     sourceItemIds,
+    coverSourceItemId: matched?.coverSourceItemId ?? (item.sourceVisual ? item.id : null),
     contributions: [...previousContributions.slice(-199), contribution],
     lastResearchedAt,
     mergeModel: mergeDecision?.model ?? matched?.mergeModel ?? null,
@@ -507,11 +508,17 @@ export async function synchronizeKnowledgeResources(
         && (candidate.confidence >= 0.85 || (candidate.intent === "reference" && candidate.confidence >= 0.8)))
       .sort((left, right) => right.confidence - left.confidence)[0];
     const repairedIntent = inferred?.intent ?? "understand";
-    if (resource.intent === repairedIntent) continue;
+    const retainedCover = resource.coverSourceItemId
+      && itemById.get(resource.coverSourceItemId)?.sourceVisual
+      ? resource.coverSourceItemId
+      : null;
+    const repairedCover = retainedCover ?? resource.sourceItemIds.find((itemId) => Boolean(itemById.get(itemId)?.sourceVisual)) ?? null;
+    if (resource.intent === repairedIntent && resource.coverSourceItemId === repairedCover) continue;
 
     await repository.saveResource(knowledgeResourceSchema.parse({
       ...resource,
       intent: repairedIntent,
+      coverSourceItemId: repairedCover,
       version: resource.version + 1,
     }));
     for (const itemId of resource.sourceItemIds) {

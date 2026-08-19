@@ -129,6 +129,7 @@ describe("public Instagram retrieval", () => {
 
     expect(result.creator).toBe("@public_teacher");
     expect(result.transcriptionModel).toBe("test-transcriber");
+    expect(result.sourceVisual).toEqual({ timestampSeconds: 2.5, mimeType: "image/jpeg", base64: "aW1hZ2U=" });
     expect(result.materials.map((material) => material.origin)).toEqual([
       "instagram_browser_transcription",
       "instagram_browser_visual_analysis",

@@ -274,6 +274,14 @@ export const resourceContributionSchema = z.object({
   createdAt: isoDateTimeSchema,
 }).strict();
 
+export const sourceVisualSchema = z.object({
+  kind: z.literal("reel_frame"),
+  objectKey: z.string().min(1).max(500),
+  mimeType: z.literal("image/jpeg"),
+  timestampSeconds: z.number().min(0),
+  capturedAt: isoDateTimeSchema,
+}).strict();
+
 export const knowledgeResourceSchema = z.object({
   id: z.string().uuid(),
   profileId: z.string().uuid(),
@@ -286,6 +294,7 @@ export const knowledgeResourceSchema = z.object({
   entities: z.array(z.string().min(1).max(120)).max(30),
   entries: z.array(knowledgeResourceEntrySchema).min(1).max(100),
   sourceItemIds: z.array(z.string().uuid()).min(1).max(200),
+  coverSourceItemId: z.string().uuid().nullable().default(null),
   contributions: z.array(resourceContributionSchema).min(1).max(200),
   lastResearchedAt: isoDateTimeSchema.nullable(),
   mergeModel: z.string().min(1).max(120).nullable().default(null),
@@ -312,6 +321,7 @@ export const learningItemSchema = z.object({
   transcript: z.string().max(80_000).nullable(),
   extractedVisualText: z.string().max(20_000).nullable(),
   uploadedMediaReference: z.string().max(500).nullable(),
+  sourceVisual: sourceVisualSchema.nullable().default(null),
   sourceFingerprint: z.string().min(1).max(128),
   accessLevel: accessLevelSchema,
   processingStatus: processingStatusSchema,
@@ -357,6 +367,7 @@ export type SaveIntent = z.infer<typeof saveIntentSchema>;
 export type KnowledgeResourceEntry = z.infer<typeof knowledgeResourceEntrySchema>;
 export type ResourceEntryStatus = z.infer<typeof resourceEntryStatusSchema>;
 export type ResourceContribution = z.infer<typeof resourceContributionSchema>;
+export type SourceVisual = z.infer<typeof sourceVisualSchema>;
 export type ResourceContributionDisposition = z.infer<typeof resourceContributionDispositionSchema>;
 export type KnowledgeResource = z.infer<typeof knowledgeResourceSchema>;
 export type ContextRecordKind = z.infer<typeof contextRecordKindSchema>;
