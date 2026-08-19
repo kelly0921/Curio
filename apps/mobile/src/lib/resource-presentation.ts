@@ -24,6 +24,13 @@ export interface DisplayResearchSource extends ResearchSourceLike {
   displayTitle: string;
 }
 
+export type ResourceDeepDiveOptionKind = 'how_it_works' | 'practical_example' | 'limits_and_risks' | 'what_to_watch';
+
+export interface ResourceDeepDiveOption {
+  kind: ResourceDeepDiveOptionKind;
+  label: string;
+}
+
 function entryNames(resource: ResourceUseInput): string[] {
   return resource.entries
     .map((entry) => entry.heading?.trim() || '')
@@ -109,6 +116,35 @@ export function resourceUseGuide(resource: ResourceUseInput): ResourceUseGuide {
     focusLabel: 'START WITH',
     focus: firstUsefulPoint(resource),
   };
+}
+
+export function resourceDeepDiveOptions(resource: ResourceUseInput): ResourceDeepDiveOption[] {
+  if (resource.intent === 'track' || resource.resourceType === 'watchlist') {
+    return [
+      { kind: 'what_to_watch', label: 'What should I watch?' },
+      { kind: 'how_it_works', label: 'How does this connect?' },
+      { kind: 'limits_and_risks', label: 'What could invalidate it?' },
+    ];
+  }
+  if (resource.intent === 'visit') {
+    return [
+      { kind: 'practical_example', label: 'Show me how to use this' },
+      { kind: 'how_it_works', label: 'How does this work?' },
+      { kind: 'limits_and_risks', label: 'What could change?' },
+    ];
+  }
+  if (resource.intent === 'buy' || resource.intent === 'compare') {
+    return [
+      { kind: 'practical_example', label: 'Show a decision example' },
+      { kind: 'limits_and_risks', label: 'What are the tradeoffs?' },
+      { kind: 'what_to_watch', label: 'What should I check first?' },
+    ];
+  }
+  return [
+    { kind: 'how_it_works', label: 'How does this work?' },
+    { kind: 'practical_example', label: 'Show a real example' },
+    { kind: 'limits_and_risks', label: 'Limits & exceptions' },
+  ];
 }
 
 export function researchDepthLabel(verdict: 'confirmed' | 'supported_with_context' | 'corrected' | 'not_verified' | 'opinion'): string {

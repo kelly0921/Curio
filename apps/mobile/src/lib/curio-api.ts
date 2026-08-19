@@ -20,6 +20,7 @@ export type LearningPresentationType = 'named_list' | 'ranked_list' | 'how_to' |
 export type KnowledgeResourceType = 'guide' | 'glossary' | 'playbook' | 'watchlist';
 export type SaveIntent = 'understand' | 'try' | 'visit' | 'buy' | 'track' | 'compare' | 'reference';
 export type ResourceEntryStatus = 'active' | 'contested' | 'superseded';
+export type ResourceDeepDiveKind = 'how_it_works' | 'practical_example' | 'limits_and_risks' | 'what_to_watch';
 export type ResourceContributionDisposition = 'created' | 'enriched' | 'supporting' | 'updated' | 'conflict';
 export type ResearchVerdict = 'confirmed' | 'supported_with_context' | 'corrected' | 'not_verified' | 'opinion';
 
@@ -168,6 +169,18 @@ export interface KnowledgeResourceEntry {
   researchedAt: string | null;
   status?: ResourceEntryStatus;
   relatedEntryIds?: string[];
+  deepDives?: ResourceDeepDive[];
+}
+
+export interface ResourceDeepDive {
+  id: string;
+  kind: ResourceDeepDiveKind;
+  question: string;
+  answer: string;
+  sources: { title: string; publisher: string; url: string }[];
+  researchedAt: string;
+  model: string;
+  promptVersion: string;
 }
 
 export interface ResourceContribution {
@@ -387,6 +400,11 @@ interface ResourceRefreshEnvelope {
   data: { resource: KnowledgeResource; freshness: ResourceFreshness; receipt: ResourceResearchReceipt };
 }
 
+interface ResourceDeepDiveEnvelope {
+  ok: true;
+  data: { resource: KnowledgeResource; deepDive: ResourceDeepDive; generated: boolean };
+}
+
 interface SearchEnvelope {
   ok: true;
   data: KnowledgeSearchResult;
@@ -516,6 +534,23 @@ export async function refreshKnowledgeResource(id: string): Promise<{ resource: 
     headers: { Accept: 'application/json' },
   }));
   resourceSnapshot = [body.data.resource, ...resourceSnapshot.filter((resource) => resource.id !== id)];
+  return body.data;
+}
+
+export async function deepenKnowledgeResourceEntry(
+  resourceId: string,
+  entryId: string,
+  kind: ResourceDeepDiveKind,
+): Promise<{ resource: KnowledgeResource; deepDive: ResourceDeepDive; generated: boolean }> {
+  const body = await readEnvelope<ResourceDeepDiveEnvelope>(await apiFetch(
+    `/api/resources/${encodeURIComponent(resourceId)}/entries/${encodeURIComponent(entryId)}/deep-dive`,
+    {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind }),
+    },
+  ));
+  resourceSnapshot = [body.data.resource, ...resourceSnapshot.filter((resource) => resource.id !== resourceId)];
   return body.data;
 }
 

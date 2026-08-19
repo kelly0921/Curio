@@ -234,6 +234,23 @@ describe("Living resources", () => {
     const source = item("10000000-0000-4000-8000-000000000003", "2026-08-18T10:00:00.000Z", card());
     await repository.save(source);
     const created = await upsertKnowledgeResourceForItem(source, repository);
+    const originalEntry = created!.resource.entries[0];
+    await repository.saveResource({
+      ...created!.resource,
+      entries: [{
+        ...originalEntry,
+        deepDives: [{
+          id: "40000000-0000-4000-8000-000000000003",
+          kind: "how_it_works",
+          question: "How does Suica work?",
+          answer: "Suica stores transit value and settles eligible fares at supported readers.",
+          sources: [{ title: "Suica guide", publisher: "JR East", url: "https://www.jreast.co.jp/suica/" }],
+          researchedAt: "2026-08-18T11:00:00.000Z",
+          model: "test-model",
+          promptVersion: "test-deep-dive-v1",
+        }],
+      }],
+    });
     const refreshed = await upsertKnowledgeResourceForItem({
       ...source,
       card: card({ keyTakeaways: ["Suica — Add the transit card before arrival."] }),
@@ -242,6 +259,8 @@ describe("Living resources", () => {
     expect(refreshed?.resource.id).toBe(created?.resource.id);
     expect(refreshed?.contribution.disposition).toBe("updated");
     expect(refreshed?.resource.entries).toHaveLength(1);
+    expect(refreshed?.resource.entries[0].id).toBe(originalEntry.id);
+    expect(refreshed?.resource.entries[0].deepDives).toHaveLength(1);
     expect(refreshed?.resource.sourceItemIds).toEqual([source.id]);
   });
 

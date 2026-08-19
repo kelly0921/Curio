@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildResourceEntryDeepDiveInput,
   buildLearningCardPrompt,
   detectNamedTakeawayTargets,
   detectPromisedListCount,
@@ -12,6 +13,47 @@ import {
 } from "@/lib/ai/prompt";
 
 describe("Learning Card prompt boundary", () => {
+  it("limits one-tap deep-dive data to the selected point and prior validation", () => {
+    const prompt = JSON.parse(buildResourceEntryDeepDiveInput({
+      kind: "limits_and_risks",
+      question: "What limits apply to a stock split?",
+      entry: {
+        id: "20000000-0000-4000-8000-000000000802",
+        kind: "term",
+        heading: "Stock split",
+        detail: "One share becomes multiple cheaper shares.",
+        sourceItemIds: ["30000000-0000-4000-8000-000000000802"],
+        research: {
+          topic: "Stock split",
+          verdict: "confirmed",
+          explanation: "Share count and price change proportionally.",
+          correction: null,
+          sources: [{ title: "Private retained source", publisher: "Source", url: "https://example.com/private" }],
+        },
+        researchedAt: "2026-08-18T12:00:00.000Z",
+        status: "active",
+        relatedEntryIds: [],
+        deepDives: [],
+      },
+    }));
+
+    expect(prompt).toEqual({
+      selectedQuestion: "What limits apply to a stock split?",
+      deepDiveKind: "limits_and_risks",
+      savedPoint: {
+        heading: "Stock split",
+        detail: "One share becomes multiple cheaper shares.",
+        priorValidation: {
+          verdict: "confirmed",
+          explanation: "Share count and price change proportionally.",
+          correction: null,
+        },
+      },
+    });
+    expect(JSON.stringify(prompt)).not.toContain("sourceItemIds");
+    expect(JSON.stringify(prompt)).not.toContain("example.com/private");
+  });
+
   it("keeps source, user context, and interpretation explicitly separated", () => {
     const prompt = buildLearningCardPrompt({
       accessLevel: "partial",

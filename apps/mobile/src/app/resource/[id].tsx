@@ -8,15 +8,18 @@ import { CurioBrand } from '@/components/curio-brand';
 import { colors, fonts, shadows } from '@/constants/curio-theme';
 import {
   CurioApiError,
+  deepenKnowledgeResourceEntry,
   getKnowledgeResource,
   refreshKnowledgeResource,
   type KnowledgeResource,
+  type KnowledgeResourceEntry,
   type LearningItem,
+  type ResourceDeepDiveKind,
   type ResourceFreshness,
   type ResourceResearchReceipt,
 } from '@/lib/curio-api';
 import { researchVerdictLabel } from '@/lib/learning-presentation';
-import { displayResearchSources, researchDepthLabel, resourceUseGuide } from '@/lib/resource-presentation';
+import { displayResearchSources, researchDepthLabel, resourceDeepDiveOptions, resourceUseGuide } from '@/lib/resource-presentation';
 
 function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
@@ -80,6 +83,9 @@ export default function ResourceDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showSources, setShowSources] = useState(false);
   const [expandedEntryIds, setExpandedEntryIds] = useState<Set<string>>(() => new Set());
+  const [activeDeepDiveKinds, setActiveDeepDiveKinds] = useState<Record<string, ResourceDeepDiveKind | undefined>>({});
+  const [deepDiveLoadingKey, setDeepDiveLoadingKey] = useState<string | null>(null);
+  const [deepDiveErrors, setDeepDiveErrors] = useState<Record<string, string | undefined>>({});
   const [freshness, setFreshness] = useState<ResourceFreshness | null>(null);
   const [refreshReceipt, setRefreshReceipt] = useState<ResourceResearchReceipt | null>(null);
   const [refreshingResearch, setRefreshingResearch] = useState(false);
@@ -109,6 +115,7 @@ export default function ResourceDetailScreen() {
   const latestContribution = useMemo(() => resource?.contributions.at(-1) ?? null, [resource]);
   const researchNeedsRefresh = freshness?.status === 'due' || freshness?.status === 'unresearched';
   const useGuide = useMemo(() => resource ? resourceUseGuide(resource) : null, [resource]);
+  const deepDiveOptions = useMemo(() => resource ? resourceDeepDiveOptions(resource) : [], [resource]);
   const suggestedNextMove = useMemo(() => [...sources]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .find((source) => source.card?.suggestedAction)?.card?.suggestedAction ?? null, [sources]);
@@ -124,6 +131,27 @@ export default function ResourceDetailScreen() {
 
   function openResearchSource(url: string) {
     void WebBrowser.openBrowserAsync(url);
+  }
+
+  async function handleDeepDive(entry: KnowledgeResourceEntry, kind: ResourceDeepDiveKind) {
+    setActiveDeepDiveKinds((current) => ({ ...current, [entry.id]: kind }));
+    if (entry.deepDives?.some((deepDive) => deepDive.kind === kind) || !id || deepDiveLoadingKey) return;
+    const loadingKey = `${entry.id}:${kind}`;
+    setDeepDiveLoadingKey(loadingKey);
+    setDeepDiveErrors((current) => ({ ...current, [entry.id]: undefined }));
+    try {
+      const result = await deepenKnowledgeResourceEntry(id, entry.id, kind);
+      setResource(result.resource);
+    } catch (deepDiveFailure) {
+      setDeepDiveErrors((current) => ({
+        ...current,
+        [entry.id]: deepDiveFailure instanceof CurioApiError
+          ? deepDiveFailure.message
+          : 'Curio could not research this question right now.',
+      }));
+    } finally {
+      setDeepDiveLoadingKey(null);
+    }
   }
 
   async function handleResearchRefresh() {
@@ -248,6 +276,10 @@ export default function ResourceDetailScreen() {
             const importantCorrection = research?.correction
               && research.verdict !== 'confirmed'
               && research.verdict !== 'opinion';
+            const activeDeepDiveKind = activeDeepDiveKinds[entry.id];
+            const activeDeepDive = entry.deepDives?.find((deepDive) => deepDive.kind === activeDeepDiveKind) ?? null;
+            const activeDeepDiveSources = activeDeepDive ? displayResearchSources(activeDeepDive.sources) : [];
+            const entryDeepDiveLoading = deepDiveLoadingKey?.startsWith(`${entry.id}:`) ?? false;
             return (
               <View key={entry.id} style={[styles.entryCard, shadows.card]}>
                 <View style={styles.entryHeader}>
@@ -305,6 +337,52 @@ export default function ResourceDetailScreen() {
                             ))}
                           </View>
                         )}
+                        <View style={styles.deepDiveSection}>
+                          <Text style={styles.deepDiveEyebrow}>GO DEEPER</Text>
+                          <Text style={styles.deepDiveIntro}>Choose one. Curio will research it once and keep the answer with this resource.</Text>
+                          <View style={styles.deepDiveOptions}>
+                            {deepDiveOptions.map((option) => {
+                              const saved = entry.deepDives?.some((deepDive) => deepDive.kind === option.kind) ?? false;
+                              const active = activeDeepDiveKind === option.kind;
+                              const loading = deepDiveLoadingKey === `${entry.id}:${option.kind}`;
+                              return (
+                                <Pressable
+                                  key={option.kind}
+                                  accessibilityLabel={`${option.label}${saved ? ', saved' : ''}`}
+                                  disabled={entryDeepDiveLoading}
+                                  onPress={() => void handleDeepDive(entry, option.kind)}
+                                  style={[styles.deepDiveOption, active && styles.deepDiveOptionActive, saved && styles.deepDiveOptionSaved]}>
+                                  {loading
+                                    ? <ActivityIndicator color={colors.ink} size="small" />
+                                    : <Text style={[styles.deepDiveOptionText, active && styles.deepDiveOptionTextActive]}>{saved ? '✓ ' : ''}{option.label}</Text>}
+                                </Pressable>
+                              );
+                            })}
+                          </View>
+                          {entryDeepDiveLoading && <Text style={styles.deepDiveLoading}>Researching current, authoritative sources…</Text>}
+                          {deepDiveErrors[entry.id] && <Text style={styles.deepDiveError}>{deepDiveErrors[entry.id]}</Text>}
+                          {activeDeepDive && (
+                            <View style={styles.deepDiveAnswer}>
+                              <Text style={styles.deepDiveQuestion}>{activeDeepDive.question}</Text>
+                              <Text style={styles.deepDiveAnswerText}>{activeDeepDive.answer}</Text>
+                              {activeDeepDiveSources.length > 0 && (
+                                <View style={styles.deepDiveSources}>
+                                  <Text style={styles.researchSourcesLabel}>SOURCES</Text>
+                                  {activeDeepDiveSources.map((source) => (
+                                    <Pressable key={source.url} onPress={() => openResearchSource(source.url)} style={styles.researchSourceRow}>
+                                      <View style={styles.researchSourceCopy}>
+                                        <Text numberOfLines={2} style={styles.researchSourceTitle}>{source.displayTitle}</Text>
+                                        <Text style={styles.researchSourcePublisher}>{source.publisher}</Text>
+                                      </View>
+                                      <Text style={styles.researchSourceArrow}>↗</Text>
+                                    </Pressable>
+                                  ))}
+                                </View>
+                              )}
+                              <Text style={styles.deepDiveDate}>Researched {dateLabel(activeDeepDive.researchedAt)}</Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
                     )}
                   </View>
@@ -429,6 +507,22 @@ const styles = StyleSheet.create({
   researchSourceTitle: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '800', lineHeight: 14 },
   researchSourcePublisher: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, marginTop: 3 },
   researchSourceArrow: { color: colors.ink, fontSize: 13 },
+  deepDiveSection: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 18, paddingTop: 16 },
+  deepDiveEyebrow: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  deepDiveIntro: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 5 },
+  deepDiveOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 12 },
+  deepDiveOption: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 13, borderWidth: 1, flexGrow: 1, justifyContent: 'center', minHeight: 42, paddingHorizontal: 11, paddingVertical: 8 },
+  deepDiveOptionActive: { backgroundColor: colors.dark, borderColor: colors.dark },
+  deepDiveOptionSaved: { borderColor: colors.success },
+  deepDiveOptionText: { color: colors.ink, fontFamily: fonts.body, fontSize: 9, fontWeight: '800', textAlign: 'center' },
+  deepDiveOptionTextActive: { color: colors.surface },
+  deepDiveLoading: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontStyle: 'italic', marginTop: 10 },
+  deepDiveError: { color: colors.danger, fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 10 },
+  deepDiveAnswer: { backgroundColor: colors.sky, borderRadius: 17, marginTop: 13, padding: 15 },
+  deepDiveQuestion: { color: colors.ink, fontFamily: fonts.display, fontSize: 19, fontWeight: '700', lineHeight: 23 },
+  deepDiveAnswerText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, lineHeight: 18, marginTop: 9 },
+  deepDiveSources: { borderTopColor: 'rgba(23,23,19,0.14)', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 16, paddingTop: 13 },
+  deepDiveDate: { color: '#526474', fontFamily: fonts.body, fontSize: 8, fontWeight: '700', marginTop: 11 },
   entrySources: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '700', marginTop: 13 },
   sourcesSection: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 40, paddingTop: 24 },
   sourcesToggle: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 13 },

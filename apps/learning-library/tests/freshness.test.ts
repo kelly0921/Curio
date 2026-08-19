@@ -105,6 +105,7 @@ function resourcePatch(patch: Partial<KnowledgeResource>): KnowledgeResource {
       researchedAt: null,
       status: "active",
       relatedEntryIds: [],
+      deepDives: [],
     }],
     sourceItemIds: [sourceId],
     contributions: [{

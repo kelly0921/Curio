@@ -12,12 +12,15 @@ import {
   saveIntentSchema,
   type AccessLevel,
   type KnowledgeResource,
+  type KnowledgeResourceEntry,
   type LearningCard,
   type LearningItem,
+  type ResourceDeepDiveKind,
   type ResearchFinding,
   type SourceMaterial,
 } from "../domain";
 import {
+  buildResourceEntryDeepDiveInput,
   buildKnowledgeResourceMergePrompt,
   buildLearningCardPrompt,
   detectNamedTakeawayTargets,
@@ -31,6 +34,8 @@ import {
   LEARNING_CARD_RESEARCH_SYSTEM_PROMPT,
   LEARNING_CARD_SYSTEM_PROMPT,
   prioritizeSourceMaterials,
+  RESOURCE_ENTRY_DEEP_DIVE_PROMPT_VERSION,
+  RESOURCE_ENTRY_DEEP_DIVE_SYSTEM_PROMPT,
   requiresEntityAlignedSources,
   researchSourceMatchesNamedTarget,
 } from "./prompt";
@@ -62,6 +67,26 @@ const researchOutputSchema = z.object({
   overview: z.string().min(1).max(1_200),
   findings: z.array(researchFindingOutputSchema).min(1).max(5),
 }).strict();
+
+const resourceEntryDeepDiveOutputSchema = z.object({
+  answer: z.string().min(1).max(3_000),
+  sources: z.array(researchSourceOutputSchema).min(1).max(4),
+}).strict();
+
+export function cleanDeepDiveAnswer(answer: string): string {
+  return answer
+    .replace(/\s*\(\s*\[[^\]]+\]\(https?:\/\/[^)\s]+\)\s*\)/giu, "")
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^)\s]+\)/giu, "$1")
+    .replace(/\s*\(\s*https?:\/\/[^)\s]+\s*\)/giu, "")
+    .replace(/https?:\/\/\S+/giu, "")
+    .replace(/\s*\[(?:\d+|source|citation)\]\s*/giu, " ")
+    .replace(/\s*\u3010[^\u3011]+\u3011\s*/gu, " ")
+    .replace(/[ \t]+([,.;:!?])/gu, "$1")
+    .replace(/[ \t]{2,}/gu, " ")
+    .replace(/\n{3,}/gu, "\n\n")
+    .replace(/[:;,]\s*$/u, ".")
+    .trim();
+}
 
 const reelFrameObservationSchema = z.object({
   timestampSeconds: z.number().min(0).max(1_200),
@@ -130,6 +155,21 @@ export interface CardResearchResult {
 
 export interface LearningCardResearcher {
   research(input: { card: LearningCard; sourceMaterials: SourceMaterial[] }): Promise<CardResearchResult>;
+}
+
+export interface ResourceEntryDeepDiveResult {
+  answer: string;
+  sources: ResearchFinding["sources"];
+  model: string;
+  promptVersion: string;
+}
+
+export interface KnowledgeResourceEntryDeepDiver {
+  deepDive(input: {
+    entry: KnowledgeResourceEntry;
+    kind: ResourceDeepDiveKind;
+    question: string;
+  }): Promise<ResourceEntryDeepDiveResult>;
 }
 
 export interface PublicSourceRetrievalResult {
@@ -202,7 +242,7 @@ function consultedUrlsFrom(response: Awaited<ReturnType<OpenAI["responses"]["par
   return [...urls];
 }
 
-export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyzer, LearningCardAnalyzer, LearningCardResearcher, PublicSourceRetriever, KnowledgeResourceMerger {
+export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyzer, LearningCardAnalyzer, LearningCardResearcher, PublicSourceRetriever, KnowledgeResourceMerger, KnowledgeResourceEntryDeepDiver {
   private readonly client: OpenAI;
   private readonly transcriptionModel: string;
   private readonly analysisModel: string;
@@ -525,6 +565,48 @@ export class OpenAILearningServices implements MediaTranscriber, ReelFrameAnalyz
       findings,
       model: response.model,
       promptVersion: LEARNING_CARD_RESEARCH_PROMPT_VERSION,
+    };
+  }
+
+  async deepDive(input: {
+    entry: KnowledgeResourceEntry;
+    kind: ResourceDeepDiveKind;
+    question: string;
+  }): Promise<ResourceEntryDeepDiveResult> {
+    const response = await this.client.responses.parse({
+      model: this.retrievalModel,
+      instructions: RESOURCE_ENTRY_DEEP_DIVE_SYSTEM_PROMPT,
+      input: buildResourceEntryDeepDiveInput(input),
+      tools: [{ type: "web_search", search_context_size: "high" }],
+      tool_choice: "required",
+      include: ["web_search_call.action.sources"],
+      text: { format: zodTextFormat(resourceEntryDeepDiveOutputSchema, "resource_entry_deep_dive") },
+    });
+    if (response.status !== "completed" || !response.output_parsed) {
+      throw new Error(`OpenAI entry deep dive did not complete (${response.status ?? "unknown"}).`);
+    }
+
+    const parsed = resourceEntryDeepDiveOutputSchema.parse(response.output_parsed);
+    const consultedKeys = new Set(
+      consultedUrlsFrom(response).map(evidenceUrlKey).filter((key): key is string => Boolean(key)),
+    );
+    const seenKeys = new Set<string>();
+    const sources = parsed.sources.flatMap((source) => {
+      const key = evidenceUrlKey(source.url);
+      if (!key || !consultedKeys.has(key) || seenKeys.has(key)) return [];
+      const validated = researchSourceSchema.safeParse(source);
+      if (!validated.success) return [];
+      seenKeys.add(key);
+      return [validated.data];
+    });
+    if (!sources.length) throw new Error("DEEP_DIVE_NOT_VERIFIABLE");
+    const answer = cleanDeepDiveAnswer(parsed.answer);
+    if (!answer) throw new Error("DEEP_DIVE_NOT_VERIFIABLE");
+    return {
+      answer,
+      sources,
+      model: response.model,
+      promptVersion: RESOURCE_ENTRY_DEEP_DIVE_PROMPT_VERSION,
     };
   }
 }

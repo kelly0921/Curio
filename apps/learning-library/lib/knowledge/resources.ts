@@ -238,6 +238,7 @@ function entriesFromCard(
       researchedAt: alignedResearch ? item.card?.researchBrief?.researchedAt ?? null : null,
       status: "active",
       relatedEntryIds: [],
+      deepDives: [],
     };
   });
 }
@@ -327,6 +328,27 @@ export async function upsertKnowledgeResourceForItem(
   const resourceType = matched?.resourceType ?? inferKnowledgeResourceType(item.card);
   const incomingEntries = entriesFromCard(item, resourceType, id);
   const wasExistingSource = Boolean(matched?.sourceItemIds.includes(item.id));
+  if (matched && wasExistingSource) {
+    const previousSourceEntries = matched.entries.filter((entry) => entry.sourceItemIds.includes(item.id) && entry.status !== "superseded");
+    const reusedEntryIds = new Set<string>();
+    for (const incoming of incomingEntries) {
+      const normalizedHeading = incoming.heading?.trim().toLocaleLowerCase() ?? null;
+      const previous = previousSourceEntries
+        .filter((entry) => !reusedEntryIds.has(entry.id))
+        .map((entry) => ({
+          entry,
+          score: normalizedHeading && entry.heading?.trim().toLocaleLowerCase() === normalizedHeading
+            ? 1
+            : entryMatchScore(entry, incoming),
+        }))
+        .filter((candidate) => candidate.score >= 0.78)
+        .sort((left, right) => right.score - left.score)[0]?.entry;
+      if (!previous) continue;
+      incoming.id = previous.id;
+      incoming.deepDives = previous.deepDives;
+      reusedEntryIds.add(previous.id);
+    }
+  }
   const retainedEntries = (matched?.entries ?? [])
     .map((entry) => ({ ...entry, sourceItemIds: entry.sourceItemIds.filter((sourceId) => sourceId !== item.id) }))
     .filter((entry) => entry.sourceItemIds.length > 0);

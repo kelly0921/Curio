@@ -131,6 +131,13 @@ export const resourceEntryStatusSchema = z.enum([
   "superseded",
 ]);
 
+export const resourceDeepDiveKindSchema = z.enum([
+  "how_it_works",
+  "practical_example",
+  "limits_and_risks",
+  "what_to_watch",
+]);
+
 export const resourceContributionDispositionSchema = z.enum([
   "created",
   "enriched",
@@ -246,6 +253,17 @@ export const learningCardSchema = z.object({
   personalization: learningPersonalizationSchema.nullable().default(null),
 }).strict();
 
+export const resourceDeepDiveSchema = z.object({
+  id: z.string().uuid(),
+  kind: resourceDeepDiveKindSchema,
+  question: z.string().min(1).max(300),
+  answer: z.string().min(1).max(3_000),
+  sources: z.array(researchSourceSchema).max(4),
+  researchedAt: isoDateTimeSchema,
+  model: z.string().min(1).max(120),
+  promptVersion: z.string().min(1).max(120),
+}).strict();
+
 export const knowledgeResourceEntrySchema = z.object({
   id: z.string().uuid(),
   kind: resourceEntryKindSchema,
@@ -256,6 +274,7 @@ export const knowledgeResourceEntrySchema = z.object({
   researchedAt: isoDateTimeSchema.nullable().default(null),
   status: resourceEntryStatusSchema.default("active"),
   relatedEntryIds: z.array(z.string().uuid()).max(20).default([]),
+  deepDives: z.array(resourceDeepDiveSchema).max(4).default([]),
 }).strict();
 
 export const resourceContributionSchema = z.object({
@@ -366,6 +385,8 @@ export type ContextDomain = z.infer<typeof contextDomainSchema>;
 export type LearningPresentationType = z.infer<typeof learningPresentationTypeSchema>;
 export type KnowledgeResourceType = z.infer<typeof knowledgeResourceTypeSchema>;
 export type SaveIntent = z.infer<typeof saveIntentSchema>;
+export type ResourceDeepDiveKind = z.infer<typeof resourceDeepDiveKindSchema>;
+export type ResourceDeepDive = z.infer<typeof resourceDeepDiveSchema>;
 export type KnowledgeResourceEntry = z.infer<typeof knowledgeResourceEntrySchema>;
 export type ResourceEntryStatus = z.infer<typeof resourceEntryStatusSchema>;
 export type ResourceContribution = z.infer<typeof resourceContributionSchema>;

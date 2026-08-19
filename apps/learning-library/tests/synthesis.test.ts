@@ -36,6 +36,7 @@ function entry(
     researchedAt: null,
     status: "active",
     relatedEntryIds: [],
+    deepDives: [],
     ...patch,
   };
 }

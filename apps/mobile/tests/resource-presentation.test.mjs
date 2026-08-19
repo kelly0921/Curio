@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { displayResearchSources, researchDepthLabel, resourceUseGuide, uniqueResearchSources } from '../src/lib/resource-presentation.ts';
+import { displayResearchSources, researchDepthLabel, resourceDeepDiveOptions, resourceUseGuide, uniqueResearchSources } from '../src/lib/resource-presentation.ts';
 
 const resource = (patch = {}) => ({
   domain: 'finance',
@@ -22,6 +22,11 @@ test('turns an investment resource into a concrete watchlist use case', () => {
     focusLabel: 'WATCHING',
     focus: 'AOI · Lumentum · Viavi Solutions',
   });
+  assert.deepEqual(resourceDeepDiveOptions(resource()), [
+    { kind: 'what_to_watch', label: 'What should I watch?' },
+    { kind: 'how_it_works', label: 'How does this connect?' },
+    { kind: 'limits_and_risks', label: 'What could invalidate it?' },
+  ]);
 });
 
 test('gives a glossary a reference purpose without making the top level verbose', () => {
@@ -49,6 +54,11 @@ test('uses the first practical step when a playbook is ready to try', () => {
   assert.equal(guide.title, 'Try the smallest useful version');
   assert.equal(guide.focusLabel, 'START HERE');
   assert.equal(guide.focus, 'Open one page and identify the repeated content pattern before automating anything.');
+  assert.deepEqual(resourceDeepDiveOptions(resource({ intent: 'try', resourceType: 'playbook' })).map((option) => option.kind), [
+    'how_it_works',
+    'practical_example',
+    'limits_and_risks',
+  ]);
 });
 
 test('labels every research state by the depth it offers', () => {

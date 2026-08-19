@@ -28,6 +28,7 @@ function resource(input: {
     researchedAt: null,
     status: "active" as const,
     relatedEntryIds: [],
+    deepDives: [],
     ...entry,
   }));
   return knowledgeResourceSchema.parse({
