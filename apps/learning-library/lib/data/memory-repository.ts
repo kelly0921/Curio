@@ -1,14 +1,20 @@
 import {
+  forYouFeedbackSchema,
   knowledgeResourceSchema,
   learningItemSchema,
+  resourceEngagementSchema,
+  type ForYouFeedback,
   type KnowledgeResource,
   type LearningItem,
+  type ResourceEngagement,
 } from "../domain";
 import type { CurioRepository } from "./repository";
 
 export class MemoryLearningItemRepository implements CurioRepository {
   private readonly items = new Map<string, LearningItem>();
   private readonly resources = new Map<string, KnowledgeResource>();
+  private readonly engagements = new Map<string, ResourceEngagement>();
+  private readonly feedback = new Map<string, ForYouFeedback>();
 
   async list(): Promise<LearningItem[]> {
     return [...this.items.values()]
@@ -47,6 +53,35 @@ export class MemoryLearningItemRepository implements CurioRepository {
   async saveResource(resource: KnowledgeResource): Promise<KnowledgeResource> {
     const validated = knowledgeResourceSchema.parse(resource);
     this.resources.set(validated.id, validated);
+    return validated;
+  }
+
+  async listResourceEngagement(profileId: string): Promise<ResourceEngagement[]> {
+    return [...this.engagements.values()]
+      .filter((engagement) => engagement.profileId === profileId)
+      .map((engagement) => resourceEngagementSchema.parse(engagement));
+  }
+
+  async findResourceEngagement(profileId: string, resourceId: string): Promise<ResourceEngagement | null> {
+    const engagement = this.engagements.get(`${profileId}:${resourceId}`);
+    return engagement ? resourceEngagementSchema.parse(engagement) : null;
+  }
+
+  async saveResourceEngagement(engagement: ResourceEngagement): Promise<ResourceEngagement> {
+    const validated = resourceEngagementSchema.parse(engagement);
+    this.engagements.set(`${validated.profileId}:${validated.resourceId}`, validated);
+    return validated;
+  }
+
+  async listForYouFeedback(profileId: string): Promise<ForYouFeedback[]> {
+    return [...this.feedback.values()]
+      .filter((feedback) => feedback.profileId === profileId)
+      .map((feedback) => forYouFeedbackSchema.parse(feedback));
+  }
+
+  async saveForYouFeedback(feedback: ForYouFeedback): Promise<ForYouFeedback> {
+    const validated = forYouFeedbackSchema.parse(feedback);
+    this.feedback.set(`${validated.profileId}:${validated.recommendationId}`, validated);
     return validated;
   }
 }

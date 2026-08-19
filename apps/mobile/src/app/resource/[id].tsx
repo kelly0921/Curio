@@ -10,6 +10,7 @@ import {
   CurioApiError,
   deepenKnowledgeResourceEntry,
   getKnowledgeResource,
+  recordResourceEngagement,
   refreshKnowledgeResource,
   type KnowledgeResource,
   type KnowledgeResourceEntry,
@@ -104,6 +105,7 @@ export default function ResourceDetailScreen() {
       setSources(result.sources);
       setFreshness(result.freshness);
       setError(null);
+      void recordResourceEngagement(id, 'opened').catch(() => undefined);
     }).catch(() => {
       if (!cancelled) setError('Curio could not open this living resource.');
     }).finally(() => {
@@ -121,6 +123,8 @@ export default function ResourceDetailScreen() {
     .find((source) => source.card?.suggestedAction)?.card?.suggestedAction ?? null, [sources]);
 
   function toggleEntryDepth(entryId: string) {
+    const opening = !expandedEntryIds.has(entryId);
+    if (opening && id) void recordResourceEngagement(id, 'expanded').catch(() => undefined);
     setExpandedEntryIds((current) => {
       const next = new Set(current);
       if (next.has(entryId)) next.delete(entryId);
@@ -130,11 +134,13 @@ export default function ResourceDetailScreen() {
   }
 
   function openResearchSource(url: string) {
+    if (id) void recordResourceEngagement(id, 'source_opened').catch(() => undefined);
     void WebBrowser.openBrowserAsync(url);
   }
 
   async function handleDeepDive(entry: KnowledgeResourceEntry, kind: ResourceDeepDiveKind) {
     setActiveDeepDiveKinds((current) => ({ ...current, [entry.id]: kind }));
+    if (id) void recordResourceEngagement(id, 'deep_dive').catch(() => undefined);
     if (entry.deepDives?.some((deepDive) => deepDive.kind === kind) || !id || deepDiveLoadingKey) return;
     const loadingKey = `${entry.id}:${kind}`;
     setDeepDiveLoadingKey(loadingKey);
@@ -403,7 +409,10 @@ export default function ResourceDetailScreen() {
             {showSources && sources.map((source) => (
               <Pressable
                 key={source.id}
-                onPress={() => router.push({ pathname: '/item/[id]', params: { id: source.id } })}
+                onPress={() => {
+                  if (id) void recordResourceEngagement(id, 'source_opened').catch(() => undefined);
+                  router.push({ pathname: '/item/[id]', params: { id: source.id } });
+                }}
                 style={styles.sourceRow}>
                 <View style={styles.sourceMark}><Text style={styles.sourceMarkText}>{source.platform === 'instagram' ? '◎' : '↗'}</Text></View>
                 <View style={styles.sourceCopy}>

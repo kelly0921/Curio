@@ -1,8 +1,12 @@
 import {
+  forYouFeedbackSchema,
   knowledgeResourceSchema,
   learningItemSchema,
+  resourceEngagementSchema,
+  type ForYouFeedback,
   type KnowledgeResource,
   type LearningItem,
+  type ResourceEngagement,
 } from "../domain";
 import type { CurioRepository } from "./repository";
 
@@ -16,6 +20,14 @@ function parseRow(row: LearningItemRow): LearningItem {
 
 function parseResourceRow(row: LearningItemRow): KnowledgeResource {
   return knowledgeResourceSchema.parse(JSON.parse(row.record_json));
+}
+
+function parseEngagementRow(row: LearningItemRow): ResourceEngagement {
+  return resourceEngagementSchema.parse(JSON.parse(row.record_json));
+}
+
+function parseForYouFeedbackRow(row: LearningItemRow): ForYouFeedback {
+  return forYouFeedbackSchema.parse(JSON.parse(row.record_json));
 }
 
 export class D1LearningItemRepository implements CurioRepository {
@@ -133,6 +145,73 @@ export class D1LearningItemRepository implements CurioRepository {
       validated.sourceItemIds.length,
       JSON.stringify(validated),
       validated.createdAt,
+      validated.updatedAt,
+    ).run();
+    return validated;
+  }
+
+  async listResourceEngagement(profileId: string): Promise<ResourceEngagement[]> {
+    const result = await this.database
+      .prepare("SELECT record_json FROM resource_engagement WHERE profile_id = ?")
+      .bind(profileId)
+      .all<LearningItemRow>();
+    return result.results.map(parseEngagementRow);
+  }
+
+  async findResourceEngagement(profileId: string, resourceId: string): Promise<ResourceEngagement | null> {
+    const row = await this.database
+      .prepare("SELECT record_json FROM resource_engagement WHERE profile_id = ? AND resource_id = ? LIMIT 1")
+      .bind(profileId, resourceId)
+      .first<LearningItemRow>();
+    return row ? parseEngagementRow(row) : null;
+  }
+
+  async saveResourceEngagement(engagement: ResourceEngagement): Promise<ResourceEngagement> {
+    const validated = resourceEngagementSchema.parse(engagement);
+    await this.database.prepare(`
+      INSERT INTO resource_engagement (profile_id, resource_id, record_json, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(profile_id, resource_id) DO UPDATE SET
+        record_json = excluded.record_json,
+        updated_at = excluded.updated_at
+    `).bind(
+      validated.profileId,
+      validated.resourceId,
+      JSON.stringify(validated),
+      validated.updatedAt,
+    ).run();
+    return validated;
+  }
+
+  async listForYouFeedback(profileId: string): Promise<ForYouFeedback[]> {
+    const result = await this.database
+      .prepare("SELECT record_json FROM for_you_feedback WHERE profile_id = ?")
+      .bind(profileId)
+      .all<LearningItemRow>();
+    return result.results.map(parseForYouFeedbackRow);
+  }
+
+  async saveForYouFeedback(feedback: ForYouFeedback): Promise<ForYouFeedback> {
+    const validated = forYouFeedbackSchema.parse(feedback);
+    await this.database.prepare(`
+      INSERT INTO for_you_feedback (
+        profile_id, recommendation_id, resource_id, lane, state, revisit_at, record_json, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(profile_id, recommendation_id) DO UPDATE SET
+        resource_id = excluded.resource_id,
+        lane = excluded.lane,
+        state = excluded.state,
+        revisit_at = excluded.revisit_at,
+        record_json = excluded.record_json,
+        updated_at = excluded.updated_at
+    `).bind(
+      validated.profileId,
+      validated.recommendationId,
+      validated.resourceId,
+      validated.lane,
+      validated.state,
+      validated.revisitAt,
+      JSON.stringify(validated),
       validated.updatedAt,
     ).run();
     return validated;

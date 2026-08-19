@@ -1,9 +1,13 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
+  forYouFeedbackSchema,
   knowledgeResourceSchema,
   learningItemSchema,
+  resourceEngagementSchema,
+  type ForYouFeedback,
   type KnowledgeResource,
   type LearningItem,
+  type ResourceEngagement,
 } from "../domain";
 import type { CurioRepository } from "./repository";
 
@@ -127,5 +131,62 @@ export class SupabaseLearningItemRepository implements CurioRepository {
     }, { onConflict: "id" }).select("record_json").single();
     if (result.error) throw new Error(`Supabase save knowledge resource failed: ${result.error.message}`);
     return knowledgeResourceSchema.parse(result.data.record_json);
+  }
+
+  async listResourceEngagement(profileId: string): Promise<ResourceEngagement[]> {
+    const result = await this.client
+      .from("resource_engagement")
+      .select("record_json")
+      .eq("profile_id", profileId);
+    if (result.error) throw new Error(`Supabase list resource engagement failed: ${result.error.message}`);
+    return (result.data ?? []).map((row) => resourceEngagementSchema.parse(row.record_json));
+  }
+
+  async findResourceEngagement(profileId: string, resourceId: string): Promise<ResourceEngagement | null> {
+    const result = await this.client
+      .from("resource_engagement")
+      .select("record_json")
+      .eq("profile_id", profileId)
+      .eq("resource_id", resourceId)
+      .maybeSingle();
+    if (result.error) throw new Error(`Supabase find resource engagement failed: ${result.error.message}`);
+    return result.data ? resourceEngagementSchema.parse(result.data.record_json) : null;
+  }
+
+  async saveResourceEngagement(engagement: ResourceEngagement): Promise<ResourceEngagement> {
+    const validated = resourceEngagementSchema.parse(engagement);
+    const result = await this.client.from("resource_engagement").upsert({
+      profile_id: validated.profileId,
+      resource_id: validated.resourceId,
+      record_json: validated,
+      updated_at: validated.updatedAt,
+    }, { onConflict: "profile_id,resource_id" }).select("record_json").single();
+    if (result.error) throw new Error(`Supabase save resource engagement failed: ${result.error.message}`);
+    return resourceEngagementSchema.parse(result.data.record_json);
+  }
+
+  async listForYouFeedback(profileId: string): Promise<ForYouFeedback[]> {
+    const result = await this.client
+      .from("for_you_feedback")
+      .select("record_json")
+      .eq("profile_id", profileId);
+    if (result.error) throw new Error(`Supabase list For You feedback failed: ${result.error.message}`);
+    return (result.data ?? []).map((row) => forYouFeedbackSchema.parse(row.record_json));
+  }
+
+  async saveForYouFeedback(feedback: ForYouFeedback): Promise<ForYouFeedback> {
+    const validated = forYouFeedbackSchema.parse(feedback);
+    const result = await this.client.from("for_you_feedback").upsert({
+      profile_id: validated.profileId,
+      recommendation_id: validated.recommendationId,
+      resource_id: validated.resourceId,
+      lane: validated.lane,
+      state: validated.state,
+      revisit_at: validated.revisitAt,
+      record_json: validated,
+      updated_at: validated.updatedAt,
+    }, { onConflict: "profile_id,recommendation_id" }).select("record_json").single();
+    if (result.error) throw new Error(`Supabase save For You feedback failed: ${result.error.message}`);
+    return forYouFeedbackSchema.parse(result.data.record_json);
   }
 }

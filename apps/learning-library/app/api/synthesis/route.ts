@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
 import { getPersonalContextSnapshot } from "@/lib/context/provider";
 import { getLearningItemRepository } from "@/lib/data/provider";
+import { personalProfile } from "@/lib/domain";
 import { synchronizeKnowledgeResources } from "@/lib/knowledge/resources";
 import { buildCrossSaveSynthesis } from "@/lib/knowledge/synthesis";
 
@@ -23,12 +24,14 @@ export async function GET(request: Request) {
   }
   try {
     const repository = await getLearningItemRepository();
-    const [items, context] = await Promise.all([
+    const [items, context, engagement, feedback] = await Promise.all([
       repository.list(),
       getPersonalContextSnapshot(),
+      repository.listResourceEngagement(personalProfile.id),
+      repository.listForYouFeedback(personalProfile.id),
     ]);
     const resources = await synchronizeKnowledgeResources(items, repository);
-    const synthesis = buildCrossSaveSynthesis({ items, resources, context });
+    const synthesis = buildCrossSaveSynthesis({ items, resources, context, engagement, feedback });
     return NextResponse.json(
       { ok: true, data: { synthesis } },
       { headers: responseHeaders(request) },

@@ -1,15 +1,18 @@
 import type {
   ContextDomain,
   ContextSnapshot,
+  ForYouFeedback,
+  ForYouLane,
   KnowledgeResource,
   KnowledgeResourceEntry,
   LearningItem,
+  ResourceEngagement,
   ResourceContribution,
   SaveIntent,
 } from "../domain";
 import { assessKnowledgeResourceFreshness } from "./freshness";
 
-export const CROSS_SAVE_SYNTHESIS_VERSION = "cross-save-synthesis-v3-intents" as const;
+export const CROSS_SAVE_SYNTHESIS_VERSION = "cross-save-synthesis-v4-behavior-aware" as const;
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1_000;
 
@@ -105,6 +108,19 @@ export interface CrossSaveUnresolved {
   kind: "contested" | "not_verified" | "research_due" | "unresearched";
 }
 
+export interface ForYouRecommendation {
+  id: string;
+  lane: ForYouLane;
+  label: string;
+  resourceId: string;
+  resourceTitle: string;
+  entryId: string | null;
+  title: string;
+  point: string;
+  whyNow: string;
+  actionLabel: string;
+}
+
 export interface CrossSaveSynthesis {
   generatedAt: string;
   engineVersion: typeof CROSS_SAVE_SYNTHESIS_VERSION;
@@ -129,6 +145,7 @@ export interface CrossSaveSynthesis {
   changed: CrossSaveChange | null;
   repeated: CrossSaveRepeated | null;
   unresolved: CrossSaveUnresolved | null;
+  recommendations: ForYouRecommendation[];
   fallbackResourceIds: string[];
 }
 
@@ -136,7 +153,14 @@ interface SynthesisInput {
   items: LearningItem[];
   resources: KnowledgeResource[];
   context?: ContextSnapshot | null;
+  engagement?: ResourceEngagement[];
+  feedback?: ForYouFeedback[];
   now?: Date;
+}
+
+interface ForYouCandidate extends ForYouRecommendation {
+  resource: KnowledgeResource;
+  score: number;
 }
 
 interface ResourceEntryCandidate {
@@ -515,6 +539,250 @@ function changeLabel(disposition: ResourceContribution["disposition"]): string {
   return "New in your library";
 }
 
+function recommendationId(
+  lane: ForYouLane,
+  resource: KnowledgeResource,
+  detail: string,
+): string {
+  return `for-you:${lane}:${resource.id}:${detail}:${resource.version}`;
+}
+
+function recommendationIsAvailable(
+  id: string,
+  feedback: ForYouFeedback[],
+  now: Date,
+): boolean {
+  const saved = feedback.find((candidate) => candidate.recommendationId === id);
+  if (!saved) return true;
+  if (saved.state === "done" || saved.state === "not_relevant") return false;
+  return !saved.revisitAt || toMillis(saved.revisitAt) <= now.getTime();
+}
+
+function engagementMap(engagement: ResourceEngagement[]): Map<string, ResourceEngagement> {
+  return new Map(engagement.map((record) => [record.resourceId, record]));
+}
+
+function behaviorInterestScore(engagement: ResourceEngagement | undefined): number {
+  if (!engagement) return 8;
+  return Math.min(12, engagement.openCount * 2)
+    + Math.min(10, engagement.expandedCount * 3)
+    + Math.min(8, engagement.sourceOpenCount * 2)
+    + Math.min(8, engagement.deepDiveCount * 4);
+}
+
+function learnNextCandidates(
+  resources: KnowledgeResource[],
+  context: ContextSnapshot | null,
+  byResource: Map<string, ResourceEngagement>,
+  feedback: ForYouFeedback[],
+  now: Date,
+): ForYouCandidate[] {
+  return resources.flatMap((resource): ForYouCandidate[] => resource.entries.flatMap((entry): ForYouCandidate[] => {
+    if ((entry.status ?? "active") !== "active" || entry.deepDives.length > 0) return [];
+    if (["corrected", "not_verified"].includes(entry.research?.verdict ?? "")) return [];
+    const engagement = byResource.get(resource.id);
+    const id = recommendationId("learn_next", resource, entry.id);
+    if (!recommendationIsAvailable(id, feedback, now)) return [];
+    const whyNow = engagement?.lastExpandedAt
+      ? "You opened the explanation; this point still has more useful depth available."
+      : engagement?.lastOpenedAt
+        ? "You visited this resource, but this point is still unexplored beyond the short version."
+        : "This is a well-supported point you have not explored yet.";
+    return [{
+      id,
+      lane: "learn_next",
+      label: "LEARN NEXT",
+      resourceId: resource.id,
+      resourceTitle: resource.title,
+      entryId: entry.id,
+      title: entry.heading ?? resource.title,
+      point: compact(entry.detail),
+      whyNow,
+      actionLabel: "Learn this",
+      resource,
+      score: entry.sourceItemIds.length * 10
+        + researchScore(entry)
+        + contextFitScore(resource, entry, context)
+        + behaviorInterestScore(engagement)
+        + (resource.intent === "understand" || resource.intent === "reference" ? 10 : 0),
+    }];
+  })).sort((left, right) => right.score - left.score || right.resource.updatedAt.localeCompare(left.resource.updatedAt));
+}
+
+function actionNowCandidates(
+  resources: KnowledgeResource[],
+  context: ContextSnapshot | null,
+  byResource: Map<string, ResourceEngagement>,
+  feedback: ForYouFeedback[],
+  now: Date,
+): ForYouCandidate[] {
+  return nextUseCandidates(resources, context).flatMap((candidate): ForYouCandidate[] => {
+    const id = recommendationId("use_now", candidate.resource, candidate.entry.id);
+    if (!recommendationIsAvailable(id, feedback, now)) return [];
+    const engagement = byResource.get(candidate.resource.id);
+    const copy = nextUseCopy(candidate.intent);
+    const whyNow = engagement?.lastExpandedAt || engagement?.lastDeepDiveAt
+      ? "You explored the context; its most practical next step is ready to use."
+      : copy.reason;
+    return [{
+      id,
+      lane: "use_now",
+      label: "USE NOW",
+      resourceId: candidate.resource.id,
+      resourceTitle: candidate.resource.title,
+      entryId: candidate.entry.id,
+      title: candidate.entry.heading ?? candidate.resource.title,
+      point: compact(candidate.entry.detail),
+      whyNow,
+      actionLabel: candidate.intent === "track" ? "Review this" : "Use this",
+      resource: candidate.resource,
+      score: candidate.score + behaviorInterestScore(engagement),
+    }];
+  }).sort((left, right) => right.score - left.score || right.resource.updatedAt.localeCompare(left.resource.updatedAt));
+}
+
+function daysSince(value: string | null, now: Date): number | null {
+  if (!value) return null;
+  return Math.max(0, Math.floor((now.getTime() - toMillis(value)) / 86_400_000));
+}
+
+function worthRevisitingCandidates(
+  resources: KnowledgeResource[],
+  byResource: Map<string, ResourceEngagement>,
+  feedback: ForYouFeedback[],
+  now: Date,
+): ForYouCandidate[] {
+  const startAt = now.getTime() - WEEK_IN_MS;
+  const candidates: ForYouCandidate[] = [];
+  changeCandidates(resources, startAt, now.getTime()).forEach(({ resource, contribution, score }) => {
+    const id = recommendationId("worth_revisiting", resource, contribution.createdAt);
+    if (!recommendationIsAvailable(id, feedback, now)) return;
+    const engagement = byResource.get(resource.id);
+    candidates.push({
+      id,
+      lane: "worth_revisiting",
+      label: "WORTH REVISITING",
+      resourceId: resource.id,
+      resourceTitle: resource.title,
+      entryId: null,
+      title: changeLabel(contribution.disposition),
+      point: compact(contribution.summary),
+      whyNow: engagement?.lastOpenedAt && toMillis(contribution.createdAt) > toMillis(engagement.lastOpenedAt)
+        ? "This resource changed after you last opened it."
+        : "A newer save changed or strengthened this resource.",
+      actionLabel: "See what changed",
+      resource,
+      score: score + 70,
+    });
+  });
+  unresolvedCandidates(resources, now).forEach(({ resource, entry, reason, kind, score }) => {
+    const id = recommendationId("worth_revisiting", resource, `${entry.id}:${kind}`);
+    if (!recommendationIsAvailable(id, feedback, now)) return;
+    candidates.push({
+      id,
+      lane: "worth_revisiting",
+      label: "WORTH REVISITING",
+      resourceId: resource.id,
+      resourceTitle: resource.title,
+      entryId: entry.id,
+      title: entry.heading ?? resource.title,
+      point: compact(entry.detail),
+      whyNow: reason,
+      actionLabel: "Review this",
+      resource,
+      score: score + 45,
+    });
+  });
+  repeatedCandidates(resources).forEach(({ resource, entry, score }) => {
+    const id = recommendationId("worth_revisiting", resource, `${entry.id}:${entry.sourceItemIds.length}`);
+    if (!recommendationIsAvailable(id, feedback, now)) return;
+    candidates.push({
+      id,
+      lane: "worth_revisiting",
+      label: "WORTH REVISITING",
+      resourceId: resource.id,
+      resourceTitle: resource.title,
+      entryId: entry.id,
+      title: entry.heading ?? resource.title,
+      point: compact(entry.detail),
+      whyNow: `${entry.sourceItemIds.length} saves now support this same point.`,
+      actionLabel: "Revisit this",
+      resource,
+      score: score + 28,
+    });
+  });
+  resources.forEach((resource) => {
+    const engagement = byResource.get(resource.id);
+    const elapsedDays = daysSince(engagement?.lastOpenedAt ?? null, now);
+    if (elapsedDays === null || elapsedDays < 14) return;
+    const entry = resource.entries.find((candidate) => (candidate.status ?? "active") === "active");
+    if (!entry) return;
+    const id = recommendationId("worth_revisiting", resource, `stale:${entry.id}`);
+    if (!recommendationIsAvailable(id, feedback, now)) return;
+    candidates.push({
+      id,
+      lane: "worth_revisiting",
+      label: "WORTH REVISITING",
+      resourceId: resource.id,
+      resourceTitle: resource.title,
+      entryId: entry.id,
+      title: entry.heading ?? resource.title,
+      point: compact(entry.detail),
+      whyNow: `You last opened this ${elapsedDays} days ago, and it remains useful.`,
+      actionLabel: "Revisit this",
+      resource,
+      score: Math.min(40, elapsedDays) + researchScore(entry),
+    });
+  });
+  const seen = new Set<string>();
+  return candidates
+    .sort((left, right) => right.score - left.score || right.resource.updatedAt.localeCompare(left.resource.updatedAt))
+    .filter((candidate) => {
+      if (seen.has(candidate.id)) return false;
+      seen.add(candidate.id);
+      return true;
+    });
+}
+
+function buildForYouRecommendations(
+  resources: KnowledgeResource[],
+  context: ContextSnapshot | null,
+  engagement: ResourceEngagement[],
+  feedback: ForYouFeedback[],
+  now: Date,
+): ForYouRecommendation[] {
+  const byResource = engagementMap(engagement);
+  const pools: Record<ForYouLane, ForYouCandidate[]> = {
+    learn_next: learnNextCandidates(resources, context, byResource, feedback, now),
+    use_now: actionNowCandidates(resources, context, byResource, feedback, now),
+    worth_revisiting: worthRevisitingCandidates(resources, byResource, feedback, now),
+  };
+  const chosen = new Map<ForYouLane, ForYouCandidate>();
+  const usedResourceIds = new Set<string>();
+  (["worth_revisiting", "use_now", "learn_next"] as ForYouLane[]).forEach((lane) => {
+    const candidate = pools[lane].find((option) => !usedResourceIds.has(option.resourceId));
+    if (!candidate) return;
+    chosen.set(lane, candidate);
+    usedResourceIds.add(candidate.resourceId);
+  });
+  return (["learn_next", "use_now", "worth_revisiting"] as ForYouLane[]).flatMap((lane) => {
+    const candidate = chosen.get(lane);
+    if (!candidate) return [];
+    return [{
+      id: candidate.id,
+      lane: candidate.lane,
+      label: candidate.label,
+      resourceId: candidate.resourceId,
+      resourceTitle: candidate.resourceTitle,
+      entryId: candidate.entryId,
+      title: candidate.title,
+      point: candidate.point,
+      whyNow: candidate.whyNow,
+      actionLabel: candidate.actionLabel,
+    }];
+  });
+}
+
 function chooseUnused<T extends { resource: KnowledgeResource }>(
   candidates: T[],
   usedResourceIds: Set<string>,
@@ -558,6 +826,8 @@ export function buildCrossSaveSynthesis({
   items,
   resources,
   context = null,
+  engagement = [],
+  feedback = [],
   now = new Date(),
 }: SynthesisInput): CrossSaveSynthesis {
   const endAt = now.getTime();
@@ -654,6 +924,7 @@ export function buildCrossSaveSynthesis({
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .slice(0, 4)
     .map((resource) => resource.id);
+  const recommendations = buildForYouRecommendations(resources, context, engagement, feedback, now);
 
   return {
     generatedAt: now.toISOString(),
@@ -672,6 +943,7 @@ export function buildCrossSaveSynthesis({
     changed,
     repeated,
     unresolved,
+    recommendations,
     fallbackResourceIds,
   };
 }

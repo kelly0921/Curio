@@ -197,6 +197,43 @@ export const recommendationFeedbackSchema = z.object({
   revisitAt: isoDateTimeSchema.nullable(),
 }).strict();
 
+export const resourceEngagementSignalSchema = z.enum([
+  "opened",
+  "expanded",
+  "source_opened",
+  "deep_dive",
+]);
+
+export const resourceEngagementSchema = z.object({
+  profileId: z.string().uuid(),
+  resourceId: z.string().uuid(),
+  openCount: z.number().int().min(0),
+  expandedCount: z.number().int().min(0),
+  sourceOpenCount: z.number().int().min(0),
+  deepDiveCount: z.number().int().min(0),
+  lastOpenedAt: isoDateTimeSchema.nullable(),
+  lastExpandedAt: isoDateTimeSchema.nullable(),
+  lastSourceOpenedAt: isoDateTimeSchema.nullable(),
+  lastDeepDiveAt: isoDateTimeSchema.nullable(),
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
+export const forYouLaneSchema = z.enum([
+  "learn_next",
+  "use_now",
+  "worth_revisiting",
+]);
+
+export const forYouFeedbackSchema = z.object({
+  profileId: z.string().uuid(),
+  recommendationId: z.string().min(1).max(300),
+  resourceId: z.string().uuid(),
+  lane: forYouLaneSchema,
+  state: z.enum(["done", "later", "not_relevant"]),
+  updatedAt: isoDateTimeSchema,
+  revisitAt: isoDateTimeSchema.nullable(),
+}).strict();
+
 export const learningPersonalizationSchema = z.object({
   domain: contextDomainSchema,
   priority: z.enum(["high", "medium", "low"]),
@@ -399,6 +436,10 @@ export type ContextRecord = z.infer<typeof contextRecordSchema>;
 export type ContextSnapshot = z.infer<typeof contextSnapshotSchema>;
 export type LearningPersonalization = z.infer<typeof learningPersonalizationSchema>;
 export type RecommendationFeedback = z.infer<typeof recommendationFeedbackSchema>;
+export type ResourceEngagementSignal = z.infer<typeof resourceEngagementSignalSchema>;
+export type ResourceEngagement = z.infer<typeof resourceEngagementSchema>;
+export type ForYouLane = z.infer<typeof forYouLaneSchema>;
+export type ForYouFeedback = z.infer<typeof forYouFeedbackSchema>;
 export type LearningItem = z.infer<typeof learningItemSchema>;
 export type ProcessingIssue = z.infer<typeof processingIssueSchema>;
 export type Intent = z.infer<typeof intentSchema>;

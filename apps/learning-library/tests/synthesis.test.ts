@@ -306,4 +306,126 @@ describe("cross-save synthesis", () => {
 
     expect(result.remember?.resourceId).toBe("hsa-guide");
   });
+
+  it("returns one behavior-aware recommendation for each useful lane without repeating resources", () => {
+    const learn = resource("learn", "finance", ["save-1"], {
+      resourceType: "glossary",
+      intent: "understand",
+      entries: [entry("learn-entry", ["save-1"], {
+        heading: "Stock split",
+        detail: "A stock split changes share count and per-share price without changing the position value at the split moment.",
+        research: {
+          topic: "Stock split",
+          verdict: "confirmed",
+          explanation: "Regulator guidance confirms the mechanism.",
+          correction: null,
+          sources: [],
+        },
+      })],
+    });
+    const use = resource("use", "ai_work", ["save-2"], {
+      resourceType: "playbook",
+      intent: "try",
+      entries: [entry("use-entry", ["save-2"], {
+        heading: "Map the audit",
+        detail: "List the pages and checks before assigning each repeatable task to an actor.",
+      })],
+    });
+    const revisit = resource("revisit", "career", ["save-3", "save-4"], {
+      entries: [entry("revisit-entry", ["save-3", "save-4"], {
+        heading: "Document outcomes",
+        detail: "Write down the decision, outcome, and lesson while the context is fresh.",
+      })],
+      contributions: [contribution("save-3"), contribution("save-4", "supporting")],
+    });
+
+    const result = buildCrossSaveSynthesis({
+      items: [item("save-1"), item("save-2"), item("save-3"), item("save-4")],
+      resources: [learn, use, revisit],
+      engagement: [{
+        profileId: "00000000-0000-4000-8000-000000000031",
+        resourceId: "learn",
+        openCount: 1,
+        expandedCount: 1,
+        sourceOpenCount: 0,
+        deepDiveCount: 0,
+        lastOpenedAt: RECENT,
+        lastExpandedAt: RECENT,
+        lastSourceOpenedAt: null,
+        lastDeepDiveAt: null,
+        updatedAt: RECENT,
+      }],
+      now: NOW,
+    });
+
+    expect(result.recommendations.map((recommendation) => recommendation.lane)).toEqual([
+      "learn_next",
+      "use_now",
+      "worth_revisiting",
+    ]);
+    expect(new Set(result.recommendations.map((recommendation) => recommendation.resourceId)).size).toBe(3);
+    expect(result.recommendations[0].whyNow).toContain("opened the explanation");
+    expect(result.recommendations[1]).toEqual(expect.objectContaining({ resourceId: "use", actionLabel: "Use this" }));
+    expect(result.recommendations[2].whyNow).toContain("newer save");
+  });
+
+  it("hides completed recommendations and restores reminders only after their revisit time", () => {
+    const practical = resource("use", "ai_work", ["save-1"], {
+      resourceType: "playbook",
+      intent: "try",
+      entries: [entry("use-entry", ["save-1"], { heading: "Try this", detail: "Run one small audit and review the output." })],
+    });
+    const first = buildCrossSaveSynthesis({ items: [item("save-1")], resources: [practical], now: NOW });
+    const recommendation = first.recommendations.find((candidate) => candidate.lane === "use_now");
+    expect(recommendation).toBeTruthy();
+    if (!recommendation) return;
+
+    const completed = buildCrossSaveSynthesis({
+      items: [item("save-1")],
+      resources: [practical],
+      feedback: [{
+        profileId: practical.profileId,
+        recommendationId: recommendation.id,
+        resourceId: practical.id,
+        lane: "use_now",
+        state: "done",
+        updatedAt: RECENT,
+        revisitAt: null,
+      }],
+      now: NOW,
+    });
+    expect(completed.recommendations.some((candidate) => candidate.id === recommendation.id)).toBe(false);
+
+    const remindedLater = buildCrossSaveSynthesis({
+      items: [item("save-1")],
+      resources: [practical],
+      feedback: [{
+        profileId: practical.profileId,
+        recommendationId: recommendation.id,
+        resourceId: practical.id,
+        lane: "use_now",
+        state: "later",
+        updatedAt: RECENT,
+        revisitAt: "2026-08-20T12:00:00.000Z",
+      }],
+      now: NOW,
+    });
+    expect(remindedLater.recommendations.some((candidate) => candidate.id === recommendation.id)).toBe(false);
+
+    const reminderDue = buildCrossSaveSynthesis({
+      items: [item("save-1")],
+      resources: [practical],
+      feedback: [{
+        profileId: practical.profileId,
+        recommendationId: recommendation.id,
+        resourceId: practical.id,
+        lane: "use_now",
+        state: "later",
+        updatedAt: RECENT,
+        revisitAt: "2026-08-19T11:00:00.000Z",
+      }],
+      now: NOW,
+    });
+    expect(reminderDue.recommendations.some((candidate) => candidate.id === recommendation.id)).toBe(true);
+  });
 });

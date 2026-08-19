@@ -21,6 +21,8 @@ export type KnowledgeResourceType = 'guide' | 'glossary' | 'playbook' | 'watchli
 export type SaveIntent = 'understand' | 'try' | 'visit' | 'buy' | 'track' | 'compare' | 'reference';
 export type ResourceEntryStatus = 'active' | 'contested' | 'superseded';
 export type ResourceDeepDiveKind = 'how_it_works' | 'practical_example' | 'limits_and_risks' | 'what_to_watch';
+export type ResourceEngagementSignal = 'opened' | 'expanded' | 'source_opened' | 'deep_dive';
+export type ForYouLane = 'learn_next' | 'use_now' | 'worth_revisiting';
 export type ResourceContributionDisposition = 'created' | 'enriched' | 'supporting' | 'updated' | 'conflict';
 export type ResearchVerdict = 'confirmed' | 'supported_with_context' | 'corrected' | 'not_verified' | 'opinion';
 
@@ -270,6 +272,29 @@ export interface CrossSaveInterest {
   sourceCount: number;
 }
 
+export interface ForYouRecommendation {
+  id: string;
+  lane: ForYouLane;
+  label: string;
+  resourceId: string;
+  resourceTitle: string;
+  entryId: string | null;
+  title: string;
+  point: string;
+  whyNow: string;
+  actionLabel: string;
+}
+
+export interface ForYouFeedback {
+  profileId: string;
+  recommendationId: string;
+  resourceId: string;
+  lane: ForYouLane;
+  state: 'done' | 'later' | 'not_relevant';
+  updatedAt: string;
+  revisitAt: string | null;
+}
+
 export interface CrossSaveSynthesis {
   generatedAt: string;
   engineVersion: string;
@@ -328,6 +353,7 @@ export interface CrossSaveSynthesis {
     reason: string;
     kind: 'contested' | 'not_verified' | 'research_due' | 'unresearched';
   } | null;
+  recommendations: ForYouRecommendation[];
   fallbackResourceIds: string[];
 }
 
@@ -403,6 +429,16 @@ interface ResourceRefreshEnvelope {
 interface ResourceDeepDiveEnvelope {
   ok: true;
   data: { resource: KnowledgeResource; deepDive: ResourceDeepDive; generated: boolean };
+}
+
+interface ResourceEngagementEnvelope {
+  ok: true;
+  data: { engagement: { resourceId: string; updatedAt: string } };
+}
+
+interface ForYouFeedbackEnvelope {
+  ok: true;
+  data: { feedback: ForYouFeedback };
 }
 
 interface SearchEnvelope {
@@ -575,7 +611,36 @@ export async function getCrossSaveSynthesis(): Promise<CrossSaveSynthesis> {
     ...body.data.synthesis,
     interests: body.data.synthesis.interests ?? [],
     nextUse: body.data.synthesis.nextUse ?? null,
+    recommendations: body.data.synthesis.recommendations ?? [],
   };
+}
+
+export async function recordResourceEngagement(
+  resourceId: string,
+  signal: ResourceEngagementSignal,
+): Promise<void> {
+  await readEnvelope<ResourceEngagementEnvelope>(await apiFetch(`/api/resources/${encodeURIComponent(resourceId)}/engagement`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ signal }),
+  }));
+}
+
+export async function updateForYouFeedback(
+  recommendation: ForYouRecommendation,
+  action: ForYouFeedback['state'],
+): Promise<ForYouFeedback> {
+  const body = await readEnvelope<ForYouFeedbackEnvelope>(await apiFetch('/api/synthesis/feedback', {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      recommendationId: recommendation.id,
+      resourceId: recommendation.resourceId,
+      lane: recommendation.lane,
+      action,
+    }),
+  }));
+  return body.data.feedback;
 }
 
 export async function syncPersonalContext(): Promise<ContextSnapshot> {
