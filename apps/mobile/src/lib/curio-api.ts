@@ -362,12 +362,20 @@ export interface KnowledgeSearchAnswer {
   title: string;
   summary: string;
   points: {
+    resourceId: string;
+    resourceTitle: string;
     entryId: string;
     heading: string | null;
     detail: string;
     status: ResourceEntryStatus;
+    evidence: string;
   }[];
   sourceCount: number;
+  resourceCount: number;
+  mode: 'library_matches' | 'library_synthesis';
+  caveat: string | null;
+  model: string | null;
+  promptVersion: string;
 }
 
 export interface KnowledgeSearchResult {

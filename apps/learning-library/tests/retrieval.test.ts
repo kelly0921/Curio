@@ -18,6 +18,8 @@ function resource(input: {
   canonicalTopic: string;
   summary: string;
   domain?: KnowledgeResource["domain"];
+  resourceType?: KnowledgeResource["resourceType"];
+  intent?: KnowledgeResource["intent"];
   entries: Array<Partial<KnowledgeResourceEntry> & Pick<KnowledgeResourceEntry, "id" | "detail">>;
 }): KnowledgeResource {
   const entries = input.entries.map((entry) => ({
@@ -34,9 +36,9 @@ function resource(input: {
   return knowledgeResourceSchema.parse({
     id: input.id,
     profileId,
-    resourceType: "guide",
+    resourceType: input.resourceType ?? "guide",
     domain: input.domain ?? "finance",
-    intent: "understand",
+    intent: input.intent ?? "understand",
     canonicalTopic: input.canonicalTopic,
     title: input.title,
     summary: input.summary,
@@ -174,6 +176,103 @@ describe("knowledge retrieval", () => {
     expect(result.results[0].matchedOn).toContain("Japan tips");
   });
 
+  it("groups useful points from more than one living resource without repeating source cards", () => {
+    const transit = resource({
+      id: "20000000-0000-4000-8000-000000000141",
+      sourceId: "10000000-0000-4000-8000-000000000141",
+      title: "Japan transit planning",
+      canonicalTopic: "Japan travel transit",
+      summary: "Practical transit setup for a Japan trip.",
+      domain: "travel",
+      entries: [{ id: "30000000-0000-4000-8000-000000000141", heading: "Set up a transit card", detail: "Confirm phone compatibility before relying on a mobile transit card." }],
+    });
+    const food = resource({
+      id: "20000000-0000-4000-8000-000000000142",
+      sourceId: "10000000-0000-4000-8000-000000000142",
+      title: "Japan food stops",
+      canonicalTopic: "Japan travel food",
+      summary: "Convenient food ideas for a Japan trip.",
+      domain: "travel",
+      entries: [{ id: "30000000-0000-4000-8000-000000000142", heading: "Convenience-store recovery", detail: "Use a nearby combini for drinks and a quick breakfast on early travel days." }],
+    });
+
+    const result = searchKnowledge({ query: "What Japan travel tips did I save?", resources: [transit, food], items: [] });
+
+    expect(result.answer?.resourceCount).toBe(2);
+    expect(result.answer?.mode).toBe("library_synthesis");
+    expect(result.answer?.points.map((point) => point.resourceId)).toEqual(expect.arrayContaining([transit.id, food.id]));
+    expect(result.answer?.sourceCount).toBe(2);
+    expect(result.results).toHaveLength(2);
+  });
+
+  it("prefers actionable finance watchlists over incidental investing mentions for an ideas query", () => {
+    const watchlist = resource({
+      id: "20000000-0000-4000-8000-000000000161",
+      sourceId: "10000000-0000-4000-8000-000000000161",
+      title: "Optical transceiver investment ideas",
+      canonicalTopic: "optical transceiver beneficiaries",
+      summary: "Companies to monitor around optical-network demand.",
+      resourceType: "watchlist",
+      intent: "track",
+      entries: [{ id: "30000000-0000-4000-8000-000000000161", detail: "Track named suppliers and the demand evidence behind each thesis." }],
+    });
+    const career = resource({
+      id: "20000000-0000-4000-8000-000000000162",
+      sourceId: "10000000-0000-4000-8000-000000000162",
+      title: "Investment careers and leverage",
+      canonicalTopic: "investment career ideas",
+      summary: "Career paths connected to capital and revenue leverage.",
+      domain: "career",
+      entries: [{ id: "30000000-0000-4000-8000-000000000162", detail: "Some investment roles tie compensation to capital allocation." }],
+    });
+    const glossary = resource({
+      id: "20000000-0000-4000-8000-000000000163",
+      sourceId: "10000000-0000-4000-8000-000000000163",
+      title: "Investment terms",
+      canonicalTopic: "investment vocabulary",
+      summary: "Plain-language definitions.",
+      resourceType: "glossary",
+      entries: [{ id: "30000000-0000-4000-8000-000000000163", detail: "Liquidity describes how easily an investment can be sold." }],
+    });
+
+    const result = searchKnowledge({ query: "What investment ideas did I save?", resources: [career, glossary, watchlist], items: [] });
+
+    expect(result.results[0].resource.id).toBe(watchlist.id);
+    expect(result.results.map((hit) => hit.resource.id)).not.toContain(glossary.id);
+    expect(result.answer?.points).toHaveLength(1);
+    expect(result.answer?.points[0].resourceId).toBe(watchlist.id);
+  });
+
+  it("retrieves details from a saved deep dive, not only the short entry", () => {
+    const hsa = resource({
+      id: "20000000-0000-4000-8000-000000000151",
+      sourceId: "10000000-0000-4000-8000-000000000151",
+      title: "HSA reimbursement notes",
+      canonicalTopic: "health savings account",
+      summary: "How reimbursements work after qualified expenses.",
+      entries: [{
+        id: "30000000-0000-4000-8000-000000000151",
+        heading: "Save receipts",
+        detail: "Keep documentation for qualified medical expenses.",
+        deepDives: [{
+          id: "40000000-0000-4000-8000-000000000151",
+          kind: "how_it_works",
+          question: "Is there a reimbursement deadline?",
+          answer: "Federal rules do not impose a fixed reimbursement deadline if the expense was qualified and incurred after the HSA was established.",
+          sources: [],
+          researchedAt: timestamp,
+          model: "test",
+          promptVersion: "test-v1",
+        }],
+      }],
+    });
+
+    const result = searchKnowledge({ query: "HSA reimbursement deadline", resources: [hsa], items: [] });
+
+    expect(result.answer?.points[0].detail).toContain("do not impose a fixed reimbursement deadline");
+    expect(result.results[0].matchedEntryIds).toContain(hsa.entries[0].id);
+  });
+
   it("searches research corrections and excludes superseded points from the answer", () => {
     const sourceId = "10000000-0000-4000-8000-000000000121";
     const japan = resource({
@@ -204,6 +303,8 @@ describe("knowledge retrieval", () => {
 
     expect(result.answer?.resourceId).toBe(japan.id);
     expect(result.answer?.points.map((point) => point.heading)).toEqual(["Current advice"]);
+    expect(result.answer?.points[0].detail).toBe("Pasmo was not verified for every device in the saved source.");
+    expect(result.answer?.points[0].evidence).toBe("Corrected by Curio");
   });
 
   it("supports domain filtering and returns no forced answer for an empty query", () => {

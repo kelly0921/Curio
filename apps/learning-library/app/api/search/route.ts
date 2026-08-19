@@ -1,14 +1,42 @@
 import { NextResponse } from "next/server";
-import { contextDomainSchema } from "@/lib/domain";
+import { z } from "zod";
 import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
 import { getLearningItemRepository } from "@/lib/data/provider";
+import { contextDomainSchema } from "@/lib/domain";
 import { searchKnowledge } from "@/lib/knowledge/retrieval";
 import { synchronizeKnowledgeResources } from "@/lib/knowledge/resources";
 
 export const dynamic = "force-dynamic";
 
+const searchInputSchema = z.object({
+  query: z.string().trim().min(2).max(300),
+  domain: contextDomainSchema.nullable().optional(),
+}).strict();
+
+function responseHeaders(request: Request): Headers {
+  const headers = new Headers(apiResponseHeaders(request));
+  headers.set("Cache-Control", "private, no-store");
+  return headers;
+}
+
 function errorResponse(request: Request, code: string, message: string, status: number) {
-  return NextResponse.json({ ok: false, error: { code, message } }, { status, headers: apiResponseHeaders(request) });
+  return NextResponse.json({ ok: false, error: { code, message } }, { status, headers: responseHeaders(request) });
+}
+
+async function runLibrarySearch(input: z.infer<typeof searchInputSchema>) {
+  const repository = await getLearningItemRepository();
+  const items = await repository.list();
+  const resources = await synchronizeKnowledgeResources(items, repository);
+  return searchKnowledge({
+    query: input.query,
+    resources,
+    items,
+    domain: input.domain ?? null,
+  });
+}
+
+function successResponse(request: Request, data: Awaited<ReturnType<typeof runLibrarySearch>>) {
+  return NextResponse.json({ ok: true, data }, { headers: responseHeaders(request) });
 }
 
 export async function GET(request: Request) {
@@ -16,30 +44,15 @@ export async function GET(request: Request) {
     return errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401);
   }
   const url = new URL(request.url);
-  const query = url.searchParams.get("q")?.trim() ?? "";
-  if (query.length < 2 || query.length > 300) {
-    return errorResponse(request, "INVALID_SEARCH_QUERY", "Search with 2 to 300 characters.", 400);
+  const parsed = searchInputSchema.safeParse({
+    query: url.searchParams.get("q") ?? "",
+    domain: url.searchParams.get("domain")?.trim() || null,
+  });
+  if (!parsed.success) {
+    return errorResponse(request, "INVALID_SEARCH_QUERY", "Search with 2 to 300 characters in a supported knowledge area.", 400);
   }
-  const domainValue = url.searchParams.get("domain")?.trim() || null;
-  const parsedDomain = domainValue ? contextDomainSchema.safeParse(domainValue) : null;
-  if (parsedDomain && !parsedDomain.success) {
-    return errorResponse(request, "INVALID_SEARCH_DOMAIN", "This knowledge domain is not supported.", 400);
-  }
-
   try {
-    const repository = await getLearningItemRepository();
-    const items = await repository.list();
-    const resources = await synchronizeKnowledgeResources(items, repository);
-    const result = searchKnowledge({
-      query,
-      resources,
-      items,
-      domain: parsedDomain?.data ?? null,
-    });
-    return NextResponse.json(
-      { ok: true, data: result },
-      { headers: { ...apiResponseHeaders(request), "Cache-Control": "no-store" } },
-    );
+    return successResponse(request, await runLibrarySearch(parsed.data));
   } catch (error) {
     console.error(JSON.stringify({ event: "knowledge_search_failed", errorType: error instanceof Error ? error.name : "unknown" }));
     return errorResponse(request, "SEARCH_UNAVAILABLE", "Curio could not search your knowledge right now.", 500);

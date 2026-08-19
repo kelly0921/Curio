@@ -43,8 +43,20 @@ function searchableText(resource: KnowledgeResource): string {
     resource.domain,
     resource.resourceType,
     ...resource.entities,
-    ...resource.entries.flatMap((entry) => [entry.heading, entry.detail]),
+    ...resource.entries.flatMap((entry) => [
+      entry.heading,
+      entry.detail,
+      entry.research?.explanation,
+      entry.research?.correction,
+      ...(entry.deepDives ?? []).flatMap((deepDive) => [deepDive.question, deepDive.answer]),
+    ]),
   ].filter(Boolean).join(' ').toLocaleLowerCase();
+}
+
+function looksLikeQuestion(value: string): boolean {
+  const normalized = value.trim();
+  return normalized.endsWith('?')
+    || /^(?:how|what|why|which|when|where|who|can|could|should|is|are|do|does|did|explain|tell me)\b/iu.test(normalized);
 }
 
 export default function HomeScreen() {
@@ -117,9 +129,7 @@ export default function HomeScreen() {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const resolvedSearch = searchResult?.query.toLocaleLowerCase() === normalizedQuery ? searchResult : null;
     if (normalizedQuery && resolvedSearch) {
-      return resolvedSearch.results
-        .map((result) => result.resource)
-        .filter((resource) => resource.id !== resolvedSearch.answer?.resourceId);
+      return resolvedSearch.results.map((result) => result.resource);
     }
     return resources.filter((resource) => {
       if (domain !== 'all' && resource.domain !== domain) return false;
@@ -131,6 +141,7 @@ export default function HomeScreen() {
   const hasQuery = Boolean(query.trim());
   const resolvedSearch = searchResult?.query.toLocaleLowerCase() === query.trim().toLocaleLowerCase() ? searchResult : null;
   const answer = resolvedSearch?.answer ?? null;
+  const questionMode = hasQuery && looksLikeQuestion(query);
 
   return (
     <View style={styles.screen}>
@@ -160,7 +171,7 @@ export default function HomeScreen() {
                     accessibilityLabel="Search your knowledge"
                     autoCapitalize="none"
                     onChangeText={setQuery}
-                    placeholder="Search ideas, terms, places"
+                    placeholder="Search or ask anything you saved"
                     placeholderTextColor="#958F83"
                     returnKeyType="search"
                     style={styles.searchInput}
@@ -189,26 +200,38 @@ export default function HomeScreen() {
               )}
 
               {answer && (
-                <Pressable
-                  accessibilityLabel={`Open ${answer.title}`}
-                  onPress={() => router.push({ pathname: '/resource/[id]', params: { id: answer.resourceId } })}
-                  style={styles.answerCard}>
-                  <Text style={styles.answerEyebrow}>BEST ANSWER FROM YOUR SAVES</Text>
-                  <Text style={styles.answerTitle}>{answer.title}</Text>
+                <View style={styles.answerCard}>
+                  <Text style={styles.answerEyebrow}>{questionMode ? 'ANSWERED FROM YOUR LIBRARY' : 'BEST MATCHES FROM YOUR SAVES'}</Text>
+                  <Text style={styles.answerTitle}>{questionMode ? 'What Curio found' : answer.title}</Text>
                   <Text style={styles.answerSummary}>{answer.summary}</Text>
                   <View style={styles.answerPoints}>
-                    {answer.points.slice(0, 3).map((point) => (
-                      <View key={point.entryId} style={styles.answerPoint}>
-                        <Text style={styles.answerBullet}>•</Text>
-                        <Text style={styles.answerPointText}>{point.heading ? `${point.heading} — ${point.detail}` : point.detail}</Text>
-                      </View>
+                    {answer.points.slice(0, 4).map((point) => (
+                      <Pressable
+                        accessibilityLabel={`Open ${point.resourceTitle}`}
+                        key={`${point.resourceId}:${point.entryId}`}
+                        onPress={() => router.push({ pathname: '/resource/[id]', params: { id: point.resourceId } })}
+                        style={({ pressed }) => [styles.answerPoint, pressed && styles.answerPointPressed]}>
+                        <View style={styles.answerPointTopline}>
+                          <Text numberOfLines={1} style={styles.answerPointResource}>{point.resourceTitle}</Text>
+                          <Text style={styles.answerPointArrow}>→</Text>
+                        </View>
+                        {point.heading && <Text style={styles.answerPointHeading}>{point.heading}</Text>}
+                        <Text style={styles.answerPointText}>{point.detail}</Text>
+                        <Text style={styles.answerEvidence}>{point.evidence}</Text>
+                      </Pressable>
                     ))}
                   </View>
+                  {answer.caveat && (
+                    <View style={styles.answerCaveat}>
+                      <Text style={styles.answerCaveatLabel}>KEEP IN MIND</Text>
+                      <Text style={styles.answerCaveatText}>{answer.caveat}</Text>
+                    </View>
+                  )}
                   <View style={styles.answerFooter}>
-                    <Text style={styles.answerSourceCount}>{answer.sourceCount} source{answer.sourceCount === 1 ? '' : 's'}</Text>
-                    <Text style={styles.answerOpen}>Open resource →</Text>
+                    <Text style={styles.answerSourceCount}>{answer.resourceCount} resource{answer.resourceCount === 1 ? '' : 's'} · {answer.sourceCount} saved source{answer.sourceCount === 1 ? '' : 's'}</Text>
+                    <Text style={styles.answerPrivate}>Private library answer</Text>
                   </View>
-                </Pressable>
+                </View>
               )}
 
               {showCollections && (
@@ -303,13 +326,21 @@ const styles = StyleSheet.create({
   answerEyebrow: { color: colors.butter, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
   answerTitle: { color: colors.surface, fontFamily: fonts.display, fontSize: 28, fontWeight: '700', letterSpacing: -0.6, lineHeight: 32, marginTop: 7 },
   answerSummary: { color: '#D7D4CA', fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 8 },
-  answerPoints: { borderTopColor: '#4A4B43', borderTopWidth: StyleSheet.hairlineWidth, gap: 8, marginTop: 15, paddingTop: 14 },
-  answerPoint: { alignItems: 'flex-start', flexDirection: 'row', gap: 8 },
-  answerBullet: { color: colors.butter, fontSize: 13, lineHeight: 18 },
-  answerPointText: { color: colors.surface, flex: 1, fontFamily: fonts.body, fontSize: 11, fontWeight: '700', lineHeight: 17 },
+  answerPoints: { borderTopColor: '#4A4B43', borderTopWidth: StyleSheet.hairlineWidth, gap: 9, marginTop: 15, paddingTop: 14 },
+  answerPoint: { backgroundColor: '#2C2D27', borderRadius: 16, padding: 13 },
+  answerPointPressed: { opacity: 0.72 },
+  answerPointTopline: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
+  answerPointResource: { color: colors.butter, flex: 1, fontFamily: fonts.body, fontSize: 9, fontWeight: '900' },
+  answerPointArrow: { color: colors.butter, fontFamily: fonts.body, fontSize: 11 },
+  answerPointHeading: { color: colors.surface, fontFamily: fonts.body, fontSize: 11, fontWeight: '900', lineHeight: 16, marginTop: 8 },
+  answerPointText: { color: '#E4E0D7', fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 4 },
+  answerEvidence: { color: '#A9A69E', fontFamily: fonts.body, fontSize: 8, fontWeight: '800', marginTop: 9, textTransform: 'uppercase' },
+  answerCaveat: { borderLeftColor: colors.peach, borderLeftWidth: 2, marginTop: 14, paddingLeft: 10 },
+  answerCaveatLabel: { color: colors.peach, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+  answerCaveatText: { color: '#D7D4CA', fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 4 },
   answerFooter: { alignItems: 'center', borderTopColor: '#4A4B43', borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingTop: 13 },
   answerSourceCount: { color: '#B8B5AB', fontFamily: fonts.body, fontSize: 9, fontWeight: '700' },
-  answerOpen: { color: colors.butter, fontFamily: fonts.body, fontSize: 10, fontWeight: '900' },
+  answerPrivate: { color: '#8F8C84', fontFamily: fonts.body, fontSize: 8, fontWeight: '800' },
   sectionHeading: { alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
   libraryHeading: { marginTop: 34 },
   sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.8, marginTop: 2 },

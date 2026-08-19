@@ -3,7 +3,10 @@ import type {
   KnowledgeResource,
   KnowledgeResourceEntry,
   LearningItem,
+  ResearchFinding,
 } from "../domain";
+
+const DETERMINISTIC_SEARCH_VERSION = "knowledge-search-v2-cross-resource" as const;
 
 const SEARCH_STOP_WORDS = new Set([
   "a", "about", "all", "an", "and", "are", "can", "could", "did", "do", "does", "find", "for", "from", "give", "have", "help", "how", "i",
@@ -77,21 +80,66 @@ function fieldMatch(value: string | null | undefined, query: Set<string>): { cou
   return { count: matched.length, matched };
 }
 
+function entrySearchText(entry: KnowledgeResourceEntry): string {
+  return [
+    entry.heading,
+    entry.detail,
+    entry.research?.topic,
+    entry.research?.explanation,
+    entry.research?.correction,
+    ...entry.deepDives.flatMap((deepDive) => [deepDive.question, deepDive.answer]),
+  ].filter((value): value is string => Boolean(value)).join(" ");
+}
+
 function entrySearchScore(entry: KnowledgeResourceEntry, query: Set<string>): number {
   return (
     fieldMatch(entry.heading, query).count * 9
     + fieldMatch(entry.detail, query).count * 5
     + fieldMatch(entry.research?.topic, query).count * 5
     + fieldMatch(entry.research?.explanation, query).count * 3
-    + fieldMatch(entry.research?.correction, query).count * 4
+    + fieldMatch(entry.research?.correction, query).count * 5
+    + entry.deepDives.reduce((score, deepDive) => score
+      + fieldMatch(deepDive.question, query).count * 4
+      + fieldMatch(deepDive.answer, query).count * 3, 0)
   );
 }
 
+function evidenceLabel(research: ResearchFinding | null): string {
+  if (!research) return "From a saved source";
+  if (research.verdict === "confirmed") return "Confirmed by research";
+  if (research.verdict === "supported_with_context") return "Verified with context";
+  if (research.verdict === "corrected") return "Corrected by Curio";
+  if (research.verdict === "not_verified") return "Not fully verified";
+  return "Saved perspective";
+}
+
+function compactText(value: string, maxLength = 240): string {
+  const normalized = value.trim().replace(/\s+/gu, " ");
+  if (normalized.length <= maxLength) return normalized;
+  const boundary = normalized.lastIndexOf(" ", maxLength - 1);
+  return `${normalized.slice(0, boundary > maxLength * 0.7 ? boundary : maxLength - 1).trimEnd()}…`;
+}
+
+function preferredEntryDetail(entry: KnowledgeResourceEntry, query: Set<string>): string {
+  if (entry.research?.verdict === "corrected" && entry.research.correction?.trim()) {
+    return compactText(entry.research.correction);
+  }
+  const options = [
+    ...entry.deepDives.map((deepDive) => ({ value: deepDive.answer, score: fieldMatch(`${deepDive.question} ${deepDive.answer}`, query).count * 6 })),
+    { value: entry.research?.explanation ?? "", score: fieldMatch(entry.research?.explanation, query).count * 5 },
+    { value: entry.detail, score: fieldMatch(entry.detail, query).count * 4 },
+  ].filter(({ value }) => value.trim());
+  return compactText(options.sort((left, right) => right.score - left.score)[0]?.value ?? entry.detail);
+}
+
 export interface KnowledgeSearchPoint {
+  resourceId: string;
+  resourceTitle: string;
   entryId: string;
   heading: string | null;
   detail: string;
   status: KnowledgeResourceEntry["status"];
+  evidence: string;
 }
 
 export interface KnowledgeSearchAnswer {
@@ -100,6 +148,11 @@ export interface KnowledgeSearchAnswer {
   summary: string;
   points: KnowledgeSearchPoint[];
   sourceCount: number;
+  resourceCount: number;
+  mode: "library_matches" | "library_synthesis";
+  caveat: string | null;
+  model: string | null;
+  promptVersion: string;
 }
 
 export interface KnowledgeSearchHit {
@@ -115,26 +168,72 @@ export interface KnowledgeSearchResponse {
   results: KnowledgeSearchHit[];
 }
 
-function answerFor(hit: KnowledgeSearchHit, query: Set<string>): KnowledgeSearchAnswer {
-  const rankedEntries = hit.resource.entries
+function rankedEntries(hit: KnowledgeSearchHit, query: Set<string>) {
+  return hit.resource.entries
     .filter((entry) => entry.status !== "superseded")
     .map((entry, index) => ({ entry, index, score: entrySearchScore(entry, query) }))
     .sort((left, right) => right.score - left.score || left.index - right.index);
-  const matchedEntries = rankedEntries.filter(({ score }) => score > 0);
-  const selected = matchedEntries.length
-    ? [...matchedEntries, ...rankedEntries.filter(({ score }) => score === 0)].slice(0, 3)
-    : rankedEntries.slice(0, 3);
+}
+
+function answerPoint(resource: KnowledgeResource, entry: KnowledgeResourceEntry, query: Set<string>): KnowledgeSearchPoint {
   return {
-    resourceId: hit.resource.id,
-    title: hit.resource.title,
-    summary: hit.resource.summary,
-    points: selected.map(({ entry }) => ({
-      entryId: entry.id,
-      heading: entry.heading,
-      detail: entry.detail,
-      status: entry.status,
-    })),
-    sourceCount: hit.resource.sourceItemIds.length,
+    resourceId: resource.id,
+    resourceTitle: resource.title,
+    entryId: entry.id,
+    heading: entry.heading,
+    detail: preferredEntryDetail(entry, query),
+    status: entry.status,
+    evidence: evidenceLabel(entry.research),
+  };
+}
+
+function compactSummary(resources: KnowledgeResource[], fallback: string): string {
+  const seen = new Set<string>();
+  const joined = resources.flatMap((resource): string[] => {
+    const summary = resource.summary.trim();
+    const key = summary.toLocaleLowerCase();
+    if (!summary || seen.has(key)) return [];
+    seen.add(key);
+    return [summary];
+  }).slice(0, 2).join(" ");
+  if (!joined) return fallback;
+  return compactText(joined, 280);
+}
+
+function answerFor(hits: KnowledgeSearchHit[], query: Set<string>): KnowledgeSearchAnswer | null {
+  const primary = hits[0]?.resource;
+  if (!primary) return null;
+  const byHit = hits.map((hit) => ({ hit, entries: rankedEntries(hit, query) }));
+  const maxPoints = byHit.length === 1 ? 3 : Math.min(4, byHit.length);
+  const selected: { resource: KnowledgeResource; entry: KnowledgeResourceEntry }[] = [];
+  const selectedKeys = new Set<string>();
+  const add = (resource: KnowledgeResource, entry: KnowledgeResourceEntry | undefined) => {
+    if (!entry || selected.length >= maxPoints) return;
+    const key = `${resource.id}:${entry.id}`;
+    if (selectedKeys.has(key)) return;
+    selectedKeys.add(key);
+    selected.push({ resource, entry });
+  };
+
+  byHit.slice(0, 3).forEach(({ hit, entries }) => add(hit.resource, entries.find(({ score }) => score > 0)?.entry ?? entries[0]?.entry));
+  if (byHit.length < 3) {
+    byHit.forEach(({ hit, entries }) => entries.forEach(({ entry }) => add(hit.resource, entry)));
+  }
+  const points = selected.map(({ resource, entry }) => answerPoint(resource, entry, query));
+  const resourceIds = new Set(points.map((point) => point.resourceId));
+  const answerResources = hits.filter((hit) => resourceIds.has(hit.resource.id)).map((hit) => hit.resource);
+  const sourceIds = new Set(answerResources.flatMap((resource) => resource.sourceItemIds));
+  return {
+    resourceId: primary.id,
+    title: primary.title,
+    summary: compactSummary(answerResources, primary.summary),
+    points,
+    sourceCount: sourceIds.size,
+    resourceCount: resourceIds.size,
+    mode: resourceIds.size > 1 ? "library_synthesis" : "library_matches",
+    caveat: null,
+    model: null,
+    promptVersion: DETERMINISTIC_SEARCH_VERSION,
   };
 }
 
@@ -149,6 +248,17 @@ export function searchKnowledge(input: {
   const expandedTokens = queryTokens(trimmedQuery);
   if (!expandedTokens.length) return { query: trimmedQuery, answer: null, results: [] };
   const query = new Set(expandedTokens);
+  const rawQuery = trimmedQuery.toLocaleLowerCase();
+  const inferredDomain: ContextDomain | null = expandedTokens.some((token) => ["account", "bank", "finance", "hsa", "invest", "portfolio", "stock", "tax", "ticker"].includes(token))
+    ? "finance"
+    : expandedTokens.some((token) => ["trip", "travel"].includes(token))
+      ? "travel"
+      : expandedTokens.some((token) => ["ai", "artificial", "intelligence", "llm"].includes(token))
+        ? "ai_work"
+        : expandedTokens.some((token) => ["dish", "food", "recipe", "restaurant"].includes(token))
+          ? "food"
+          : null;
+  const asksForOptions = /\b(?:ideas?|options?|recommendations?|picks?|stocks?|companies?)\b/iu.test(rawQuery);
   const itemsById = new Map(input.items.map((item) => [item.id, item]));
 
   const candidates = input.resources.flatMap((resource): KnowledgeSearchHit[] => {
@@ -176,8 +286,7 @@ export function searchKnowledge(input: {
       const entryScore = entrySearchScore(entry, query);
       if (entryScore > 0) {
         score += entryScore;
-        fieldMatch(`${entry.heading ?? ""} ${entry.detail} ${entry.research?.topic ?? ""} ${entry.research?.explanation ?? ""} ${entry.research?.correction ?? ""}`, query)
-          .matched.forEach((token) => matchedTokens.add(token));
+        fieldMatch(entrySearchText(entry), query).matched.forEach((token) => matchedTokens.add(token));
         if (entry.heading && !matchedOn.includes(entry.heading)) matchedOn.push(entry.heading);
       }
       return { id: entry.id, score: entryScore };
@@ -194,8 +303,15 @@ export function searchKnowledge(input: {
       if (sourceLabel && !matchedOn.includes(sourceLabel)) matchedOn.push(sourceLabel);
     }
 
+    if (!input.domain && inferredDomain) score += resource.domain === inferredDomain ? 18 : -8;
+    if (asksForOptions) {
+      if (resource.resourceType === "watchlist") score += 42;
+      if (["buy", "compare", "track", "visit"].includes(resource.intent)) score += 24;
+      if (resource.resourceType === "glossary") score -= 18;
+    }
+
     const coverage = matchedTokens.size / query.size;
-    if (score <= 0 || (query.size >= 3 && coverage < 0.25 && score < 14)) return [];
+    if (!matchedTokens.size || score <= 0 || (query.size >= 3 && coverage < 0.25 && score < 14)) return [];
     return [{
       resource,
       score: Math.round(score + coverage * 20),
@@ -204,14 +320,17 @@ export function searchKnowledge(input: {
     }];
   }).sort((left, right) => right.score - left.score || right.resource.updatedAt.localeCompare(left.resource.updatedAt));
   const strongestScore = candidates[0]?.score ?? 0;
-  const relativeCutoff = query.size >= 3 ? strongestScore * 0.3 : query.size === 2 ? strongestScore * 0.2 : 0;
+  const relativeCutoff = strongestScore * (query.size >= 3 ? 0.35 : query.size === 2 ? 0.45 : 0.4);
   const results = candidates
     .filter((candidate, index) => index === 0 || candidate.score >= Math.max(8, relativeCutoff))
     .slice(0, Math.max(1, Math.min(input.limit ?? 8, 20)));
+  const actionableResults = asksForOptions
+    ? results.filter(({ resource }) => resource.resourceType === "watchlist" || ["buy", "compare", "track", "visit"].includes(resource.intent))
+    : results;
 
   return {
     query: trimmedQuery,
-    answer: results[0] ? answerFor(results[0], query) : null,
+    answer: answerFor(actionableResults.length ? actionableResults : results, query),
     results,
   };
 }
