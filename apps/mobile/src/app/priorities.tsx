@@ -119,6 +119,7 @@ export default function PrioritiesScreen() {
 
   const hasSynthesis = Boolean(synthesis && (
     synthesis.themes.length
+    || synthesis.interests.length
     || synthesis.remember
     || synthesis.changed
     || synthesis.repeated
@@ -210,6 +211,32 @@ export default function PrioritiesScreen() {
                         <Text style={styles.resourceArrow}>→</Text>
                       </Pressable>
                     ))}
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          {synthesis?.interests.length ? (
+            <View>
+              <SectionHeading title="What you explored" subtitle="Recent subjects grouped by area—not assumed to be connected." />
+              {synthesis.interests.map((interest) => (
+                <View key={interest.id} style={[styles.interestCard, shadows.card]}>
+                  <View style={styles.themeTopline}>
+                    <Text style={styles.interestEyebrow}>RECENT AREA</Text>
+                    <Text style={styles.themeCount}>{interest.sourceCount} {interest.sourceCount === 1 ? 'save' : 'saves'}</Text>
+                  </View>
+                  <Text style={styles.interestTitle}>{interest.title}</Text>
+                  <Text style={styles.interestDescription}>{interest.description}</Text>
+                  <View style={styles.subjectList}>
+                    {interest.subjects.map((subject) => (
+                      <View key={subject} style={styles.subjectPill}>
+                        <Text style={styles.subjectText}>{subject}</Text>
+                      </View>
+                    ))}
+                    {interest.resourceCount > interest.subjects.length ? (
+                      <View style={styles.subjectPill}><Text style={styles.subjectText}>+{interest.resourceCount - interest.subjects.length} more</Text></View>
+                    ) : null}
                   </View>
                 </View>
               ))}
@@ -350,6 +377,13 @@ const styles = StyleSheet.create({
   themeDescription: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 8 },
   themeContext: { color: colors.success, fontFamily: fonts.body, fontSize: 10, fontWeight: '700', lineHeight: 15, marginTop: 10 },
   resourceList: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 16 },
+  interestCard: { backgroundColor: '#E9E4D8', borderRadius: 25, marginBottom: 14, padding: 19 },
+  interestEyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  interestTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.6, lineHeight: 30, marginTop: 15 },
+  interestDescription: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 8 },
+  subjectList: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 15 },
+  subjectPill: { backgroundColor: colors.surface, borderColor: '#D6CEBE', borderRadius: 13, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 9, paddingVertical: 7 },
+  subjectText: { color: colors.ink, fontFamily: fonts.body, fontSize: 9, fontWeight: '800' },
   resourceRow: { alignItems: 'center', borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: 12, justifyContent: 'space-between', minHeight: 47, paddingVertical: 9 },
   resourceRowTitle: { color: colors.ink, flex: 1, fontFamily: fonts.body, fontSize: 11, fontWeight: '800', lineHeight: 15 },
   resourceArrow: { color: colors.ink, fontSize: 13 },

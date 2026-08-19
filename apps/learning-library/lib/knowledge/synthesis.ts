@@ -8,21 +8,33 @@ import type {
 } from "../domain";
 import { assessKnowledgeResourceFreshness } from "./freshness";
 
-export const CROSS_SAVE_SYNTHESIS_VERSION = "cross-save-synthesis-v1" as const;
+export const CROSS_SAVE_SYNTHESIS_VERSION = "cross-save-synthesis-v2-concepts" as const;
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1_000;
 
-const THEME_TITLES: Record<ContextDomain, string> = {
-  finance: "Money decisions taking shape",
-  travel: "A trip is taking shape",
-  food: "Places and dishes to come back to",
-  ai_work: "AI workflows worth combining",
-  career: "Career moves reinforcing each other",
-  health: "Health guidance worth weighing",
-  home: "Ideas for how you want to live",
-  relationships: "Patterns for stronger relationships",
-  general: "Ideas starting to connect",
+const INTEREST_TITLES: Record<ContextDomain, string> = {
+  finance: "Money ideas you explored",
+  travel: "Travel ideas you explored",
+  food: "Food ideas you explored",
+  ai_work: "AI + work ideas you explored",
+  career: "Career ideas you explored",
+  health: "Health ideas you explored",
+  home: "Home ideas you explored",
+  relationships: "Relationship ideas you explored",
+  general: "Other ideas you explored",
 };
+
+const GENERIC_CONCEPT_TOKENS = new Set([
+  "a", "about", "account", "across", "advice", "an", "and", "announcement", "app", "approach",
+  "basic", "basics", "best", "career", "company", "concept", "content", "explained", "finance", "financial",
+  "entry", "food", "for", "fund", "funding", "general", "guide", "health", "how", "idea", "ideas", "in", "insight",
+  "invest", "investing", "investment", "itinerary", "job", "knowledge", "lesson", "limit", "limits", "money",
+  "of", "option", "overview", "plain", "planning", "point", "preparation", "recommendation", "resource", "role", "save",
+  "saving", "source", "startup", "stock", "strategy", "term", "terms", "the", "tip", "tips", "to", "topic",
+  "track", "travel", "trip", "understand", "use", "using", "watch", "way", "what", "why", "with", "work",
+]);
+
+const STRONG_SHORT_CONCEPTS = new Set(["hsa", "ira", "401k"]);
 
 export interface CrossSaveTheme {
   id: string;
@@ -34,6 +46,18 @@ export interface CrossSaveTheme {
   resourceCount: number;
   sourceCount: number;
   contextReason: string | null;
+}
+
+export interface CrossSaveInterest {
+  id: string;
+  domain: ContextDomain;
+  title: string;
+  description: string;
+  resourceIds: string[];
+  resourceTitles: string[];
+  subjects: string[];
+  resourceCount: number;
+  sourceCount: number;
 }
 
 export interface CrossSaveRemember {
@@ -88,6 +112,7 @@ export interface CrossSaveSynthesis {
     detail: string;
   };
   themes: CrossSaveTheme[];
+  interests: CrossSaveInterest[];
   remember: CrossSaveRemember | null;
   changed: CrossSaveChange | null;
   repeated: CrossSaveRepeated | null;
@@ -145,12 +170,6 @@ function compact(value: string, maxLength = 190): string {
   return `${shortened || normalized.slice(0, maxLength - 1)}…`;
 }
 
-function joinTitles(titles: string[]): string {
-  if (titles.length === 1) return titles[0];
-  if (titles.length === 2) return `${titles[0]} and ${titles[1]}`;
-  return `${titles.slice(0, -1).join(", ")}, and ${titles.at(-1)}`;
-}
-
 function researchScore(entry: KnowledgeResourceEntry): number {
   if (entry.research?.verdict === "confirmed") return 18;
   if (entry.research?.verdict === "supported_with_context") return 14;
@@ -196,35 +215,147 @@ function nonDemoContextReason(domain: ContextDomain, context?: ContextSnapshot |
   return compact(record.statement, 120);
 }
 
+function normalizedConceptTokens(value: string): string[] {
+  const withAliases = value.toLocaleLowerCase()
+    .replace(/\bhealth savings? accounts?\b/gu, "hsa")
+    .replace(/\bartificial intelligence\b/gu, "ai")
+    .replace(/\b401\s*\(k\)\b/gu, "401k");
+  return (withAliases.match(/[a-z0-9]+/gu) ?? [])
+    .map((token) => {
+      if (token.length > 4 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
+      if (token.length > 4 && token.endsWith("s") && !token.endsWith("ss")) return token.slice(0, -1);
+      return token;
+    })
+    .filter((token) => token.length > 1 && !GENERIC_CONCEPT_TOKENS.has(token));
+}
+
+function conceptDisplay(key: string, original?: string): string {
+  if (key === "hsa") return "Health savings accounts";
+  if (key === "ira") return "IRAs";
+  if (key === "401k") return "401(k)s";
+  if (key === "ai") return "AI";
+  const cleaned = original?.replace(/^topic\s+/iu, "").trim();
+  if (cleaned) return cleaned;
+  return key.replace(/\b\w/gu, (letter) => letter.toLocaleUpperCase());
+}
+
+function conceptKeyIsStrong(key: string): boolean {
+  const tokens = key.split(" ");
+  return tokens.length >= 2 || STRONG_SHORT_CONCEPTS.has(key) || key.length >= 5;
+}
+
+function resourceConcepts(resource: KnowledgeResource): Map<string, string> {
+  const concepts = new Map<string, string>();
+  const candidates = [
+    resource.canonicalTopic,
+    ...resource.entities,
+    ...resource.entries.map((entry) => entry.heading).filter((heading): heading is string => Boolean(heading)),
+  ];
+  candidates.forEach((candidate) => {
+    const key = normalizedConceptTokens(candidate).join(" ");
+    if (key && conceptKeyIsStrong(key) && !concepts.has(key)) concepts.set(key, conceptDisplay(key, candidate));
+  });
+  return concepts;
+}
+
+function resourceConceptTokenSet(resource: KnowledgeResource): Set<string> {
+  return new Set([...resourceConcepts(resource).keys()].flatMap((key) => key.split(" ")));
+}
+
+function conceptOverlapScore(left: KnowledgeResource, right: KnowledgeResource): number {
+  const leftConcepts = resourceConcepts(left);
+  const rightConcepts = resourceConcepts(right);
+  const exactKeys = [...leftConcepts.keys()].filter((key) => rightConcepts.has(key) && conceptKeyIsStrong(key));
+  if (exactKeys.length) return 100 + Math.max(...exactKeys.map((key) => key.split(" ").length * 10 + key.length));
+  if (left.domain !== right.domain) return 0;
+  const rightTokens = resourceConceptTokenSet(right);
+  const sharedTokens = [...resourceConceptTokenSet(left)].filter((token) => rightTokens.has(token));
+  return sharedTokens.length >= 2 ? 50 + sharedTokens.length * 10 : 0;
+}
+
+function stableThemeId(label: string, resourceIds: string[]): string {
+  const value = `${label}|${[...resourceIds].sort().join("|")}`;
+  let hash = 0;
+  for (const character of value) hash = ((hash << 5) - hash + character.charCodeAt(0)) | 0;
+  const slug = normalizedConceptTokens(label).slice(0, 4).join("-") || "connected-saves";
+  return `theme-${slug}-${Math.abs(hash).toString(36)}`;
+}
+
+function sharedConceptLabel(resources: KnowledgeResource[]): string {
+  if (resources.length === 1) {
+    const first = resourceConcepts(resources[0]).entries().next().value as [string, string] | undefined;
+    return first?.[1] ?? resources[0].canonicalTopic ?? resources[0].title;
+  }
+  const phraseCounts = new Map<string, { count: number; display: string }>();
+  resources.forEach((resource) => resourceConcepts(resource).forEach((display, key) => {
+    const existing = phraseCounts.get(key);
+    phraseCounts.set(key, { count: (existing?.count ?? 0) + 1, display: existing?.display ?? display });
+  }));
+  const sharedPhrase = [...phraseCounts.entries()]
+    .filter(([, value]) => value.count >= 2)
+    .sort((left, right) => right[1].count - left[1].count || right[0].split(" ").length - left[0].split(" ").length || right[0].length - left[0].length)[0];
+  if (sharedPhrase) return conceptDisplay(sharedPhrase[0], sharedPhrase[1].display);
+
+  const tokenCounts = new Map<string, number>();
+  resources.forEach((resource) => resourceConceptTokenSet(resource).forEach((token) => tokenCounts.set(token, (tokenCounts.get(token) ?? 0) + 1)));
+  const sharedTokens = [...tokenCounts.entries()]
+    .filter(([, count]) => count >= 2)
+    .sort((left, right) => right[1] - left[1] || right[0].length - left[0].length)
+    .slice(0, 2)
+    .map(([token]) => token);
+  return conceptDisplay(sharedTokens.join(" ") || "connected saves");
+}
+
 function buildThemes(
   resources: KnowledgeResource[],
   context?: ContextSnapshot | null,
 ): CrossSaveTheme[] {
-  const groups = new Map<ContextDomain, KnowledgeResource[]>();
-  resources.forEach((resource) => groups.set(resource.domain, [...(groups.get(resource.domain) ?? []), resource]));
-  return [...groups.entries()].flatMap(([domain, groupedResources]): CrossSaveTheme[] => {
-    const sourceIds = new Set(groupedResources.flatMap((resource) => resource.sourceItemIds));
-    if (sourceIds.size < 2) return [];
-    const sortedResources = [...groupedResources].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-    const resourceTitles = sortedResources.slice(0, 3).map((resource) => resource.title);
+  const connections = resources.map(() => new Set<number>());
+  for (let left = 0; left < resources.length; left += 1) {
+    for (let right = left + 1; right < resources.length; right += 1) {
+      if (conceptOverlapScore(resources[left], resources[right]) <= 0) continue;
+      connections[left].add(right);
+      connections[right].add(left);
+    }
+  }
+  const visited = new Set<number>();
+  const components: KnowledgeResource[][] = [];
+  resources.forEach((resource, startIndex) => {
+    if (visited.has(startIndex)) return;
+    const indexes: number[] = [];
+    const queue = [startIndex];
+    visited.add(startIndex);
+    while (queue.length) {
+      const index = queue.shift();
+      if (index === undefined) break;
+      indexes.push(index);
+      connections[index].forEach((connectedIndex) => {
+        if (visited.has(connectedIndex)) return;
+        visited.add(connectedIndex);
+        queue.push(connectedIndex);
+      });
+    }
+    components.push(indexes.map((index) => resources[index] ?? resource));
+  });
+
+  return components.flatMap((component): CrossSaveTheme[] => {
+    const sourceIds = new Set(component.flatMap((resource) => resource.sourceItemIds));
+    if (sourceIds.size < 2 || (component.length === 1 && component[0].sourceItemIds.length < 2)) return [];
+    const sortedResources = [...component].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    const visibleResources = sortedResources.slice(0, 4);
+    const domains = new Set(sortedResources.map((resource) => resource.domain));
+    const domain = domains.size === 1 ? sortedResources[0].domain : "general";
+    const title = compact(sharedConceptLabel(sortedResources), 80);
     const description = sortedResources.length === 1
-      ? `${resourceTitles[0]} now brings ${sourceIds.size} saves together in one place.`
-      : domain === "finance"
-        ? `Compare ${joinTitles(resourceTitles.slice(0, 2))} in one place before making a money decision.`
-        : domain === "career"
-          ? `See how ${joinTitles(resourceTitles.slice(0, 2))} relate to opportunity and career leverage.`
-          : domain === "travel"
-            ? `Turn ${joinTitles(resourceTitles.slice(0, 2))} into one trip-planning reference.`
-            : domain === "ai_work"
-              ? `Combine ${joinTitles(resourceTitles.slice(0, 2))} into a workflow you can reuse.`
-              : `Review ${joinTitles(resourceTitles.slice(0, 2))} together instead of as isolated saves.`;
+      ? `${sourceIds.size} saves now strengthen one ${sortedResources[0].resourceType}: ${sortedResources[0].title}.`
+      : `${sourceIds.size} saves overlap on ${title.toLocaleLowerCase()} across ${sortedResources.length} ${plural(sortedResources.length, "guide")}.`;
     return [{
-      id: `theme-${domain}`,
+      id: stableThemeId(title, sortedResources.map((resource) => resource.id)),
       domain,
-      title: THEME_TITLES[domain],
+      title,
       description: compact(description),
       resourceIds: sortedResources.map((resource) => resource.id),
-      resourceTitles,
+      resourceTitles: visibleResources.map((resource) => resource.title),
       resourceCount: sortedResources.length,
       sourceCount: sourceIds.size,
       contextReason: nonDemoContextReason(domain, context),
@@ -236,7 +367,33 @@ function buildThemes(
       || (right.sourceCount - left.sourceCount)
       || (right.resourceCount - left.resourceCount)
       || left.title.localeCompare(right.title);
-  }).slice(0, 3);
+  });
+}
+
+function buildInterests(resources: KnowledgeResource[], themes: CrossSaveTheme[]): CrossSaveInterest[] {
+  const themedResourceIds = new Set(themes.flatMap((theme) => theme.resourceIds));
+  const groups = new Map<ContextDomain, KnowledgeResource[]>();
+  resources.filter((resource) => !themedResourceIds.has(resource.id)).forEach((resource) => {
+    groups.set(resource.domain, [...(groups.get(resource.domain) ?? []), resource]);
+  });
+  return [...groups.entries()].flatMap(([domain, groupedResources]): CrossSaveInterest[] => {
+    if (groupedResources.length < 2) return [];
+    const sortedResources = [...groupedResources].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    const visibleResources = sortedResources.slice(0, 4);
+    const subjects = visibleResources.map((resource) => compact(resource.canonicalTopic || resource.title, 70));
+    const sourceIds = new Set(sortedResources.flatMap((resource) => resource.sourceItemIds));
+    return [{
+      id: `interest-${domain}`,
+      domain,
+      title: INTEREST_TITLES[domain],
+      description: `${sortedResources.length} separate recent ${plural(sortedResources.length, "subject")} in the same broad area.`,
+      resourceIds: visibleResources.map((resource) => resource.id),
+      resourceTitles: visibleResources.map((resource) => resource.title),
+      subjects,
+      resourceCount: sortedResources.length,
+      sourceCount: sourceIds.size,
+    }];
+  }).sort((left, right) => right.sourceCount - left.sourceCount || right.resourceCount - left.resourceCount || left.title.localeCompare(right.title)).slice(0, 3);
 }
 
 function unresolvedCandidates(resources: KnowledgeResource[], now: Date): UnresolvedCandidate[] {
@@ -362,7 +519,9 @@ export function buildCrossSaveSynthesis({
     || resource.contributions.some((contribution) => inWindow(contribution.createdAt, startAt, endAt)));
   const mode = eligibleRecentItems.length > 0 ? "this_week" : "library";
   const synthesisResources = mode === "this_week" ? recentResources : resources;
-  const themes = buildThemes(synthesisResources, context);
+  const allThemes = buildThemes(synthesisResources, context);
+  const themes = allThemes.slice(0, 3);
+  const interests = buildInterests(synthesisResources, allThemes);
   const librarySourceCount = new Set(resources.flatMap((resource) => resource.sourceItemIds)).size;
 
   const usedResourceIds = new Set<string>();
@@ -444,6 +603,7 @@ export function buildCrossSaveSynthesis({
     },
     overview,
     themes,
+    interests,
     remember,
     changed,
     repeated,

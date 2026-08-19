@@ -110,9 +110,44 @@ describe("cross-save synthesis", () => {
     expect(result.overview.savedSourceCount).toBe(4);
     expect(result.overview.newResourceCount).toBe(2);
     expect(result.overview.changedResourceCount).toBe(1);
-    expect(result.themes.map((theme) => theme.domain)).toEqual(["finance", "career"]);
+    expect(result.themes.map((theme) => theme.domain)).toEqual(["career"]);
     expect(result.themes.find((theme) => theme.domain === "career")?.sourceCount).toBe(2);
+    expect(result.interests.map((interest) => interest.domain)).toEqual(["finance"]);
     expect(result.themes.some((theme) => theme.domain === "travel")).toBe(false);
+  });
+
+  it("clusters genuine concept overlap while keeping unrelated resources as separate interests", () => {
+    const hsaBasics = resource("hsa-basics", "finance", ["save-1"], {
+      canonicalTopic: "Health Savings Accounts",
+      title: "How an HSA works",
+      entities: ["Health Savings Accounts", "qualified medical withdrawals"],
+    });
+    const hsaInvesting = resource("hsa-investing", "finance", ["save-2"], {
+      canonicalTopic: "Investing an HSA",
+      title: "Using an HSA for long-term investing",
+      entities: ["HSA", "tax-free growth"],
+    });
+    const infiniteBanking = resource("infinite-banking", "finance", ["save-3"], {
+      canonicalTopic: "Infinite banking",
+      entities: ["whole life insurance", "policy loans"],
+    });
+    const opticalStocks = resource("optical-stocks", "finance", ["save-4"], {
+      canonicalTopic: "optical transceiver stocks",
+      entities: ["data center networking", "fiber optic validation"],
+    });
+
+    const result = buildCrossSaveSynthesis({
+      items: [item("save-1"), item("save-2"), item("save-3"), item("save-4")],
+      resources: [hsaBasics, hsaInvesting, infiniteBanking, opticalStocks],
+      now: NOW,
+    });
+
+    expect(result.themes).toHaveLength(1);
+    expect(result.themes[0].title).toBe("Health savings accounts");
+    expect(result.themes[0].resourceIds).toEqual(["hsa-basics", "hsa-investing"]);
+    expect(result.interests).toHaveLength(1);
+    expect(result.interests[0].resourceIds).toEqual(["infinite-banking", "optical-stocks"]);
+    expect(result.interests[0].description).toBe("2 separate recent subjects in the same broad area.");
   });
 
   it("shows a repeated point only when multiple saved sources support the same entry", () => {
@@ -192,7 +227,8 @@ describe("cross-save synthesis", () => {
 
     expect(result.period.mode).toBe("library");
     expect(result.period.label).toBe("Across your library");
-    expect(result.themes).toHaveLength(1);
+    expect(result.themes).toHaveLength(0);
+    expect(result.interests).toHaveLength(1);
     expect(result.repeated).toBeNull();
     expect(result.changed).toBeNull();
     expect(result.fallbackResourceIds).toEqual(["old-one", "old-two"]);

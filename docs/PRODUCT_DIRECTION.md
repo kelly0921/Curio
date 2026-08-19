@@ -134,10 +134,11 @@ The first Living Resources slice is implemented:
 - A due resource can rerun source-grounded web research and receives a concise receipt that highlights corrections, added context, unresolved points, or no material change.
 - For You now synthesizes the week across saves instead of repeating per-card relevance: it shows supported themes, one durable point to remember, actual resource changes, repeated evidence, and important unresolved claims.
 - Synthesis modules are evidence-gated. Themes require at least two sources, repeated points require multi-source provenance, and change cards exclude brand-new resources.
+- Theme detection now requires concept overlap across canonical topics, entities, or useful entry headings. A shared broad domain alone is shown as “What you explored,” not misrepresented as a connected pattern.
 - Sparse libraries fall back to a few existing recommendations, while empty synthesis categories stay hidden rather than filling the screen with generic status text.
 - Demo context may influence ranking but is not presented as a real connected workspace; visible context claims are reserved for an actual connection.
 
-The initial merge, retrieval, and weekly synthesis engines deliberately use high-confidence deterministic matching. Semantic embeddings, narrower concept-level theme clustering, automatic intent classification, scheduled background refreshes, and AI-written cross-source explanations remain later phases.
+The initial merge, retrieval, and weekly synthesis engines deliberately use high-confidence deterministic matching. Semantic embeddings for fuzzier synonym matching, automatic intent classification, scheduled background refreshes, and AI-written cross-source explanations remain later phases.
 
 ## North-star behavior
 

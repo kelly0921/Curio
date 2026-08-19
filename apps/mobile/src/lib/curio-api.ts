@@ -235,6 +235,18 @@ export interface CrossSaveTheme {
   contextReason: string | null;
 }
 
+export interface CrossSaveInterest {
+  id: string;
+  domain: ContextDomain;
+  title: string;
+  description: string;
+  resourceIds: string[];
+  resourceTitles: string[];
+  subjects: string[];
+  resourceCount: number;
+  sourceCount: number;
+}
+
 export interface CrossSaveSynthesis {
   generatedAt: string;
   engineVersion: string;
@@ -253,6 +265,7 @@ export interface CrossSaveSynthesis {
     detail: string;
   };
   themes: CrossSaveTheme[];
+  interests: CrossSaveInterest[];
   remember: {
     resourceId: string;
     title: string;
@@ -495,7 +508,7 @@ export async function getPersonalContext(): Promise<ContextSnapshot> {
 
 export async function getCrossSaveSynthesis(): Promise<CrossSaveSynthesis> {
   const body = await readEnvelope<SynthesisEnvelope>(await apiFetch('/api/synthesis', { headers: { Accept: 'application/json' } }));
-  return body.data.synthesis;
+  return { ...body.data.synthesis, interests: body.data.synthesis.interests ?? [] };
 }
 
 export async function syncPersonalContext(): Promise<ContextSnapshot> {
