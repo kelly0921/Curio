@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,6 +15,8 @@ import {
   type ResourceFreshness,
   type ResourceResearchReceipt,
 } from '@/lib/curio-api';
+import { researchVerdictLabel } from '@/lib/learning-presentation';
+import { displayResearchSources, researchDepthLabel, resourceUseGuide } from '@/lib/resource-presentation';
 
 function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
@@ -76,6 +79,7 @@ export default function ResourceDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showSources, setShowSources] = useState(false);
+  const [expandedEntryIds, setExpandedEntryIds] = useState<Set<string>>(() => new Set());
   const [freshness, setFreshness] = useState<ResourceFreshness | null>(null);
   const [refreshReceipt, setRefreshReceipt] = useState<ResourceResearchReceipt | null>(null);
   const [refreshingResearch, setRefreshingResearch] = useState(false);
@@ -104,6 +108,23 @@ export default function ResourceDetailScreen() {
 
   const latestContribution = useMemo(() => resource?.contributions.at(-1) ?? null, [resource]);
   const researchNeedsRefresh = freshness?.status === 'due' || freshness?.status === 'unresearched';
+  const useGuide = useMemo(() => resource ? resourceUseGuide(resource) : null, [resource]);
+  const suggestedNextMove = useMemo(() => [...sources]
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .find((source) => source.card?.suggestedAction)?.card?.suggestedAction ?? null, [sources]);
+
+  function toggleEntryDepth(entryId: string) {
+    setExpandedEntryIds((current) => {
+      const next = new Set(current);
+      if (next.has(entryId)) next.delete(entryId);
+      else next.add(entryId);
+      return next;
+    });
+  }
+
+  function openResearchSource(url: string) {
+    void WebBrowser.openBrowserAsync(url);
+  }
 
   async function handleResearchRefresh() {
     if (!id || refreshingResearch) return;
@@ -197,13 +218,36 @@ export default function ResourceDetailScreen() {
             </View>
           )}
 
+          {useGuide && (
+            <View style={styles.usePanel}>
+              <Text style={styles.useEyebrow}>PUT THIS TO USE</Text>
+              <Text style={styles.useTitle}>{useGuide.title}</Text>
+              <Text style={styles.useDescription}>{useGuide.description}</Text>
+              {suggestedNextMove && (
+                <View style={styles.nextMove}>
+                  <Text style={styles.nextMoveLabel}>A USEFUL NEXT MOVE</Text>
+                  <Text style={styles.nextMoveText}>{suggestedNextMove}</Text>
+                </View>
+              )}
+              <View style={styles.useFocus}>
+                <Text style={styles.useFocusLabel}>{useGuide.focusLabel}</Text>
+                <Text style={styles.useFocusText}>{useGuide.focus}</Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionEyebrow}>{sectionEyebrow(resource)}</Text>
             <Text style={styles.sectionTitle}>{sectionTitle(resource)}</Text>
           </View>
 
           {resource.entries.map((entry, index) => {
-            const materialResearch = entry.research && entry.research.verdict !== 'confirmed' && entry.research.verdict !== 'opinion';
+            const research = entry.research;
+            const researchSources = research ? displayResearchSources(research.sources) : [];
+            const depthExpanded = expandedEntryIds.has(entry.id);
+            const importantCorrection = research?.correction
+              && research.verdict !== 'confirmed'
+              && research.verdict !== 'opinion';
             return (
               <View key={entry.id} style={[styles.entryCard, shadows.card]}>
                 <View style={styles.entryHeader}>
@@ -218,10 +262,51 @@ export default function ResourceDetailScreen() {
                     <Text style={[styles.entryDetail, !entry.heading && styles.entryDetailStrong]}>{entry.detail}</Text>
                   </View>
                 </View>
-                {materialResearch && entry.research && (
-                  <View style={[styles.researchNote, entry.research.verdict === 'corrected' && styles.researchCorrection]}>
-                    <Text style={styles.researchLabel}>{entry.research.verdict === 'corrected' ? 'CORRECTED BY CURIO' : entry.research.verdict === 'not_verified' ? 'NOT YET VERIFIED' : 'CURIO ADDED'}</Text>
-                    <Text style={styles.researchText}>{entry.research.correction || entry.research.explanation}</Text>
+                {importantCorrection && research && (
+                  <View style={[styles.researchNote, research.verdict === 'corrected' && styles.researchCorrection]}>
+                    <Text style={styles.researchLabel}>{research.verdict === 'corrected' ? 'CORRECTED BY CURIO' : research.verdict === 'not_verified' ? 'NOT YET VERIFIED' : 'IMPORTANT CONTEXT'}</Text>
+                    <Text style={styles.researchText}>{research.correction}</Text>
+                  </View>
+                )}
+                {research && (
+                  <View style={styles.depthSection}>
+                    <Pressable
+                      accessibilityLabel={`${depthExpanded ? 'Hide' : 'Learn more about'} ${entry.heading || `point ${index + 1}`}`}
+                      accessibilityState={{ expanded: depthExpanded }}
+                      onPress={() => toggleEntryDepth(entry.id)}
+                      style={styles.depthToggle}>
+                      <View style={styles.depthToggleCopy}>
+                        <Text style={styles.depthLabel}>{researchDepthLabel(research.verdict).toUpperCase()}</Text>
+                        <Text style={styles.depthMeta}>{researchVerdictLabel(research.verdict)}{researchSources.length ? ` · ${researchSources.length} source${researchSources.length === 1 ? '' : 's'}` : ''}</Text>
+                      </View>
+                      <Text style={styles.depthToggleText}>{depthExpanded ? 'Hide  −' : 'Learn more  +'}</Text>
+                    </Pressable>
+                    {depthExpanded && (
+                      <View style={styles.depthContent}>
+                        <Text style={styles.depthContentLabel}>{research.verdict === 'not_verified' ? 'WHAT IS STILL UNCERTAIN' : research.verdict === 'opinion' ? 'HOW TO READ THIS' : 'WHAT CURIO FOUND'}</Text>
+                        <Text style={styles.depthExplanation}>{research.explanation}</Text>
+                        {research.correction && !importantCorrection && (
+                          <View style={styles.depthBottomLine}>
+                            <Text style={styles.depthBottomLineLabel}>BOTTOM LINE</Text>
+                            <Text style={styles.depthBottomLineText}>{research.correction}</Text>
+                          </View>
+                        )}
+                        {researchSources.length > 0 && (
+                          <View style={styles.researchSources}>
+                            <Text style={styles.researchSourcesLabel}>READ THE SOURCES</Text>
+                            {researchSources.map((source) => (
+                              <Pressable key={source.url} onPress={() => openResearchSource(source.url)} style={styles.researchSourceRow}>
+                                <View style={styles.researchSourceCopy}>
+                                  <Text numberOfLines={2} style={styles.researchSourceTitle}>{source.displayTitle}</Text>
+                                  <Text style={styles.researchSourcePublisher}>{source.publisher}</Text>
+                                </View>
+                                <Text style={styles.researchSourceArrow}>↗</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    )}
                   </View>
                 )}
                 <Text style={styles.entrySources}>{entry.sourceItemIds.length} supporting source{entry.sourceItemIds.length === 1 ? '' : 's'}</Text>
@@ -296,6 +381,16 @@ const styles = StyleSheet.create({
   changeCopy: { flex: 1, marginLeft: 11 },
   changeLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
   changeText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 4 },
+  usePanel: { backgroundColor: colors.sage, borderRadius: 26, marginTop: 28, padding: 20 },
+  useEyebrow: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1.2 },
+  useTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.7, lineHeight: 31, marginTop: 7 },
+  useDescription: { color: '#384437', fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 9 },
+  nextMove: { backgroundColor: 'rgba(255,252,246,0.72)', borderRadius: 17, marginTop: 18, padding: 14 },
+  nextMoveLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  nextMoveText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '800', lineHeight: 17, marginTop: 5 },
+  useFocus: { borderTopColor: 'rgba(23,23,19,0.16)', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 17, paddingTop: 14 },
+  useFocusLabel: { color: '#4D594B', fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  useFocusText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '800', lineHeight: 16, marginTop: 5 },
   sectionHeader: { paddingBottom: 15, paddingTop: 38 },
   sectionEyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
   sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 28, fontWeight: '700', letterSpacing: -0.7, marginTop: 4 },
@@ -315,6 +410,25 @@ const styles = StyleSheet.create({
   researchCorrection: { backgroundColor: colors.peach },
   researchLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
   researchText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, lineHeight: 16, marginTop: 5 },
+  depthSection: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 15, paddingTop: 4 },
+  depthToggle: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 54, paddingVertical: 8 },
+  depthToggleCopy: { flex: 1, paddingRight: 10 },
+  depthLabel: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
+  depthMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, marginTop: 3 },
+  depthToggleText: { color: colors.ink, fontFamily: fonts.body, fontSize: 9, fontWeight: '900' },
+  depthContent: { backgroundColor: colors.canvas, borderRadius: 17, marginBottom: 5, padding: 15 },
+  depthContentLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  depthExplanation: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, lineHeight: 19, marginTop: 7 },
+  depthBottomLine: { borderLeftColor: colors.peach, borderLeftWidth: 3, marginTop: 15, paddingLeft: 11 },
+  depthBottomLineLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
+  depthBottomLineText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '700', lineHeight: 17, marginTop: 4 },
+  researchSources: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 17, paddingTop: 14 },
+  researchSourcesLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  researchSourceRow: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 13, flexDirection: 'row', marginTop: 8, padding: 11 },
+  researchSourceCopy: { flex: 1, paddingRight: 9 },
+  researchSourceTitle: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '800', lineHeight: 14 },
+  researchSourcePublisher: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, marginTop: 3 },
+  researchSourceArrow: { color: colors.ink, fontSize: 13 },
   entrySources: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '700', marginTop: 13 },
   sourcesSection: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 40, paddingTop: 24 },
   sourcesToggle: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 13 },
