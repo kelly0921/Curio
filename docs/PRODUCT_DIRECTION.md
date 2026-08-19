@@ -1,6 +1,6 @@
 # Curio product direction
 
-Last updated: August 18, 2026
+Last updated: August 19, 2026
 
 ## The problem
 
@@ -129,8 +129,11 @@ The first Living Resources slice is implemented:
 - The mobile Library is resource-first, with broad domain collections and search across entries and entities.
 - Original saves remain available in a secondary source archive and from each resource's provenance section.
 - Processing now opens the living resource when one was created or updated.
+- Natural-language retrieval searches resources, research, transcripts, and visible Reel text, then returns one concise answer from the strongest matching resource.
+- Research freshness is consequence-aware: watchlists and tracked resources expire fastest, finance and health resources use shorter review windows, and evergreen or subjective knowledge stays visually quiet.
+- A due resource can rerun source-grounded web research and receives a concise receipt that highlights corrections, added context, unresolved points, or no material change.
 
-The initial merge engine deliberately uses high-confidence topic and entry matching. Semantic embeddings, AI-written cross-source summaries, contradiction detection, automatic intent classification, and weekly cross-resource synthesis remain later phases.
+The initial merge and retrieval engines deliberately use high-confidence deterministic matching. Semantic embeddings, AI-written cross-source summaries, automatic intent classification, scheduled background refreshes, and weekly cross-resource synthesis remain later phases.
 
 ## North-star behavior
 

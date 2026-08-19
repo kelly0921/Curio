@@ -5,7 +5,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CurioBrand } from '@/components/curio-brand';
 import { colors, fonts, shadows } from '@/constants/curio-theme';
-import { getKnowledgeResource, type KnowledgeResource, type LearningItem } from '@/lib/curio-api';
+import {
+  CurioApiError,
+  getKnowledgeResource,
+  refreshKnowledgeResource,
+  type KnowledgeResource,
+  type LearningItem,
+  type ResourceFreshness,
+  type ResourceResearchReceipt,
+} from '@/lib/curio-api';
 
 function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
@@ -40,6 +48,10 @@ export default function ResourceDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showSources, setShowSources] = useState(false);
+  const [freshness, setFreshness] = useState<ResourceFreshness | null>(null);
+  const [refreshReceipt, setRefreshReceipt] = useState<ResourceResearchReceipt | null>(null);
+  const [refreshingResearch, setRefreshingResearch] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +64,7 @@ export default function ResourceDetailScreen() {
       if (cancelled || !result) return;
       setResource(result.resource);
       setSources(result.sources);
+      setFreshness(result.freshness);
       setError(null);
     }).catch(() => {
       if (!cancelled) setError('Curio could not open this living resource.');
@@ -62,6 +75,25 @@ export default function ResourceDetailScreen() {
   }, [id]);
 
   const latestContribution = useMemo(() => resource?.contributions.at(-1) ?? null, [resource]);
+  const researchNeedsRefresh = freshness?.status === 'due' || freshness?.status === 'unresearched';
+
+  async function handleResearchRefresh() {
+    if (!id || refreshingResearch) return;
+    setRefreshingResearch(true);
+    setRefreshError(null);
+    try {
+      const result = await refreshKnowledgeResource(id);
+      setResource(result.resource);
+      setFreshness(result.freshness);
+      setRefreshReceipt(result.receipt);
+    } catch (refreshFailure) {
+      setRefreshError(refreshFailure instanceof CurioApiError
+        ? refreshFailure.message
+        : 'Curio could not refresh this research right now.');
+    } finally {
+      setRefreshingResearch(false);
+    }
+  }
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator color={colors.ink} /><Text style={styles.loadingText}>Opening this resource…</Text></View>;
@@ -100,12 +132,39 @@ export default function ResourceDetailScreen() {
             <Text style={styles.resourceMetaText}>Updated {dateLabel(resource.updatedAt)}</Text>
           </View>
 
-          {latestContribution && (
-            <View style={[styles.changeReceipt, latestContribution.disposition === 'conflict' && styles.changeReceiptConflict]}>
-              <View style={[styles.changeMark, latestContribution.disposition === 'conflict' && styles.changeMarkConflict]}><Text style={styles.changeMarkText}>{latestContribution.disposition === 'conflict' ? '!' : '✦'}</Text></View>
+          {freshness?.status === 'current' && freshness.checkedAt && (
+            <View style={styles.freshnessCurrent}>
+              <View style={styles.freshnessDot} />
+              <Text style={styles.freshnessCurrentText}>Research checked {dateLabel(freshness.checkedAt)} · Current</Text>
+            </View>
+          )}
+
+          {researchNeedsRefresh && freshness && (
+            <View style={styles.freshnessCallout}>
+              <View style={styles.freshnessCalloutCopy}>
+                <Text style={styles.freshnessEyebrow}>{freshness.status === 'unresearched' ? 'RESEARCH NEEDED' : 'RESEARCH DUE'}</Text>
+                <Text style={styles.freshnessTitle}>{freshness.status === 'unresearched' ? 'Check the important claims' : 'Bring this resource up to date'}</Text>
+                <Text style={styles.freshnessReason}>{freshness.reason}</Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Refresh this resource's research"
+                disabled={refreshingResearch}
+                onPress={() => void handleResearchRefresh()}
+                style={[styles.refreshButton, refreshingResearch && styles.refreshButtonDisabled]}>
+                {refreshingResearch
+                  ? <ActivityIndicator color={colors.surface} size="small" />
+                  : <Text style={styles.refreshButtonText}>Refresh</Text>}
+              </Pressable>
+            </View>
+          )}
+          {refreshError && <Text style={styles.refreshError}>{refreshError}</Text>}
+
+          {(latestContribution || refreshReceipt) && (
+            <View style={[styles.changeReceipt, !refreshReceipt && latestContribution?.disposition === 'conflict' && styles.changeReceiptConflict]}>
+              <View style={[styles.changeMark, !refreshReceipt && latestContribution?.disposition === 'conflict' && styles.changeMarkConflict]}><Text style={styles.changeMarkText}>{!refreshReceipt && latestContribution?.disposition === 'conflict' ? '!' : '✦'}</Text></View>
               <View style={styles.changeCopy}>
-                <Text style={styles.changeLabel}>LATEST CHANGE</Text>
-                <Text style={styles.changeText}>{latestContribution.summary}</Text>
+                <Text style={styles.changeLabel}>{refreshReceipt ? 'RESEARCH REFRESH' : 'LATEST CHANGE'}</Text>
+                <Text style={styles.changeText}>{refreshReceipt?.summary ?? latestContribution?.summary}</Text>
               </View>
             </View>
           )}
@@ -141,10 +200,6 @@ export default function ResourceDetailScreen() {
               </View>
             );
           })}
-
-          {resource.lastResearchedAt && (
-            <Text style={styles.researchedAt}>Research last checked {dateLabel(resource.lastResearchedAt)}</Text>
-          )}
 
           <View style={styles.sourcesSection}>
             <Pressable onPress={() => setShowSources((current) => !current)} style={styles.sourcesToggle}>
@@ -193,6 +248,18 @@ const styles = StyleSheet.create({
   resourceMeta: { alignItems: 'center', flexDirection: 'row', gap: 7, marginTop: 15 },
   resourceMetaText: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700' },
   resourceMetaDot: { color: colors.muted, fontSize: 10 },
+  freshnessCurrent: { alignItems: 'center', flexDirection: 'row', gap: 7, marginTop: 13 },
+  freshnessDot: { backgroundColor: colors.success, borderRadius: 4, height: 7, width: 7 },
+  freshnessCurrentText: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700' },
+  freshnessCallout: { alignItems: 'center', backgroundColor: colors.dark, borderRadius: 22, flexDirection: 'row', gap: 14, marginTop: 22, padding: 16 },
+  freshnessCalloutCopy: { flex: 1 },
+  freshnessEyebrow: { color: colors.butter, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  freshnessTitle: { color: colors.surface, fontFamily: fonts.display, fontSize: 19, fontWeight: '700', lineHeight: 22, marginTop: 4 },
+  freshnessReason: { color: '#C9C6BC', fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 5 },
+  refreshButton: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 15, justifyContent: 'center', minHeight: 42, minWidth: 76, paddingHorizontal: 13 },
+  refreshButtonDisabled: { opacity: 0.7 },
+  refreshButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900' },
+  refreshError: { color: '#9A4E3E', fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 9 },
   changeReceipt: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 20, flexDirection: 'row', marginTop: 25, padding: 14 },
   changeReceiptConflict: { borderColor: colors.peach, borderWidth: 1 },
   changeMark: { alignItems: 'center', backgroundColor: colors.butter, borderRadius: 14, height: 38, justifyContent: 'center', width: 38 },
@@ -221,7 +288,6 @@ const styles = StyleSheet.create({
   researchLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
   researchText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, lineHeight: 16, marginTop: 5 },
   entrySources: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '700', marginTop: 13 },
-  researchedAt: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, marginTop: 3, textAlign: 'right' },
   sourcesSection: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 40, paddingTop: 24 },
   sourcesToggle: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 13 },
   sourcesTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 24, fontWeight: '700', marginTop: 4 },

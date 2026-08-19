@@ -21,6 +21,7 @@ export type KnowledgeResourceType = 'guide' | 'glossary' | 'playbook' | 'watchli
 export type SaveIntent = 'understand' | 'try' | 'visit' | 'buy' | 'track' | 'compare' | 'reference';
 export type ResourceEntryStatus = 'active' | 'contested' | 'superseded';
 export type ResourceContributionDisposition = 'created' | 'enriched' | 'supporting' | 'updated' | 'conflict';
+export type ResearchVerdict = 'confirmed' | 'supported_with_context' | 'corrected' | 'not_verified' | 'opinion';
 
 export interface ContextConnection {
   id: string;
@@ -106,7 +107,7 @@ export interface LearningCard {
     overview: string;
     findings: {
       topic: string;
-      verdict: 'confirmed' | 'supported_with_context' | 'corrected' | 'not_verified' | 'opinion';
+      verdict: ResearchVerdict;
       explanation: string;
       correction: string | null;
       sources: { title: string; publisher: string; url: string }[];
@@ -198,6 +199,30 @@ export interface KnowledgeResource {
   updatedAt: string;
 }
 
+export interface ResourceFreshness {
+  status: 'current' | 'due' | 'unresearched' | 'not_required';
+  checkedAt: string | null;
+  nextCheckAt: string | null;
+  intervalDays: number | null;
+  refreshRecommended: boolean;
+  reason: string;
+  policyVersion: string;
+}
+
+export interface ResourceResearchReceipt {
+  checkedAt: string;
+  checkedSourceCount: number;
+  materialChangeCount: number;
+  summary: string;
+  changes: {
+    entryId: string;
+    heading: string | null;
+    previousVerdict: ResearchVerdict | null;
+    verdict: ResearchVerdict;
+    note: string;
+  }[];
+}
+
 export interface KnowledgeSearchAnswer {
   resourceId: string;
   title: string;
@@ -254,7 +279,12 @@ interface ResourcesEnvelope {
 
 interface ResourceEnvelope {
   ok: true;
-  data: { resource: KnowledgeResource; sources: LearningItem[] };
+  data: { resource: KnowledgeResource; sources: LearningItem[]; freshness: ResourceFreshness };
+}
+
+interface ResourceRefreshEnvelope {
+  ok: true;
+  data: { resource: KnowledgeResource; freshness: ResourceFreshness; receipt: ResourceResearchReceipt };
 }
 
 interface SearchEnvelope {
@@ -364,11 +394,20 @@ export async function listKnowledgeResources(): Promise<KnowledgeResource[]> {
   return body.data.resources;
 }
 
-export async function getKnowledgeResource(id: string): Promise<{ resource: KnowledgeResource; sources: LearningItem[] } | null> {
+export async function getKnowledgeResource(id: string): Promise<{ resource: KnowledgeResource; sources: LearningItem[]; freshness: ResourceFreshness } | null> {
   const cached = resourceSnapshot.find((resource) => resource.id === id);
   const body = await readEnvelope<ResourceEnvelope>(await apiFetch(`/api/resources/${encodeURIComponent(id)}`, { headers: { Accept: 'application/json' } }));
   resourceSnapshot = [body.data.resource, ...resourceSnapshot.filter((resource) => resource.id !== id)];
-  return { resource: cached ? { ...cached, ...body.data.resource } : body.data.resource, sources: body.data.sources };
+  return { resource: cached ? { ...cached, ...body.data.resource } : body.data.resource, sources: body.data.sources, freshness: body.data.freshness };
+}
+
+export async function refreshKnowledgeResource(id: string): Promise<{ resource: KnowledgeResource; freshness: ResourceFreshness; receipt: ResourceResearchReceipt }> {
+  const body = await readEnvelope<ResourceRefreshEnvelope>(await apiFetch(`/api/resources/${encodeURIComponent(id)}/refresh`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+  }));
+  resourceSnapshot = [body.data.resource, ...resourceSnapshot.filter((resource) => resource.id !== id)];
+  return body.data;
 }
 
 export async function searchKnowledgeLibrary(query: string, domain?: ContextDomain | null): Promise<KnowledgeSearchResult> {

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { OpenAILearningServices } from "@/lib/ai/services";
 import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
 import { getLearningItemRepository } from "@/lib/data/provider";
-import { assessKnowledgeResourceFreshness } from "@/lib/knowledge/freshness";
+import { refreshKnowledgeResourceResearch } from "@/lib/knowledge/refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ function errorResponse(request: Request, code: string, message: string, status: 
   return NextResponse.json({ ok: false, error: { code, message } }, { status, headers: apiResponseHeaders(request) });
 }
 
-export async function GET(
+export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
@@ -21,19 +22,23 @@ export async function GET(
   if (!z.string().uuid().safeParse(id).success) {
     return errorResponse(request, "INVALID_RESOURCE_ID", "This living resource ID is invalid.", 400);
   }
+  if (!process.env.OPENAI_API_KEY?.trim()) {
+    return errorResponse(request, "RESEARCH_NOT_CONFIGURED", "Curio research is not configured on this processor.", 503);
+  }
   try {
     const repository = await getLearningItemRepository();
-    const resource = await repository.findResourceById(id);
-    if (!resource) return errorResponse(request, "RESOURCE_NOT_FOUND", "This living resource could not be found.", 404);
-    const items = await repository.list();
-    const sources = items.filter((item) => resource.sourceItemIds.includes(item.id));
+    const result = await refreshKnowledgeResourceResearch(id, repository, new OpenAILearningServices());
+    if (!result) return errorResponse(request, "RESOURCE_NOT_FOUND", "This living resource could not be found.", 404);
     return NextResponse.json(
-      { ok: true, data: { resource, sources, freshness: assessKnowledgeResourceFreshness(resource) } },
-      { headers: apiResponseHeaders(request) },
+      { ok: true, data: result },
+      { headers: { ...apiResponseHeaders(request), "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    console.error(JSON.stringify({ event: "knowledge_resource_load_failed", errorType: error instanceof Error ? error.name : "unknown" }));
-    return errorResponse(request, "RESOURCE_UNAVAILABLE", "This living resource could not be loaded.", 500);
+    if (error instanceof Error && error.message === "NO_RESEARCHABLE_SOURCES") {
+      return errorResponse(request, "RESOURCE_NOT_RESEARCHABLE", "This resource does not yet have enough source evidence to refresh.", 422);
+    }
+    console.error(JSON.stringify({ event: "knowledge_resource_refresh_failed", errorType: error instanceof Error ? error.name : "unknown" }));
+    return errorResponse(request, "RESOURCE_REFRESH_FAILED", "Curio could not refresh this research right now.", 500);
   }
 }
 
