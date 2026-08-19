@@ -2,12 +2,20 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
 import { getLearningItemRepository } from "@/lib/data/provider";
+import { personalProfile } from "@/lib/domain";
+import { buildFollowThroughPlan } from "@/lib/knowledge/follow-through";
 import { assessKnowledgeResourceFreshness } from "@/lib/knowledge/freshness";
 
 export const dynamic = "force-dynamic";
 
+function responseHeaders(request: Request): Headers {
+  const headers = new Headers(apiResponseHeaders(request));
+  headers.set("Cache-Control", "private, no-store");
+  return headers;
+}
+
 function errorResponse(request: Request, code: string, message: string, status: number) {
-  return NextResponse.json({ ok: false, error: { code, message } }, { status, headers: apiResponseHeaders(request) });
+  return NextResponse.json({ ok: false, error: { code, message } }, { status, headers: responseHeaders(request) });
 }
 
 export async function GET(
@@ -24,12 +32,25 @@ export async function GET(
   try {
     const repository = await getLearningItemRepository();
     const resource = await repository.findResourceById(id);
-    if (!resource) return errorResponse(request, "RESOURCE_NOT_FOUND", "This living resource could not be found.", 404);
-    const items = await repository.list();
+    if (!resource || resource.profileId !== personalProfile.id) {
+      return errorResponse(request, "RESOURCE_NOT_FOUND", "This living resource could not be found.", 404);
+    }
+    const [items, engagement] = await Promise.all([
+      repository.list(),
+      repository.findResourceEngagement(personalProfile.id, id),
+    ]);
     const sources = items.filter((item) => resource.sourceItemIds.includes(item.id));
     return NextResponse.json(
-      { ok: true, data: { resource, sources, freshness: assessKnowledgeResourceFreshness(resource) } },
-      { headers: apiResponseHeaders(request) },
+      {
+        ok: true,
+        data: {
+          resource,
+          sources,
+          freshness: assessKnowledgeResourceFreshness(resource),
+          followThrough: buildFollowThroughPlan(resource, engagement),
+        },
+      },
+      { headers: responseHeaders(request) },
     );
   } catch (error) {
     console.error(JSON.stringify({ event: "knowledge_resource_load_failed", errorType: error instanceof Error ? error.name : "unknown" }));

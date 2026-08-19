@@ -204,6 +204,23 @@ export const resourceEngagementSignalSchema = z.enum([
   "deep_dive",
 ]);
 
+export const followThroughKindSchema = z.enum([
+  "checklist",
+  "trip_plan",
+  "watchlist",
+  "shortlist",
+  "review",
+]);
+
+export const resourceFollowThroughSchema = z.object({
+  kind: followThroughKindSchema,
+  state: z.enum(["active", "completed"]),
+  completedEntryIds: z.array(z.string().uuid()).max(100),
+  startedAt: isoDateTimeSchema,
+  completedAt: isoDateTimeSchema.nullable(),
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
 export const resourceEngagementSchema = z.object({
   profileId: z.string().uuid(),
   resourceId: z.string().uuid(),
@@ -215,6 +232,7 @@ export const resourceEngagementSchema = z.object({
   lastExpandedAt: isoDateTimeSchema.nullable(),
   lastSourceOpenedAt: isoDateTimeSchema.nullable(),
   lastDeepDiveAt: isoDateTimeSchema.nullable(),
+  followThrough: resourceFollowThroughSchema.nullable().default(null),
   updatedAt: isoDateTimeSchema,
 }).strict();
 
@@ -437,6 +455,8 @@ export type ContextSnapshot = z.infer<typeof contextSnapshotSchema>;
 export type LearningPersonalization = z.infer<typeof learningPersonalizationSchema>;
 export type RecommendationFeedback = z.infer<typeof recommendationFeedbackSchema>;
 export type ResourceEngagementSignal = z.infer<typeof resourceEngagementSignalSchema>;
+export type FollowThroughKind = z.infer<typeof followThroughKindSchema>;
+export type ResourceFollowThrough = z.infer<typeof resourceFollowThroughSchema>;
 export type ResourceEngagement = z.infer<typeof resourceEngagementSchema>;
 export type ForYouLane = z.infer<typeof forYouLaneSchema>;
 export type ForYouFeedback = z.infer<typeof forYouFeedbackSchema>;

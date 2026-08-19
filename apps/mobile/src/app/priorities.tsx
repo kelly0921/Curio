@@ -9,13 +9,17 @@ import { colors, fonts, shadows } from '@/constants/curio-theme';
 import {
   getCrossSaveSynthesis,
   getPersonalContext,
+  updateResourceFollowThrough,
   updateForYouFeedback,
   type ContextSnapshot,
   type CrossSaveSynthesis,
   type ForYouFeedback,
   type ForYouLane,
   type ForYouRecommendation,
+  type FollowThroughPlan,
+  type FollowThroughUpdate,
 } from '@/lib/curio-api';
+import { followThroughPresentation } from '@/lib/resource-presentation';
 
 type FeedbackAction = ForYouFeedback['state'];
 
@@ -87,12 +91,73 @@ function RecommendationCard({
   );
 }
 
+function ActivePlanCard({
+  plan,
+  updatingKey,
+  onUpdate,
+}: {
+  plan: FollowThroughPlan;
+  updatingKey: string | null;
+  onUpdate: (update: FollowThroughUpdate) => void;
+}) {
+  const copy = followThroughPresentation(plan.kind);
+  const visibleEntries = plan.entries.slice(0, 4);
+  return (
+    <View style={[styles.planCard, shadows.card]}>
+      <View style={styles.planTopline}>
+        <Text style={styles.planEyebrow}>{copy.eyebrow}</Text>
+        <Text style={styles.planProgress}>{plan.completedCount}/{plan.totalCount} {copy.progressNoun}</Text>
+      </View>
+      <Text style={styles.planTitle}>{plan.resourceTitle}</Text>
+      <View style={styles.planEntries}>
+        {visibleEntries.map((entry) => {
+          const key = `${plan.resourceId}:${entry.id}`;
+          return (
+            <Pressable
+              accessibilityLabel={`${entry.completed ? 'Mark not done' : 'Mark done'}: ${entry.title}`}
+              disabled={Boolean(updatingKey)}
+              key={entry.id}
+              onPress={() => onUpdate({ action: 'toggle_entry', entryId: entry.id, completed: !entry.completed })}
+              style={styles.planEntry}>
+              <View style={[styles.planCheck, entry.completed && styles.planCheckDone]}>
+                {updatingKey === key
+                  ? <ActivityIndicator color={colors.ink} size="small" />
+                  : entry.completed && <Text style={styles.planCheckmark}>✓</Text>}
+              </View>
+              <Text numberOfLines={2} style={[styles.planEntryText, entry.completed && styles.planEntryTextDone]}>{entry.title}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {plan.entries.length > visibleEntries.length && (
+        <Text style={styles.planMore}>+{plan.entries.length - visibleEntries.length} more inside the resource</Text>
+      )}
+      <View style={styles.planActions}>
+        <Pressable onPress={() => openResource(plan.resourceId)} style={styles.planOpenButton}>
+          <Text style={styles.planOpenText}>Open resource</Text>
+          <Text style={styles.planOpenArrow}>→</Text>
+        </Pressable>
+        <Pressable
+          accessibilityLabel={`${copy.completeLabel}: ${plan.resourceTitle}`}
+          disabled={Boolean(updatingKey)}
+          onPress={() => onUpdate({ action: 'complete' })}
+          style={styles.planDoneButton}>
+          {updatingKey === `${plan.resourceId}:complete`
+            ? <ActivityIndicator color={colors.surface} size="small" />
+            : <Text style={styles.planDoneText}>Done</Text>}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 export default function PrioritiesScreen() {
   const [synthesis, setSynthesis] = useState<CrossSaveSynthesis | null>(null);
   const [context, setContext] = useState<ContextSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [followThroughUpdatingKey, setFollowThroughUpdatingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (pullToRefresh = false) => {
@@ -119,6 +184,8 @@ export default function PrioritiesScreen() {
 
   const realConnection = context?.connections.find((connection) => !connection.isDemo) ?? null;
   const recommendations = synthesis?.recommendations ?? [];
+  const activePlans = synthesis?.followThrough ?? [];
+  const attentionCount = activePlans.length + recommendations.length;
 
   async function saveFeedback(recommendation: ForYouRecommendation, action: FeedbackAction) {
     if (updatingId) return;
@@ -135,6 +202,28 @@ export default function PrioritiesScreen() {
       setError('Curio could not save that choice. Try again.');
     } finally {
       setUpdatingId(null);
+    }
+  }
+
+  async function saveFollowThrough(plan: FollowThroughPlan, update: FollowThroughUpdate) {
+    if (followThroughUpdatingKey) return;
+    const key = update.action === 'toggle_entry'
+      ? `${plan.resourceId}:${update.entryId}`
+      : `${plan.resourceId}:${update.action}`;
+    setFollowThroughUpdatingKey(key);
+    setError(null);
+    try {
+      const updated = await updateResourceFollowThrough(plan.resourceId, update);
+      setSynthesis((current) => current ? {
+        ...current,
+        followThrough: updated.state === 'active'
+          ? current.followThrough.map((candidate) => candidate.resourceId === updated.resourceId ? updated : candidate)
+          : current.followThrough.filter((candidate) => candidate.resourceId !== updated.resourceId),
+      } : current);
+    } catch {
+      setError('Curio could not update that plan. Try again.');
+    } finally {
+      setFollowThroughUpdatingKey(null);
     }
   }
 
@@ -180,10 +269,12 @@ export default function PrioritiesScreen() {
                 <Text style={styles.heroLabel}>TODAY IN CURIO</Text>
                 <Text style={styles.heroMark}>✦</Text>
               </View>
-              <Text style={styles.heroTitle}>{recommendations.length
-                ? `${recommendations.length} thing${recommendations.length === 1 ? '' : 's'} worth your attention`
+              <Text style={styles.heroTitle}>{attentionCount
+                ? `${attentionCount} thing${attentionCount === 1 ? '' : 's'} worth your attention`
                 : 'You are caught up for now'}</Text>
-              <Text style={styles.heroDetail}>{recommendations.length === 3
+              <Text style={styles.heroDetail}>{activePlans.length
+                ? 'What you chose to use stays first. Curio fills the rest with a few timely suggestions.'
+                : recommendations.length === 3
                 ? 'One to learn, one to use, and one worth revisiting—without digging through your saves.'
                 : recommendations.length
                   ? 'Curio is only showing the suggestions with a clear reason to return.'
@@ -195,10 +286,27 @@ export default function PrioritiesScreen() {
             </View>
           ) : null}
 
+          {activePlans.length ? (
+            <View style={styles.plansSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>You chose</Text>
+                <Text style={styles.sectionSubtitle}>Curio turned each resource into a lightweight plan. Check off only what is useful.</Text>
+              </View>
+              {activePlans.map((plan) => (
+                <ActivePlanCard
+                  key={plan.resourceId}
+                  onUpdate={(update) => void saveFollowThrough(plan, update)}
+                  plan={plan}
+                  updatingKey={followThroughUpdatingKey}
+                />
+              ))}
+            </View>
+          ) : null}
+
           {recommendations.length ? (
             <View style={styles.recommendationsSection}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Your next three</Text>
+                <Text style={styles.sectionTitle}>{activePlans.length ? 'Curio suggests' : 'Your next three'}</Text>
                 <Text style={styles.sectionSubtitle}>These change as you open, explore, finish, or dismiss things.</Text>
               </View>
               {recommendations.map((recommendation) => (
@@ -212,7 +320,7 @@ export default function PrioritiesScreen() {
             </View>
           ) : null}
 
-          {!loading && synthesis && recommendations.length === 0 ? (
+          {!loading && synthesis && attentionCount === 0 ? (
             <View style={[styles.empty, shadows.card]}>
               <Text style={styles.emptyMark}>✓</Text>
               <Text style={styles.emptyTitle}>Nothing needs your attention</Text>
@@ -255,9 +363,29 @@ const styles = StyleSheet.create({
   libraryPulseLabel: { color: colors.butter, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
   libraryPulseText: { color: '#C9C5B9', fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 6 },
   recommendationsSection: { marginTop: 34 },
+  plansSection: { marginTop: 34 },
   sectionHeader: { marginBottom: 15 },
   sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 29, fontWeight: '700', letterSpacing: -0.7 },
   sectionSubtitle: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, lineHeight: 16, marginTop: 4 },
+  planCard: { backgroundColor: colors.surface, borderRadius: 26, marginBottom: 16, padding: 19 },
+  planTopline: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  planEyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
+  planProgress: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '800' },
+  planTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.6, lineHeight: 31, marginTop: 12 },
+  planEntries: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, gap: 4, marginTop: 15, paddingTop: 10 },
+  planEntry: { alignItems: 'center', flexDirection: 'row', gap: 10, minHeight: 43, paddingVertical: 5 },
+  planCheck: { alignItems: 'center', borderColor: colors.muted, borderRadius: 10, borderWidth: 1, height: 24, justifyContent: 'center', width: 24 },
+  planCheckDone: { backgroundColor: colors.sage, borderColor: colors.sage },
+  planCheckmark: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '900' },
+  planEntryText: { color: colors.ink, flex: 1, fontFamily: fonts.body, fontSize: 11, fontWeight: '700', lineHeight: 16 },
+  planEntryTextDone: { color: colors.muted, textDecorationLine: 'line-through' },
+  planMore: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, marginTop: 7 },
+  planActions: { alignItems: 'center', borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: 9, marginTop: 15, paddingTop: 14 },
+  planOpenButton: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: 7, minHeight: 42 },
+  planOpenText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900' },
+  planOpenArrow: { color: colors.ink, fontSize: 13 },
+  planDoneButton: { alignItems: 'center', backgroundColor: colors.dark, borderRadius: 14, justifyContent: 'center', minHeight: 42, minWidth: 72, paddingHorizontal: 14 },
+  planDoneText: { color: colors.surface, fontFamily: fonts.body, fontSize: 10, fontWeight: '900' },
   recommendationCard: { borderRadius: 26, marginBottom: 16, overflow: 'hidden' },
   cardButter: { backgroundColor: '#E9D99D' },
   cardSage: { backgroundColor: '#C8D8C1' },

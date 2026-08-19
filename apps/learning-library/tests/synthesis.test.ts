@@ -353,6 +353,7 @@ describe("cross-save synthesis", () => {
         lastExpandedAt: RECENT,
         lastSourceOpenedAt: null,
         lastDeepDiveAt: null,
+        followThrough: null,
         updatedAt: RECENT,
       }],
       now: NOW,
@@ -367,6 +368,72 @@ describe("cross-save synthesis", () => {
     expect(result.recommendations[0].whyNow).toContain("opened the explanation");
     expect(result.recommendations[1]).toEqual(expect.objectContaining({ resourceId: "use", actionLabel: "Use this" }));
     expect(result.recommendations[2].whyNow).toContain("newer save");
+  });
+
+  it("puts user-chosen follow-through ahead of automatic For You recommendations", () => {
+    const practical = resource("use", "ai_work", ["save-1"], {
+      resourceType: "playbook",
+      intent: "try",
+      entries: [entry("use-entry", ["save-1"], { heading: "Run the audit", detail: "Audit one page before expanding the workflow." })],
+    });
+    const result = buildCrossSaveSynthesis({
+      items: [item("save-1")],
+      resources: [practical],
+      engagement: [{
+        profileId: practical.profileId,
+        resourceId: practical.id,
+        openCount: 1,
+        expandedCount: 0,
+        sourceOpenCount: 0,
+        deepDiveCount: 0,
+        lastOpenedAt: RECENT,
+        lastExpandedAt: null,
+        lastSourceOpenedAt: null,
+        lastDeepDiveAt: null,
+        followThrough: {
+          kind: "checklist",
+          state: "active",
+          completedEntryIds: [],
+          startedAt: RECENT,
+          completedAt: null,
+          updatedAt: RECENT,
+        },
+        updatedAt: RECENT,
+      }],
+      now: NOW,
+    });
+
+    expect(result.followThrough).toEqual([expect.objectContaining({ resourceId: "use", kind: "checklist", totalCount: 1 })]);
+    expect(result.recommendations.some((recommendation) => recommendation.resourceId === "use")).toBe(false);
+
+    const completed = buildCrossSaveSynthesis({
+      items: [item("save-1")],
+      resources: [practical],
+      engagement: [{
+        profileId: practical.profileId,
+        resourceId: practical.id,
+        openCount: 1,
+        expandedCount: 0,
+        sourceOpenCount: 0,
+        deepDiveCount: 0,
+        lastOpenedAt: RECENT,
+        lastExpandedAt: null,
+        lastSourceOpenedAt: null,
+        lastDeepDiveAt: null,
+        followThrough: {
+          kind: "checklist",
+          state: "completed",
+          completedEntryIds: ["use-entry"],
+          startedAt: RECENT,
+          completedAt: NOW.toISOString(),
+          updatedAt: NOW.toISOString(),
+        },
+        updatedAt: NOW.toISOString(),
+      }],
+      now: NOW,
+    });
+    expect(completed.followThrough).toEqual([]);
+    expect(completed.recommendations.some((recommendation) => recommendation.resourceId === "use")).toBe(false);
   });
 
   it("hides completed recommendations and restores reminders only after their revisit time", () => {

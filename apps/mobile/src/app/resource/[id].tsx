@@ -12,6 +12,8 @@ import {
   getKnowledgeResource,
   recordResourceEngagement,
   refreshKnowledgeResource,
+  updateResourceFollowThrough,
+  type FollowThroughPlan,
   type KnowledgeResource,
   type KnowledgeResourceEntry,
   type LearningItem,
@@ -20,7 +22,7 @@ import {
   type ResourceResearchReceipt,
 } from '@/lib/curio-api';
 import { researchVerdictLabel } from '@/lib/learning-presentation';
-import { displayResearchSources, researchDepthLabel, resourceDeepDiveOptions, resourceUseGuide } from '@/lib/resource-presentation';
+import { displayResearchSources, followThroughPresentation, researchDepthLabel, resourceDeepDiveOptions, resourceFollowThroughKind, resourceUseGuide } from '@/lib/resource-presentation';
 
 function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
@@ -91,6 +93,9 @@ export default function ResourceDetailScreen() {
   const [refreshReceipt, setRefreshReceipt] = useState<ResourceResearchReceipt | null>(null);
   const [refreshingResearch, setRefreshingResearch] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [followThrough, setFollowThrough] = useState<FollowThroughPlan | null>(null);
+  const [followThroughUpdating, setFollowThroughUpdating] = useState(false);
+  const [followThroughError, setFollowThroughError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +109,7 @@ export default function ResourceDetailScreen() {
       setResource(result.resource);
       setSources(result.sources);
       setFreshness(result.freshness);
+      setFollowThrough(result.followThrough);
       setError(null);
       void recordResourceEngagement(id, 'opened').catch(() => undefined);
     }).catch(() => {
@@ -117,6 +123,9 @@ export default function ResourceDetailScreen() {
   const latestContribution = useMemo(() => resource?.contributions.at(-1) ?? null, [resource]);
   const researchNeedsRefresh = freshness?.status === 'due' || freshness?.status === 'unresearched';
   const useGuide = useMemo(() => resource ? resourceUseGuide(resource) : null, [resource]);
+  const followThroughCopy = useMemo(() => resource
+    ? followThroughPresentation(resourceFollowThroughKind(resource))
+    : null, [resource]);
   const deepDiveOptions = useMemo(() => resource ? resourceDeepDiveOptions(resource) : [], [resource]);
   const suggestedNextMove = useMemo(() => [...sources]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
@@ -175,6 +184,25 @@ export default function ResourceDetailScreen() {
         : 'Curio could not refresh this research right now.');
     } finally {
       setRefreshingResearch(false);
+    }
+  }
+
+  async function handleFollowThrough() {
+    if (!id || followThroughUpdating) return;
+    if (followThrough?.state === 'active') {
+      router.push('/priorities');
+      return;
+    }
+    setFollowThroughUpdating(true);
+    setFollowThroughError(null);
+    try {
+      setFollowThrough(await updateResourceFollowThrough(id, { action: 'start' }));
+    } catch (followThroughFailure) {
+      setFollowThroughError(followThroughFailure instanceof CurioApiError
+        ? followThroughFailure.message
+        : 'Curio could not add this to For You right now.');
+    } finally {
+      setFollowThroughUpdating(false);
     }
   }
 
@@ -267,6 +295,23 @@ export default function ResourceDetailScreen() {
                 <Text style={styles.useFocusLabel}>{useGuide.focusLabel}</Text>
                 <Text style={styles.useFocusText}>{useGuide.focus}</Text>
               </View>
+              {followThroughCopy && (
+                <Pressable
+                  accessibilityLabel={followThrough?.state === 'active' ? `Open ${followThroughCopy.activeLabel}` : followThroughCopy.startLabel}
+                  disabled={followThroughUpdating}
+                  onPress={() => void handleFollowThrough()}
+                  style={[styles.followThroughButton, followThrough?.state === 'active' && styles.followThroughButtonActive]}>
+                  {followThroughUpdating
+                    ? <ActivityIndicator color={colors.surface} size="small" />
+                    : <>
+                      <Text style={[styles.followThroughButtonText, followThrough?.state === 'active' && styles.followThroughButtonTextActive]}>
+                        {followThrough?.state === 'active' ? `✓ ${followThroughCopy.activeLabel}` : followThroughCopy.startLabel}
+                      </Text>
+                      <Text style={[styles.followThroughArrow, followThrough?.state === 'active' && styles.followThroughButtonTextActive]}>→</Text>
+                    </>}
+                </Pressable>
+              )}
+              {followThroughError && <Text style={styles.followThroughError}>{followThroughError}</Text>}
             </View>
           )}
 
@@ -478,6 +523,12 @@ const styles = StyleSheet.create({
   useFocus: { borderTopColor: 'rgba(23,23,19,0.16)', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 17, paddingTop: 14 },
   useFocusLabel: { color: '#4D594B', fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
   useFocusText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '800', lineHeight: 16, marginTop: 5 },
+  followThroughButton: { alignItems: 'center', backgroundColor: colors.dark, borderColor: colors.dark, borderRadius: 16, borderWidth: 1, flexDirection: 'row', justifyContent: 'space-between', marginTop: 17, minHeight: 48, paddingHorizontal: 15 },
+  followThroughButtonActive: { backgroundColor: 'rgba(255,252,246,0.7)', borderColor: 'rgba(23,23,19,0.22)' },
+  followThroughButtonText: { color: colors.surface, fontFamily: fonts.body, fontSize: 11, fontWeight: '900' },
+  followThroughButtonTextActive: { color: colors.ink },
+  followThroughArrow: { color: colors.surface, fontFamily: fonts.body, fontSize: 13 },
+  followThroughError: { color: colors.danger, fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 8 },
   sectionHeader: { paddingBottom: 15, paddingTop: 38 },
   sectionEyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
   sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 28, fontWeight: '700', letterSpacing: -0.7, marginTop: 4 },

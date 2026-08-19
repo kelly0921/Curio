@@ -10,16 +10,12 @@ import type { CurioRepository } from "../data/repository";
 
 const REMIND_LATER_MS = 7 * 24 * 60 * 60 * 1_000;
 
-export async function recordResourceEngagement(
+export function emptyResourceEngagement(
   profileId: string,
   resourceId: string,
-  signal: ResourceEngagementSignal,
-  repository: CurioRepository,
   now = new Date(),
-): Promise<ResourceEngagement> {
-  const timestamp = now.toISOString();
-  const existing = await repository.findResourceEngagement(profileId, resourceId);
-  const base: ResourceEngagement = existing ?? {
+): ResourceEngagement {
+  return resourceEngagementSchema.parse({
     profileId,
     resourceId,
     openCount: 0,
@@ -30,8 +26,21 @@ export async function recordResourceEngagement(
     lastExpandedAt: null,
     lastSourceOpenedAt: null,
     lastDeepDiveAt: null,
-    updatedAt: timestamp,
-  };
+    followThrough: null,
+    updatedAt: now.toISOString(),
+  });
+}
+
+export async function recordResourceEngagement(
+  profileId: string,
+  resourceId: string,
+  signal: ResourceEngagementSignal,
+  repository: CurioRepository,
+  now = new Date(),
+): Promise<ResourceEngagement> {
+  const timestamp = now.toISOString();
+  const existing = await repository.findResourceEngagement(profileId, resourceId);
+  const base = existing ?? emptyResourceEngagement(profileId, resourceId, now);
   const next = resourceEngagementSchema.parse({
     ...base,
     openCount: base.openCount + (signal === "opened" ? 1 : 0),

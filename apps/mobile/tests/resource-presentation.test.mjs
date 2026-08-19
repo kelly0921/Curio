@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { displayResearchSources, researchDepthLabel, resourceDeepDiveOptions, resourceUseGuide, uniqueResearchSources } from '../src/lib/resource-presentation.ts';
+import { displayResearchSources, followThroughPresentation, researchDepthLabel, resourceDeepDiveOptions, resourceFollowThroughKind, resourceUseGuide, uniqueResearchSources } from '../src/lib/resource-presentation.ts';
 
 const resource = (patch = {}) => ({
   domain: 'finance',
@@ -27,6 +27,8 @@ test('turns an investment resource into a concrete watchlist use case', () => {
     { kind: 'how_it_works', label: 'How does this connect?' },
     { kind: 'limits_and_risks', label: 'What could invalidate it?' },
   ]);
+  assert.equal(resourceFollowThroughKind(resource()), 'watchlist');
+  assert.equal(followThroughPresentation('watchlist').startLabel, 'Follow this watchlist');
 });
 
 test('gives a glossary a reference purpose without making the top level verbose', () => {
@@ -54,11 +56,20 @@ test('uses the first practical step when a playbook is ready to try', () => {
   assert.equal(guide.title, 'Try the smallest useful version');
   assert.equal(guide.focusLabel, 'START HERE');
   assert.equal(guide.focus, 'Open one page and identify the repeated content pattern before automating anything.');
+  assert.equal(resourceFollowThroughKind(resource({ intent: 'try', resourceType: 'playbook' })), 'checklist');
+  assert.equal(followThroughPresentation('checklist').progressNoun, 'steps done');
   assert.deepEqual(resourceDeepDiveOptions(resource({ intent: 'try', resourceType: 'playbook' })).map((option) => option.kind), [
     'how_it_works',
     'practical_example',
     'limits_and_risks',
   ]);
+});
+
+test('maps travel, comparison, and reference resources to low-input follow-through formats', () => {
+  assert.equal(resourceFollowThroughKind(resource({ intent: 'visit', resourceType: 'guide' })), 'trip_plan');
+  assert.equal(resourceFollowThroughKind(resource({ intent: 'compare', resourceType: 'guide' })), 'shortlist');
+  assert.equal(resourceFollowThroughKind(resource({ intent: 'reference', resourceType: 'glossary' })), 'review');
+  assert.equal(followThroughPresentation('trip_plan').activeLabel, 'In your trip prep');
 });
 
 test('labels every research state by the depth it offers', () => {

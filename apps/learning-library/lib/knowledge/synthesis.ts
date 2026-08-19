@@ -11,8 +11,9 @@ import type {
   SaveIntent,
 } from "../domain";
 import { assessKnowledgeResourceFreshness } from "./freshness";
+import { buildActiveFollowThroughPlans, type FollowThroughPlan } from "./follow-through";
 
-export const CROSS_SAVE_SYNTHESIS_VERSION = "cross-save-synthesis-v4-behavior-aware" as const;
+export const CROSS_SAVE_SYNTHESIS_VERSION = "cross-save-synthesis-v5-follow-through" as const;
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1_000;
 
@@ -145,6 +146,7 @@ export interface CrossSaveSynthesis {
   changed: CrossSaveChange | null;
   repeated: CrossSaveRepeated | null;
   unresolved: CrossSaveUnresolved | null;
+  followThrough: FollowThroughPlan[];
   recommendations: ForYouRecommendation[];
   fallbackResourceIds: string[];
 }
@@ -752,6 +754,16 @@ function buildForYouRecommendations(
   now: Date,
 ): ForYouRecommendation[] {
   const byResource = engagementMap(engagement);
+  const resourcesById = new Map(resources.map((resource) => [resource.id, resource]));
+  const handledFollowThroughIds = new Set(engagement
+    .filter((record) => {
+      const followThrough = record.followThrough;
+      if (!followThrough) return false;
+      if (followThrough.state === "active") return true;
+      const resource = resourcesById.get(record.resourceId);
+      return !resource || !followThrough.completedAt || resource.updatedAt <= followThrough.completedAt;
+    })
+    .map((record) => record.resourceId));
   const pools: Record<ForYouLane, ForYouCandidate[]> = {
     learn_next: learnNextCandidates(resources, context, byResource, feedback, now),
     use_now: actionNowCandidates(resources, context, byResource, feedback, now),
@@ -760,7 +772,7 @@ function buildForYouRecommendations(
   const chosen = new Map<ForYouLane, ForYouCandidate>();
   const usedResourceIds = new Set<string>();
   (["worth_revisiting", "use_now", "learn_next"] as ForYouLane[]).forEach((lane) => {
-    const candidate = pools[lane].find((option) => !usedResourceIds.has(option.resourceId));
+    const candidate = pools[lane].find((option) => !usedResourceIds.has(option.resourceId) && !handledFollowThroughIds.has(option.resourceId));
     if (!candidate) return;
     chosen.set(lane, candidate);
     usedResourceIds.add(candidate.resourceId);
@@ -925,6 +937,7 @@ export function buildCrossSaveSynthesis({
     .slice(0, 4)
     .map((resource) => resource.id);
   const recommendations = buildForYouRecommendations(resources, context, engagement, feedback, now);
+  const followThrough = buildActiveFollowThroughPlans(resources, engagement);
 
   return {
     generatedAt: now.toISOString(),
@@ -943,6 +956,7 @@ export function buildCrossSaveSynthesis({
     changed,
     repeated,
     unresolved,
+    followThrough,
     recommendations,
     fallbackResourceIds,
   };

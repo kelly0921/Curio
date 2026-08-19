@@ -14,6 +14,16 @@ export interface ResourceUseGuide {
   title: string;
 }
 
+export type FollowThroughKind = 'checklist' | 'trip_plan' | 'watchlist' | 'shortlist' | 'review';
+
+export interface FollowThroughPresentation {
+  eyebrow: string;
+  startLabel: string;
+  activeLabel: string;
+  progressNoun: string;
+  completeLabel: string;
+}
+
 export interface ResearchSourceLike {
   publisher: string;
   title: string;
@@ -50,6 +60,22 @@ function namedFocus(resource: ResourceUseInput, fallback: string): string {
   if (names.length >= 2) return names.join(' · ');
   if (names.length === 1) return names[0];
   return fallback;
+}
+
+export function resourceFollowThroughKind(resource: ResourceUseInput): FollowThroughKind {
+  if (resource.intent === 'track' || resource.resourceType === 'watchlist') return 'watchlist';
+  if (resource.intent === 'visit') return 'trip_plan';
+  if (resource.intent === 'buy' || resource.intent === 'compare') return 'shortlist';
+  if (resource.intent === 'try' || resource.resourceType === 'playbook') return 'checklist';
+  return 'review';
+}
+
+export function followThroughPresentation(kind: FollowThroughKind): FollowThroughPresentation {
+  if (kind === 'watchlist') return { eyebrow: 'WATCHLIST', startLabel: 'Follow this watchlist', activeLabel: 'In your watchlist', progressNoun: 'items reviewed', completeLabel: 'Finish review' };
+  if (kind === 'trip_plan') return { eyebrow: 'TRIP PREP', startLabel: 'Add to trip prep', activeLabel: 'In your trip prep', progressNoun: 'tips prepared', completeLabel: 'Finish trip prep' };
+  if (kind === 'shortlist') return { eyebrow: 'SHORTLIST', startLabel: 'Build this shortlist', activeLabel: 'In your shortlist', progressNoun: 'options reviewed', completeLabel: 'Finish shortlist' };
+  if (kind === 'checklist') return { eyebrow: 'CHECKLIST', startLabel: 'Start this checklist', activeLabel: 'Checklist in progress', progressNoun: 'steps done', completeLabel: 'Finish checklist' };
+  return { eyebrow: 'REVIEW LATER', startLabel: 'Review this later', activeLabel: 'In your review queue', progressNoun: 'points reviewed', completeLabel: 'Finish review' };
 }
 
 export function resourceUseGuide(resource: ResourceUseInput): ResourceUseGuide {

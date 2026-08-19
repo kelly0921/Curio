@@ -22,6 +22,7 @@ export type SaveIntent = 'understand' | 'try' | 'visit' | 'buy' | 'track' | 'com
 export type ResourceEntryStatus = 'active' | 'contested' | 'superseded';
 export type ResourceDeepDiveKind = 'how_it_works' | 'practical_example' | 'limits_and_risks' | 'what_to_watch';
 export type ResourceEngagementSignal = 'opened' | 'expanded' | 'source_opened' | 'deep_dive';
+export type FollowThroughKind = 'checklist' | 'trip_plan' | 'watchlist' | 'shortlist' | 'review';
 export type ForYouLane = 'learn_next' | 'use_now' | 'worth_revisiting';
 export type ResourceContributionDisposition = 'created' | 'enriched' | 'supporting' | 'updated' | 'conflict';
 export type ResearchVerdict = 'confirmed' | 'supported_with_context' | 'corrected' | 'not_verified' | 'opinion';
@@ -248,6 +249,30 @@ export interface ResourceResearchReceipt {
   }[];
 }
 
+export interface FollowThroughPlan {
+  resourceId: string;
+  resourceTitle: string;
+  domain: ContextDomain;
+  kind: FollowThroughKind;
+  state: 'active' | 'completed';
+  entries: {
+    id: string;
+    title: string;
+    detail: string;
+    completed: boolean;
+  }[];
+  completedCount: number;
+  totalCount: number;
+  startedAt: string;
+  completedAt: string | null;
+  updatedAt: string;
+}
+
+export type FollowThroughUpdate =
+  | { action: 'start' }
+  | { action: 'toggle_entry'; entryId: string; completed: boolean }
+  | { action: 'complete' };
+
 export interface CrossSaveTheme {
   id: string;
   domain: ContextDomain;
@@ -353,6 +378,7 @@ export interface CrossSaveSynthesis {
     reason: string;
     kind: 'contested' | 'not_verified' | 'research_due' | 'unresearched';
   } | null;
+  followThrough: FollowThroughPlan[];
   recommendations: ForYouRecommendation[];
   fallbackResourceIds: string[];
 }
@@ -381,6 +407,7 @@ export interface KnowledgeSearchAnswer {
 export interface KnowledgeSearchResult {
   query: string;
   answer: KnowledgeSearchAnswer | null;
+  followThroughResourceIds: string[];
   results: {
     resource: KnowledgeResource;
     score: number;
@@ -426,7 +453,7 @@ interface ResourcesEnvelope {
 
 interface ResourceEnvelope {
   ok: true;
-  data: { resource: KnowledgeResource; sources: LearningItem[]; freshness: ResourceFreshness };
+  data: { resource: KnowledgeResource; sources: LearningItem[]; freshness: ResourceFreshness; followThrough: FollowThroughPlan | null };
 }
 
 interface ResourceRefreshEnvelope {
@@ -442,6 +469,11 @@ interface ResourceDeepDiveEnvelope {
 interface ResourceEngagementEnvelope {
   ok: true;
   data: { engagement: { resourceId: string; updatedAt: string } };
+}
+
+interface FollowThroughEnvelope {
+  ok: true;
+  data: { plan: FollowThroughPlan };
 }
 
 interface ForYouFeedbackEnvelope {
@@ -565,11 +597,16 @@ export async function listKnowledgeResources(): Promise<KnowledgeResource[]> {
   return body.data.resources;
 }
 
-export async function getKnowledgeResource(id: string): Promise<{ resource: KnowledgeResource; sources: LearningItem[]; freshness: ResourceFreshness } | null> {
+export async function getKnowledgeResource(id: string): Promise<{ resource: KnowledgeResource; sources: LearningItem[]; freshness: ResourceFreshness; followThrough: FollowThroughPlan | null } | null> {
   const cached = resourceSnapshot.find((resource) => resource.id === id);
   const body = await readEnvelope<ResourceEnvelope>(await apiFetch(`/api/resources/${encodeURIComponent(id)}`, { headers: { Accept: 'application/json' } }));
   resourceSnapshot = [body.data.resource, ...resourceSnapshot.filter((resource) => resource.id !== id)];
-  return { resource: cached ? { ...cached, ...body.data.resource } : body.data.resource, sources: body.data.sources, freshness: body.data.freshness };
+  return {
+    resource: cached ? { ...cached, ...body.data.resource } : body.data.resource,
+    sources: body.data.sources,
+    freshness: body.data.freshness,
+    followThrough: body.data.followThrough ?? null,
+  };
 }
 
 export async function refreshKnowledgeResource(id: string): Promise<{ resource: KnowledgeResource; freshness: ResourceFreshness; receipt: ResourceResearchReceipt }> {
@@ -619,8 +656,21 @@ export async function getCrossSaveSynthesis(): Promise<CrossSaveSynthesis> {
     ...body.data.synthesis,
     interests: body.data.synthesis.interests ?? [],
     nextUse: body.data.synthesis.nextUse ?? null,
+    followThrough: body.data.synthesis.followThrough ?? [],
     recommendations: body.data.synthesis.recommendations ?? [],
   };
+}
+
+export async function updateResourceFollowThrough(
+  resourceId: string,
+  update: FollowThroughUpdate,
+): Promise<FollowThroughPlan> {
+  const body = await readEnvelope<FollowThroughEnvelope>(await apiFetch(`/api/resources/${encodeURIComponent(resourceId)}/follow-through`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(update),
+  }));
+  return body.data.plan;
 }
 
 export async function recordResourceEngagement(

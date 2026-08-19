@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
 import { getLearningItemRepository } from "@/lib/data/provider";
-import { contextDomainSchema } from "@/lib/domain";
+import { contextDomainSchema, personalProfile } from "@/lib/domain";
 import { searchKnowledge } from "@/lib/knowledge/retrieval";
 import { synchronizeKnowledgeResources } from "@/lib/knowledge/resources";
 
@@ -25,14 +25,23 @@ function errorResponse(request: Request, code: string, message: string, status: 
 
 async function runLibrarySearch(input: z.infer<typeof searchInputSchema>) {
   const repository = await getLearningItemRepository();
-  const items = await repository.list();
+  const [items, engagement] = await Promise.all([
+    repository.list(),
+    repository.listResourceEngagement(personalProfile.id),
+  ]);
   const resources = await synchronizeKnowledgeResources(items, repository);
-  return searchKnowledge({
+  const result = searchKnowledge({
     query: input.query,
     resources,
     items,
     domain: input.domain ?? null,
   });
+  return {
+    ...result,
+    followThroughResourceIds: engagement
+      .filter((record) => record.followThrough?.state === "active")
+      .map((record) => record.resourceId),
+  };
 }
 
 function successResponse(request: Request, data: Awaited<ReturnType<typeof runLibrarySearch>>) {

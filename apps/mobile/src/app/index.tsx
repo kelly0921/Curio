@@ -22,6 +22,7 @@ import {
   getCurioApiUrl,
   listKnowledgeResources,
   searchKnowledgeLibrary,
+  updateResourceFollowThrough,
   type ContextDomain,
   type KnowledgeResource,
   type KnowledgeSearchResult,
@@ -69,6 +70,9 @@ export default function HomeScreen() {
   const [searchResult, setSearchResult] = useState<KnowledgeSearchResult | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [followThroughResourceIds, setFollowThroughResourceIds] = useState<Set<string>>(() => new Set());
+  const [followThroughUpdatingId, setFollowThroughUpdatingId] = useState<string | null>(null);
+  const [followThroughError, setFollowThroughError] = useState<string | null>(null);
 
   const load = useCallback(async (pullToRefresh = false) => {
     if (pullToRefresh) setRefreshing(true);
@@ -101,7 +105,10 @@ export default function HomeScreen() {
     const timer = setTimeout(() => {
       void searchKnowledgeLibrary(normalized, domain === 'all' ? null : (domain as ContextDomain))
         .then((result) => {
-          if (!cancelled) setSearchResult(result);
+          if (!cancelled) {
+            setSearchResult(result);
+            setFollowThroughResourceIds(new Set(result.followThroughResourceIds ?? []));
+          }
         })
         .catch(() => {
           if (!cancelled) {
@@ -142,6 +149,24 @@ export default function HomeScreen() {
   const resolvedSearch = searchResult?.query.toLocaleLowerCase() === query.trim().toLocaleLowerCase() ? searchResult : null;
   const answer = resolvedSearch?.answer ?? null;
   const questionMode = hasQuery && looksLikeQuestion(query);
+
+  async function handleFollowThrough(resourceId: string) {
+    if (followThroughUpdatingId) return;
+    if (followThroughResourceIds.has(resourceId)) {
+      router.push('/priorities');
+      return;
+    }
+    setFollowThroughUpdatingId(resourceId);
+    setFollowThroughError(null);
+    try {
+      await updateResourceFollowThrough(resourceId, { action: 'start' });
+      setFollowThroughResourceIds((current) => new Set(current).add(resourceId));
+    } catch (caught) {
+      setFollowThroughError(caught instanceof CurioApiError ? caught.message : 'Curio could not add that to For You.');
+    } finally {
+      setFollowThroughUpdatingId(null);
+    }
+  }
 
   return (
     <View style={styles.screen}>
@@ -205,22 +230,39 @@ export default function HomeScreen() {
                   <Text style={styles.answerTitle}>{questionMode ? 'What Curio found' : answer.title}</Text>
                   <Text style={styles.answerSummary}>{answer.summary}</Text>
                   <View style={styles.answerPoints}>
-                    {answer.points.slice(0, 4).map((point) => (
-                      <Pressable
-                        accessibilityLabel={`Open ${point.resourceTitle}`}
-                        key={`${point.resourceId}:${point.entryId}`}
-                        onPress={() => router.push({ pathname: '/resource/[id]', params: { id: point.resourceId } })}
-                        style={({ pressed }) => [styles.answerPoint, pressed && styles.answerPointPressed]}>
-                        <View style={styles.answerPointTopline}>
-                          <Text numberOfLines={1} style={styles.answerPointResource}>{point.resourceTitle}</Text>
-                          <Text style={styles.answerPointArrow}>→</Text>
+                    {answer.points.slice(0, 4).map((point) => {
+                      const active = followThroughResourceIds.has(point.resourceId);
+                      const updating = followThroughUpdatingId === point.resourceId;
+                      return (
+                        <View key={`${point.resourceId}:${point.entryId}`} style={styles.answerPoint}>
+                          <Pressable
+                            accessibilityLabel={`Open ${point.resourceTitle}`}
+                            onPress={() => router.push({ pathname: '/resource/[id]', params: { id: point.resourceId } })}
+                            style={({ pressed }) => [styles.answerPointBody, pressed && styles.answerPointPressed]}>
+                            <View style={styles.answerPointTopline}>
+                              <Text numberOfLines={1} style={styles.answerPointResource}>{point.resourceTitle}</Text>
+                              <Text style={styles.answerPointArrow}>→</Text>
+                            </View>
+                            {point.heading && <Text style={styles.answerPointHeading}>{point.heading}</Text>}
+                            <Text style={styles.answerPointText}>{point.detail}</Text>
+                          </Pressable>
+                          <View style={styles.answerPointActions}>
+                            <Text style={styles.answerEvidence}>{point.evidence}</Text>
+                            <Pressable
+                              accessibilityLabel={active ? `Open ${point.resourceTitle} in For You` : `Add ${point.resourceTitle} to For You`}
+                              disabled={Boolean(followThroughUpdatingId)}
+                              onPress={() => void handleFollowThrough(point.resourceId)}
+                              style={[styles.answerUseButton, active && styles.answerUseButtonActive]}>
+                              {updating
+                                ? <ActivityIndicator color={colors.ink} size="small" />
+                                : <Text style={[styles.answerUseButtonText, active && styles.answerUseButtonTextActive]}>{active ? '✓ In For You' : 'Use this'}</Text>}
+                            </Pressable>
+                          </View>
                         </View>
-                        {point.heading && <Text style={styles.answerPointHeading}>{point.heading}</Text>}
-                        <Text style={styles.answerPointText}>{point.detail}</Text>
-                        <Text style={styles.answerEvidence}>{point.evidence}</Text>
-                      </Pressable>
-                    ))}
+                      );
+                    })}
                   </View>
+                  {followThroughError && <Text style={styles.answerActionError}>{followThroughError}</Text>}
                   {answer.caveat && (
                     <View style={styles.answerCaveat}>
                       <Text style={styles.answerCaveatLabel}>KEEP IN MIND</Text>
@@ -327,14 +369,21 @@ const styles = StyleSheet.create({
   answerTitle: { color: colors.surface, fontFamily: fonts.display, fontSize: 28, fontWeight: '700', letterSpacing: -0.6, lineHeight: 32, marginTop: 7 },
   answerSummary: { color: '#D7D4CA', fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 8 },
   answerPoints: { borderTopColor: '#4A4B43', borderTopWidth: StyleSheet.hairlineWidth, gap: 9, marginTop: 15, paddingTop: 14 },
-  answerPoint: { backgroundColor: '#2C2D27', borderRadius: 16, padding: 13 },
+  answerPoint: { backgroundColor: '#2C2D27', borderRadius: 16, overflow: 'hidden' },
+  answerPointBody: { paddingHorizontal: 13, paddingTop: 13 },
   answerPointPressed: { opacity: 0.72 },
   answerPointTopline: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
   answerPointResource: { color: colors.butter, flex: 1, fontFamily: fonts.body, fontSize: 9, fontWeight: '900' },
   answerPointArrow: { color: colors.butter, fontFamily: fonts.body, fontSize: 11 },
   answerPointHeading: { color: colors.surface, fontFamily: fonts.body, fontSize: 11, fontWeight: '900', lineHeight: 16, marginTop: 8 },
   answerPointText: { color: '#E4E0D7', fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 4 },
-  answerEvidence: { color: '#A9A69E', fontFamily: fonts.body, fontSize: 8, fontWeight: '800', marginTop: 9, textTransform: 'uppercase' },
+  answerPointActions: { alignItems: 'center', borderTopColor: '#41423C', borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, minHeight: 47, paddingHorizontal: 13, paddingVertical: 8 },
+  answerEvidence: { color: '#A9A69E', flex: 1, fontFamily: fonts.body, fontSize: 8, fontWeight: '800', paddingRight: 8, textTransform: 'uppercase' },
+  answerUseButton: { alignItems: 'center', backgroundColor: colors.butter, borderRadius: 11, justifyContent: 'center', minHeight: 30, minWidth: 74, paddingHorizontal: 10 },
+  answerUseButtonActive: { backgroundColor: '#45463F' },
+  answerUseButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '900' },
+  answerUseButtonTextActive: { color: colors.surface },
+  answerActionError: { color: colors.peach, fontFamily: fonts.body, fontSize: 9, lineHeight: 14, marginTop: 10 },
   answerCaveat: { borderLeftColor: colors.peach, borderLeftWidth: 2, marginTop: 14, paddingLeft: 10 },
   answerCaveatLabel: { color: colors.peach, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
   answerCaveatText: { color: '#D7D4CA', fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 4 },
