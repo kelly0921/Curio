@@ -72,7 +72,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try {
     const result = await authorizedItem(request, id);
     if ("response" in result) return result.response;
-    if (result.item.sourceVisual) {
+    const refresh = new URL(request.url).searchParams.get("refresh") === "true";
+    if (result.item.sourceVisual && !refresh) {
       return NextResponse.json({ ok: true, data: { sourceVisual: result.item.sourceVisual, captured: false } }, { headers: apiResponseHeaders(request) });
     }
     if (!result.item.sourceUrl || !canonicalInstagramReelUrl(result.item.sourceUrl)) {
@@ -93,7 +94,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     });
     await result.repository.save(learningItemSchema.parse({ ...result.item, sourceVisual: visual }));
     await synchronizeKnowledgeResources(await result.repository.list(), result.repository);
-    return NextResponse.json({ ok: true, data: { sourceVisual: visual, captured: true } }, { status: 201, headers: apiResponseHeaders(request) });
+    return NextResponse.json(
+      { ok: true, data: { sourceVisual: visual, captured: true, refreshed: Boolean(result.item.sourceVisual) } },
+      { status: result.item.sourceVisual ? 200 : 201, headers: apiResponseHeaders(request) },
+    );
   } catch (error) {
     console.error(JSON.stringify({
       event: "source_cover_capture_failed",

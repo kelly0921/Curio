@@ -41,7 +41,7 @@ function updatedLabel(updatedAt: string): string {
 export function ResourceTile({ resource, index, onPress }: { resource: KnowledgeResource; index: number; onPress: () => void }) {
   const [imageFailed, setImageFailed] = useState(false);
   const coverSource = resource.coverSourceItemId && !imageFailed
-    ? getSourceCoverImageSource(resource.coverSourceItemId)
+    ? getSourceCoverImageSource(resource.coverSourceItemId, resource.coverCapturedAt)
     : null;
   return (
     <Pressable

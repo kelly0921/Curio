@@ -1,4 +1,4 @@
-import type { Browser, BrowserWorker, ElementHandle } from "@cloudflare/puppeteer";
+import type { Browser, BrowserWorker, ElementHandle, Page } from "@cloudflare/puppeteer";
 import type {
   MediaTranscriber,
   PublicSourceRetrievalHints,
@@ -15,6 +15,8 @@ const MAX_PUBLIC_AUDIO_BYTES = 12 * 1024 * 1024;
 const MAX_REEL_DURATION_SECONDS = 20 * 60;
 const MAX_REEL_FRAMES = 24;
 const FRAME_INTERVAL_SECONDS = 2.5;
+const COVER_WIDTH = 540;
+const COVER_HEIGHT = 960;
 const INSTAGRAM_HOSTS = new Set(["instagram.com", "www.instagram.com", "instagr.am"]);
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -27,6 +29,7 @@ export interface InstagramReelCaptureResult {
   caption: string | null;
   username: string | null;
   frames: ReelFrame[];
+  coverFrame: ReelFrame | null;
   mediaUrls: string[];
 }
 
@@ -61,6 +64,138 @@ function bytesToBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 8_192));
   }
   return btoa(binary);
+}
+
+function base64FromDataUrl(value: string): string {
+  const separator = value.indexOf(",");
+  if (separator < 0) throw new Error("The normalized cover frame was not encoded as a data URL.");
+  return value.slice(separator + 1);
+}
+
+async function captureFullBleedMediaFrame<T extends HTMLVideoElement | HTMLImageElement>(
+  page: Page,
+  element: ElementHandle<T>,
+  selector: "video" | "img",
+  timestampSeconds: number,
+): Promise<ReelFrame> {
+  try {
+    const dataUrl = await page.evaluate(({ mediaSelector, outputWidth, outputHeight }) => {
+      const media = document.querySelector(mediaSelector);
+      if (!(media instanceof HTMLVideoElement) && !(media instanceof HTMLImageElement)) {
+        throw new Error("The source media element is unavailable.");
+      }
+      const sourceWidth = media instanceof HTMLVideoElement ? media.videoWidth : media.naturalWidth;
+      const sourceHeight = media instanceof HTMLVideoElement ? media.videoHeight : media.naturalHeight;
+      if (!sourceWidth || !sourceHeight) throw new Error("The source media has no intrinsic dimensions.");
+
+      let sourceX = 0;
+      let sourceWidthAfterTrim = sourceWidth;
+      const probeWidth = Math.min(270, sourceWidth);
+      const probeHeight = Math.max(1, Math.round(sourceHeight * probeWidth / sourceWidth));
+      const probe = document.createElement("canvas");
+      probe.width = probeWidth;
+      probe.height = probeHeight;
+      const probeContext = probe.getContext("2d", { willReadFrequently: true });
+      if (!probeContext) throw new Error("The cover probe canvas is unavailable.");
+      probeContext.drawImage(media, 0, 0, probeWidth, probeHeight);
+
+      try {
+        const pixels = probeContext.getImageData(0, 0, probeWidth, probeHeight).data;
+        const top = Math.round(probeHeight * 0.08);
+        const bottom = Math.max(top + 1, Math.round(probeHeight * 0.92));
+        const step = Math.max(1, Math.floor((bottom - top) / 160));
+        const darkColumn = (x: number) => {
+          let dark = 0;
+          let samples = 0;
+          for (let y = top; y < bottom; y += step) {
+            const offset = (y * probeWidth + x) * 4;
+            const red = pixels[offset] ?? 255;
+            const green = pixels[offset + 1] ?? 255;
+            const blue = pixels[offset + 2] ?? 255;
+            const maximum = Math.max(red, green, blue);
+            const minimum = Math.min(red, green, blue);
+            if (maximum <= 32 && maximum - minimum <= 14) dark += 1;
+            samples += 1;
+          }
+          return samples > 0 && dark / samples >= 0.94;
+        };
+        const maximumBar = Math.floor(probeWidth * 0.22);
+        let leftBar = 0;
+        while (leftBar < maximumBar && darkColumn(leftBar)) leftBar += 1;
+        let rightBar = 0;
+        while (rightBar < maximumBar && darkColumn(probeWidth - 1 - rightBar)) rightBar += 1;
+        const minimumBar = Math.max(2, Math.floor(probeWidth * 0.012));
+        const symmetricTolerance = Math.max(2, Math.round(Math.max(leftBar, rightBar) * 0.3));
+        if (
+          leftBar >= minimumBar
+          && rightBar >= minimumBar
+          && Math.abs(leftBar - rightBar) <= symmetricTolerance
+          && leftBar + rightBar < probeWidth * 0.45
+        ) {
+          sourceX = leftBar / probeWidth * sourceWidth;
+          sourceWidthAfterTrim = sourceWidth - (leftBar + rightBar) / probeWidth * sourceWidth;
+        }
+      } catch {
+        // Cross-origin media can prevent pixel inspection; the full-bleed crop below still removes layout bars.
+      }
+
+      const targetRatio = outputWidth / outputHeight;
+      let cropX = sourceX;
+      let cropY = 0;
+      let cropWidth = sourceWidthAfterTrim;
+      let cropHeight = sourceHeight;
+      if (cropWidth / cropHeight > targetRatio) {
+        const fittedWidth = cropHeight * targetRatio;
+        cropX += (cropWidth - fittedWidth) / 2;
+        cropWidth = fittedWidth;
+      } else {
+        const fittedHeight = cropWidth / targetRatio;
+        cropY = (cropHeight - fittedHeight) / 2;
+        cropHeight = fittedHeight;
+      }
+
+      const output = document.createElement("canvas");
+      output.width = outputWidth;
+      output.height = outputHeight;
+      const outputContext = output.getContext("2d");
+      if (!outputContext) throw new Error("The cover output canvas is unavailable.");
+      outputContext.drawImage(media, cropX, cropY, cropWidth, cropHeight, 0, 0, outputWidth, outputHeight);
+      return output.toDataURL("image/jpeg", 0.72);
+    }, { mediaSelector: selector, outputWidth: COVER_WIDTH, outputHeight: COVER_HEIGHT });
+    return { timestampSeconds, mimeType: "image/jpeg", base64: base64FromDataUrl(dataUrl) };
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: "source_cover_canvas_normalization_failed",
+      errorType: error instanceof Error ? error.name : "unknown",
+    }));
+    const original = await page.evaluate((mediaSelector) => {
+      const media = document.querySelector<HTMLElement>(mediaSelector);
+      if (!media) throw new Error("The source media element is unavailable.");
+      return {
+        mediaStyle: media.style.cssText,
+        bodyStyle: document.body.style.cssText,
+        htmlStyle: document.documentElement.style.cssText,
+      };
+    }, selector);
+    try {
+      await page.evaluate(({ mediaSelector, outputWidth, outputHeight }) => {
+        const media = document.querySelector<HTMLElement>(mediaSelector);
+        if (!media) throw new Error("The source media element is unavailable.");
+        document.documentElement.style.cssText = "margin:0;background:black;width:100%;height:100%;overflow:hidden";
+        document.body.style.cssText = "margin:0;background:black;width:100%;height:100%;overflow:hidden";
+        media.style.cssText = `position:fixed;inset:0;width:${outputWidth}px;height:${outputHeight}px;object-fit:cover;object-position:center;display:block;z-index:2147483647`;
+      }, { mediaSelector: selector, outputWidth: COVER_WIDTH, outputHeight: COVER_HEIGHT });
+      const image = await element.screenshot({ type: "jpeg", quality: 72 });
+      return { timestampSeconds, mimeType: "image/jpeg", base64: bytesToBase64(image) };
+    } finally {
+      await page.evaluate(({ mediaSelector, previous }) => {
+        const media = document.querySelector<HTMLElement>(mediaSelector);
+        if (media) media.style.cssText = previous.mediaStyle;
+        document.body.style.cssText = previous.bodyStyle;
+        document.documentElement.style.cssText = previous.htmlStyle;
+      }, { mediaSelector: selector, previous: original });
+    }
+  }
 }
 
 export function canonicalInstagramReelUrl(value: string): string | null {
@@ -249,6 +384,7 @@ export class CloudflareInstagramReelCapture implements InstagramReelCapture {
           document.documentElement.style.background = "black";
           document.body.style.margin = "0";
           const element = document.createElement("video");
+          element.crossOrigin = "anonymous";
           element.src = mediaUrl;
           element.preload = "auto";
           element.playsInline = true;
@@ -310,14 +446,15 @@ export class CloudflareInstagramReelCapture implements InstagramReelCapture {
             const element = document.querySelector("img");
             return element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0;
           }, { timeout: 20_000 });
-          const screenshot = await image.screenshot({ type: "jpeg", quality: 72 });
+          const coverFrame = await captureFullBleedMediaFrame(page, image, "img", 0);
           const metadata = metadataFromDescription(fallbackDescription);
           return {
             sourceUrl: canonicalUrl,
             durationSeconds: 0,
             caption: metadata.caption,
             username: metadata.username,
-            frames: [{ timestampSeconds: 0, mimeType: "image/jpeg", base64: bytesToBase64(screenshot) }],
+            frames: [coverFrame],
+            coverFrame,
             mediaUrls: [...mediaUrls],
           };
         }
@@ -362,6 +499,7 @@ export class CloudflareInstagramReelCapture implements InstagramReelCapture {
       }
 
       const frames: ReelFrame[] = [];
+      let coverFrame: ReelFrame | null = null;
       const frameTimestamps = frameMode === "cover"
         ? [reelCoverTimestamp(pageMetadata.duration)]
         : reelFrameTimestamps(pageMetadata.duration);
@@ -385,8 +523,14 @@ export class CloudflareInstagramReelCapture implements InstagramReelCapture {
             });
             await new Promise((resolve) => setTimeout(resolve, 120));
           }, timestampSeconds);
-          const image = await video.screenshot({ type: "jpeg", quality: 62 });
-          frames.push({ timestampSeconds, mimeType: "image/jpeg", base64: bytesToBase64(image) });
+          if (frameMode === "cover") {
+            coverFrame = await captureFullBleedMediaFrame(page, video, "video", timestampSeconds);
+            frames.push(coverFrame);
+          } else {
+            const image = await video.screenshot({ type: "jpeg", quality: 62 });
+            frames.push({ timestampSeconds, mimeType: "image/jpeg", base64: bytesToBase64(image) });
+            if (!coverFrame) coverFrame = await captureFullBleedMediaFrame(page, video, "video", timestampSeconds);
+          }
         } catch (error) {
           console.warn(JSON.stringify({
             event: "instagram_reel_frame_capture_failed",
@@ -408,6 +552,7 @@ export class CloudflareInstagramReelCapture implements InstagramReelCapture {
         caption: metadata.caption,
         username: metadata.username,
         frames,
+        coverFrame,
         mediaUrls: [...mediaUrls],
       };
     } finally {
@@ -526,7 +671,7 @@ export class InstagramFullReelRetriever implements PublicSourceRetriever {
       model: models.join("+") || "instagram-full-reel",
       transcriptionModel,
       consultedUrls: [captured.sourceUrl],
-      sourceVisual: selectRepresentativeReelFrame(captured.frames),
+      sourceVisual: captured.coverFrame ?? selectRepresentativeReelFrame(captured.frames),
     };
   }
 }

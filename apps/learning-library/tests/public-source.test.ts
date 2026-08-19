@@ -110,6 +110,7 @@ describe("public Instagram retrieval", () => {
         caption: "Five Japan trip tips.",
         username: "public_teacher",
         frames: [{ timestampSeconds: 2.5, mimeType: "image/jpeg", base64: "aW1hZ2U=" }],
+        coverFrame: { timestampSeconds: 2.5, mimeType: "image/jpeg", base64: "Y292ZXI=" },
         mediaUrls: [`https://media.cdninstagram.com/reel.mp4?efg=${encodeURIComponent(audioMetadata)}&bytestart=0&byteend=3`],
       }),
     };
@@ -129,7 +130,7 @@ describe("public Instagram retrieval", () => {
 
     expect(result.creator).toBe("@public_teacher");
     expect(result.transcriptionModel).toBe("test-transcriber");
-    expect(result.sourceVisual).toEqual({ timestampSeconds: 2.5, mimeType: "image/jpeg", base64: "aW1hZ2U=" });
+    expect(result.sourceVisual).toEqual({ timestampSeconds: 2.5, mimeType: "image/jpeg", base64: "Y292ZXI=" });
     expect(result.materials.map((material) => material.origin)).toEqual([
       "instagram_browser_transcription",
       "instagram_browser_visual_analysis",

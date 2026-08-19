@@ -279,6 +279,7 @@ export const sourceVisualSchema = z.object({
   objectKey: z.string().min(1).max(500),
   mimeType: z.literal("image/jpeg"),
   timestampSeconds: z.number().min(0),
+  normalizationVersion: z.string().min(1).max(80).nullable().default(null),
   capturedAt: isoDateTimeSchema,
 }).strict();
 
@@ -295,6 +296,7 @@ export const knowledgeResourceSchema = z.object({
   entries: z.array(knowledgeResourceEntrySchema).min(1).max(100),
   sourceItemIds: z.array(z.string().uuid()).min(1).max(200),
   coverSourceItemId: z.string().uuid().nullable().default(null),
+  coverCapturedAt: isoDateTimeSchema.nullable().default(null),
   contributions: z.array(resourceContributionSchema).min(1).max(200),
   lastResearchedAt: isoDateTimeSchema.nullable(),
   mergeModel: z.string().min(1).max(120).nullable().default(null),

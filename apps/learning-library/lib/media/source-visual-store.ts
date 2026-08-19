@@ -3,6 +3,7 @@ import type { SourceVisualCandidate } from "../ai/services";
 import { sourceVisualSchema, type SourceVisual } from "../domain";
 
 const MAX_SOURCE_VISUAL_BYTES = 2 * 1024 * 1024;
+export const SOURCE_VISUAL_NORMALIZATION_VERSION = "full-bleed-9x16-v1" as const;
 
 export interface StoredSourceVisual {
   body: ReadableStream<Uint8Array>;
@@ -43,6 +44,7 @@ function visualMetadata(input: {
     objectKey: `profiles/${input.profileId}/items/${input.itemId}/cover.jpg`,
     mimeType: input.candidate.mimeType,
     timestampSeconds: input.candidate.timestampSeconds,
+    normalizationVersion: SOURCE_VISUAL_NORMALIZATION_VERSION,
     capturedAt: input.capturedAt,
   });
 }
@@ -66,6 +68,7 @@ class R2SourceVisualStore implements SourceVisualStore {
       customMetadata: {
         kind: visual.kind,
         timestampSeconds: visual.timestampSeconds.toString(),
+        normalizationVersion: SOURCE_VISUAL_NORMALIZATION_VERSION,
         capturedAt: visual.capturedAt,
       },
     });

@@ -107,6 +107,7 @@ describe("Learning Item pipeline", () => {
         objectKey: "profiles/profile/items/item/cover.jpg",
         mimeType: "image/jpeg",
         timestampSeconds: 1.5,
+        normalizationVersion: "full-bleed-9x16-v1",
         capturedAt: "2026-08-19T12:00:00.000Z",
       }),
       get: vi.fn(),

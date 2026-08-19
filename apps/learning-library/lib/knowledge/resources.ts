@@ -451,6 +451,10 @@ export async function upsertKnowledgeResourceForItem(
     matched?.lastResearchedAt ?? null,
     item.card.researchBrief?.researchedAt ?? null,
   ].filter((value): value is string => Boolean(value)).sort().at(-1) ?? null;
+  const coverSourceItemId = matched?.coverSourceItemId ?? (item.sourceVisual ? item.id : null);
+  const coverCapturedAt = coverSourceItemId === item.id && item.sourceVisual
+    ? item.sourceVisual.capturedAt
+    : matched?.coverCapturedAt ?? null;
   const resource = knowledgeResourceSchema.parse({
     id: matched?.id ?? id(),
     profileId: item.profileId,
@@ -467,7 +471,8 @@ export async function upsertKnowledgeResourceForItem(
     entities: [...new Set([...(matched?.entities ?? []), ...resourceEntities(item.card, baseEntries)])].slice(0, 30),
     entries: baseEntries,
     sourceItemIds,
-    coverSourceItemId: matched?.coverSourceItemId ?? (item.sourceVisual ? item.id : null),
+    coverSourceItemId,
+    coverCapturedAt,
     contributions: [...previousContributions.slice(-199), contribution],
     lastResearchedAt,
     mergeModel: mergeDecision?.model ?? matched?.mergeModel ?? null,
@@ -513,12 +518,18 @@ export async function synchronizeKnowledgeResources(
       ? resource.coverSourceItemId
       : null;
     const repairedCover = retainedCover ?? resource.sourceItemIds.find((itemId) => Boolean(itemById.get(itemId)?.sourceVisual)) ?? null;
-    if (resource.intent === repairedIntent && resource.coverSourceItemId === repairedCover) continue;
+    const repairedCoverCapturedAt = repairedCover ? itemById.get(repairedCover)?.sourceVisual?.capturedAt ?? null : null;
+    if (
+      resource.intent === repairedIntent
+      && resource.coverSourceItemId === repairedCover
+      && resource.coverCapturedAt === repairedCoverCapturedAt
+    ) continue;
 
     await repository.saveResource(knowledgeResourceSchema.parse({
       ...resource,
       intent: repairedIntent,
       coverSourceItemId: repairedCover,
+      coverCapturedAt: repairedCoverCapturedAt,
       version: resource.version + 1,
     }));
     for (const itemId of resource.sourceItemIds) {

@@ -176,6 +176,7 @@ describe("Living resources", () => {
     const created = await upsertKnowledgeResourceForItem(source, repository);
 
     expect(created?.resource.coverSourceItemId).toBe(source.id);
+    expect(created?.resource.coverCapturedAt).toBe("2026-08-18T10:01:00.000Z");
   });
 
   it("repairs a stale specific intent when the source shape does not support it", async () => {
