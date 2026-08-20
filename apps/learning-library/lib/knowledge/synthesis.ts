@@ -13,7 +13,7 @@ import type {
 import { assessKnowledgeResourceFreshness } from "./freshness";
 import { buildActiveFollowThroughPlans, type FollowThroughPlan } from "./follow-through";
 
-export const CROSS_SAVE_SYNTHESIS_VERSION = "cross-save-synthesis-v6-right-time" as const;
+export const CROSS_SAVE_SYNTHESIS_VERSION = "cross-save-synthesis-v7-action-only" as const;
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1_000;
 
@@ -759,6 +759,7 @@ function buildForYouRecommendations(
     .filter((record) => {
       const followThrough = record.followThrough;
       if (!followThrough) return false;
+      if (followThrough.kind === "review") return false;
       if (followThrough.state === "active") return true;
       const resource = resourcesById.get(record.resourceId);
       return !resource || !followThrough.completedAt || resource.updatedAt <= followThrough.completedAt;

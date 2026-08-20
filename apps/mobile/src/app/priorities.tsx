@@ -298,7 +298,7 @@ export default function PrioritiesScreen() {
                   ? 'What changed or became due is first. Curio keeps the rest quietly on track.'
                   : recommendations.length
                     ? 'Your plans are on track. The count above is only the timely suggestions Curio found.'
-                    : 'Your plans are on track. Curio will move one up when something changes or a review is due.'
+                    : 'Your plans are on track. Curio will move one up when something changes or needs attention.'
                 : recommendations.length === 3
                 ? 'One to learn, one to use, and one worth revisiting—without digging through your saves.'
                 : recommendations.length
@@ -315,7 +315,7 @@ export default function PrioritiesScreen() {
             <View style={styles.plansSection}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>You chose</Text>
-                <Text style={styles.sectionSubtitle}>Sorted by what changed and what is due. Quieter plans keep their next review date.</Text>
+                <Text style={styles.sectionSubtitle}>Sorted by what changed and what is due. Quieter plans keep their next check date.</Text>
               </View>
               {activePlans.map((plan) => (
                 <ActivePlanCard

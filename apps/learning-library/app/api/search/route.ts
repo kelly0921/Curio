@@ -39,7 +39,7 @@ async function runLibrarySearch(input: z.infer<typeof searchInputSchema>) {
   return {
     ...result,
     followThroughResourceIds: engagement
-      .filter((record) => record.followThrough?.state === "active")
+      .filter((record) => record.followThrough?.state === "active" && record.followThrough.kind !== "review")
       .map((record) => record.resourceId),
   };
 }

@@ -57,6 +57,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const { plan } = await updateResourceFollowThrough(personalProfile.id, resource, input, repository);
     return NextResponse.json({ ok: true, data: { plan } }, { headers: responseHeaders(request) });
   } catch (error) {
+    if (error instanceof Error && error.message === "FOLLOW_THROUGH_NOT_ACTIONABLE") {
+      return errorResponse(
+        request,
+        "FOLLOW_THROUGH_NOT_ACTIONABLE",
+        "Only trips, checklists, shortlists, and watchlists can be added to For You.",
+        400,
+      );
+    }
     console.error(JSON.stringify({
       event: "resource_follow_through_failed",
       resourceId: id,

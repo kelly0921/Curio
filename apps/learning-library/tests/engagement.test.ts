@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { MemoryLearningItemRepository } from "@/lib/data/memory-repository";
-import type { ContextSnapshot, KnowledgeResource } from "@/lib/domain";
+import type { ContextSnapshot, KnowledgeResource, ResourceEngagement } from "@/lib/domain";
 import { recordResourceEngagement, saveForYouRecommendationFeedback } from "@/lib/knowledge/engagement";
-import { buildActiveFollowThroughPlans, buildFollowThroughPlan, updateResourceFollowThrough } from "@/lib/knowledge/follow-through";
+import { buildActiveFollowThroughPlans, buildFollowThroughPlan, followThroughKindFor, updateResourceFollowThrough } from "@/lib/knowledge/follow-through";
 
 const profileId = "00000000-0000-4000-8000-000000000031";
 const resourceId = "10000000-0000-4000-8000-000000000901";
@@ -163,6 +163,49 @@ describe("For You engagement", () => {
     );
     expect(completed.plan).toEqual(expect.objectContaining({ state: "completed", completedCount: 2 }));
     expect(buildActiveFollowThroughPlans([watchlistResource], [completed.engagement])).toEqual([]);
+  });
+
+  it("does not turn informational resources or legacy review rows into user tasks", async () => {
+    const repository = new MemoryLearningItemRepository();
+    const informational = {
+      ...watchlistResource,
+      resourceType: "guide" as const,
+      intent: "understand" as const,
+      title: "Optical transceivers explained",
+    };
+    expect(followThroughKindFor(informational)).toBeNull();
+    await expect(updateResourceFollowThrough(
+      profileId,
+      informational,
+      { action: "start" },
+      repository,
+      new Date(timestamp),
+    )).rejects.toThrow("FOLLOW_THROUGH_NOT_ACTIONABLE");
+    expect(await repository.listResourceEngagement(profileId)).toEqual([]);
+
+    const legacy: ResourceEngagement = {
+      profileId,
+      resourceId,
+      openCount: 0,
+      expandedCount: 0,
+      sourceOpenCount: 0,
+      deepDiveCount: 0,
+      lastOpenedAt: null,
+      lastExpandedAt: null,
+      lastSourceOpenedAt: null,
+      lastDeepDiveAt: null,
+      followThrough: {
+        kind: "review",
+        state: "active",
+        completedEntryIds: [],
+        startedAt: timestamp,
+        completedAt: null,
+        updatedAt: timestamp,
+      },
+      updatedAt: timestamp,
+    };
+    expect(buildFollowThroughPlan(informational, legacy)).toBeNull();
+    expect(buildActiveFollowThroughPlans([informational], [legacy])).toEqual([]);
   });
 
   it("resurfaces active plans only when evidence, timing, or real context makes them relevant", async () => {

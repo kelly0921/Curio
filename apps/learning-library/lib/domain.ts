@@ -204,6 +204,7 @@ export const resourceEngagementSignalSchema = z.enum([
   "deep_dive",
 ]);
 
+// "review" remains readable for legacy engagement rows, but Curio no longer creates generic review plans.
 export const followThroughKindSchema = z.enum([
   "checklist",
   "trip_plan",

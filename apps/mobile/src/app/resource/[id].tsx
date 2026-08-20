@@ -123,9 +123,10 @@ export default function ResourceDetailScreen() {
   const latestContribution = useMemo(() => resource?.contributions.at(-1) ?? null, [resource]);
   const researchNeedsRefresh = freshness?.status === 'due' || freshness?.status === 'unresearched';
   const useGuide = useMemo(() => resource ? resourceUseGuide(resource) : null, [resource]);
-  const followThroughCopy = useMemo(() => resource
-    ? followThroughPresentation(resourceFollowThroughKind(resource))
-    : null, [resource]);
+  const followThroughKind = useMemo(() => resource ? resourceFollowThroughKind(resource) : null, [resource]);
+  const followThroughCopy = useMemo(() => followThroughKind
+    ? followThroughPresentation(followThroughKind)
+    : null, [followThroughKind]);
   const deepDiveOptions = useMemo(() => resource ? resourceDeepDiveOptions(resource) : [], [resource]);
   const suggestedNextMove = useMemo(() => [...sources]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))

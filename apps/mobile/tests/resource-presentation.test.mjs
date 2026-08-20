@@ -65,17 +65,18 @@ test('uses the first practical step when a playbook is ready to try', () => {
   ]);
 });
 
-test('maps travel, comparison, and reference resources to low-input follow-through formats', () => {
+test('maps only naturally actionable resources to follow-through formats', () => {
   assert.equal(resourceFollowThroughKind(resource({ intent: 'visit', resourceType: 'guide' })), 'trip_plan');
   assert.equal(resourceFollowThroughKind(resource({ intent: 'compare', resourceType: 'guide' })), 'shortlist');
-  assert.equal(resourceFollowThroughKind(resource({ intent: 'reference', resourceType: 'glossary' })), 'review');
+  assert.equal(resourceFollowThroughKind(resource({ intent: 'reference', resourceType: 'glossary' })), null);
+  assert.equal(resourceFollowThroughKind(resource({ intent: 'understand', resourceType: 'guide' })), null);
   assert.equal(followThroughPresentation('trip_plan').activeLabel, 'In your trip prep');
 });
 
 test('keeps follow-through timing labels compact and only explains actionable plans', () => {
-  assert.deepEqual(followThroughAttentionPresentation('now'), { label: 'REVIEW NOW', showReason: true });
+  assert.deepEqual(followThroughAttentionPresentation('now'), { label: 'NEEDS ATTENTION', showReason: true });
   assert.deepEqual(followThroughAttentionPresentation('soon'), { label: 'COMING UP', showReason: true });
-  assert.deepEqual(followThroughAttentionPresentation('on_track'), { label: 'NEXT REVIEW', showReason: false });
+  assert.deepEqual(followThroughAttentionPresentation('on_track'), { label: 'NEXT CHECK', showReason: false });
 });
 
 test('labels every research state by the depth it offers', () => {

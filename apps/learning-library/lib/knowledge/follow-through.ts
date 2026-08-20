@@ -12,12 +12,16 @@ import { assessKnowledgeResourceFreshness } from "./freshness";
 const DAY_IN_MS = 24 * 60 * 60 * 1_000;
 const SOON_WINDOW_IN_MS = 2 * DAY_IN_MS;
 
-const REVIEW_CADENCE_DAYS: Record<FollowThroughKind, number> = {
+export type ActionableFollowThroughKind = Exclude<FollowThroughKind, "review">;
+
+type StoredFollowThrough = NonNullable<ResourceEngagement["followThrough"]>;
+type ActionableStoredFollowThrough = Omit<StoredFollowThrough, "kind"> & { kind: ActionableFollowThroughKind };
+
+const REVIEW_CADENCE_DAYS: Record<ActionableFollowThroughKind, number> = {
   watchlist: 7,
   checklist: 7,
   trip_plan: 14,
   shortlist: 14,
-  review: 21,
 };
 
 const ACTIONABLE_CONTEXT_KINDS = new Set(["goal", "preference", "constraint", "plan", "habit"]);
@@ -35,7 +39,7 @@ export interface FollowThroughPlan {
   resourceId: string;
   resourceTitle: string;
   domain: KnowledgeResource["domain"];
-  kind: FollowThroughKind;
+  kind: ActionableFollowThroughKind;
   state: "active" | "completed";
   entries: FollowThroughPlanEntry[];
   completedCount: number;
@@ -57,7 +61,13 @@ function usableEntries(resource: KnowledgeResource) {
   return resource.entries.filter((entry) => entry.status !== "superseded");
 }
 
-function reviewDate(updatedAt: string, kind: FollowThroughKind): Date {
+function isActionableStoredFollowThrough(
+  followThrough: StoredFollowThrough | null | undefined,
+): followThrough is ActionableStoredFollowThrough {
+  return Boolean(followThrough && followThrough.kind !== "review");
+}
+
+function reviewDate(updatedAt: string, kind: ActionableFollowThroughKind): Date {
   return new Date(Date.parse(updatedAt) + REVIEW_CADENCE_DAYS[kind] * DAY_IN_MS);
 }
 
@@ -93,25 +103,25 @@ function matchesCurrentContext(
     }));
 }
 
-function dueReason(kind: FollowThroughKind): string {
+function dueReason(kind: ActionableFollowThroughKind): string {
   if (kind === "watchlist") return "Time to recheck the evidence behind this watchlist.";
   if (kind === "trip_plan") return "Your trip prep is due for a quick review.";
   if (kind === "shortlist") return "Revisit this shortlist before the options go stale.";
   if (kind === "checklist") return "This checklist is ready for its next step.";
-  return "This resource is due for a quick review.";
+  return "This plan is ready for its next step.";
 }
 
-function soonReason(kind: FollowThroughKind): string {
+function soonReason(kind: ActionableFollowThroughKind): string {
   if (kind === "watchlist") return "This watchlist is due for an evidence check soon.";
   if (kind === "trip_plan") return "Your trip prep is coming up for review.";
   if (kind === "shortlist") return "This shortlist is coming up for review.";
   if (kind === "checklist") return "This checklist is coming back soon.";
-  return "This resource is coming up for review.";
+  return "This plan is coming up soon.";
 }
 
 function followThroughTiming(
   resource: KnowledgeResource,
-  followThrough: NonNullable<ResourceEngagement["followThrough"]>,
+  followThrough: ActionableStoredFollowThrough,
   completedCount: number,
   totalCount: number,
   context: ContextSnapshot | null | undefined,
@@ -162,17 +172,17 @@ function followThroughTiming(
   }
   return {
     attention: "on_track",
-    whyNow: "Nothing needs attention yet. Curio will bring this back for review.",
+    whyNow: "Nothing needs attention yet. Curio will bring this plan back when it does.",
     nextReviewAt,
   };
 }
 
-export function followThroughKindFor(resource: KnowledgeResource): FollowThroughKind {
+export function followThroughKindFor(resource: KnowledgeResource): ActionableFollowThroughKind | null {
   if (resource.intent === "track" || resource.resourceType === "watchlist") return "watchlist";
   if (resource.intent === "visit") return "trip_plan";
   if (resource.intent === "buy" || resource.intent === "compare") return "shortlist";
   if (resource.intent === "try" || resource.resourceType === "playbook") return "checklist";
-  return "review";
+  return null;
 }
 
 export function buildFollowThroughPlan(
@@ -182,7 +192,7 @@ export function buildFollowThroughPlan(
   now = new Date(),
 ): FollowThroughPlan | null {
   const followThrough = engagement?.followThrough;
-  if (!followThrough) return null;
+  if (!isActionableStoredFollowThrough(followThrough)) return null;
   const completedIds = new Set(followThrough.completedEntryIds);
   const entries = usableEntries(resource).map((entry) => ({
     id: entry.id,
@@ -240,7 +250,10 @@ export async function updateResourceFollowThrough(
     ?? emptyResourceEngagement(profileId, resource.id, now);
   const entries = usableEntries(resource);
   const validEntryIds = new Set(entries.map((entry) => entry.id));
-  const current = existing.followThrough?.state === "active" ? existing.followThrough : null;
+  const existingActive = existing.followThrough?.state === "active" ? existing.followThrough : null;
+  const current = isActionableStoredFollowThrough(existingActive) ? existingActive : null;
+  const kind = current?.kind ?? followThroughKindFor(resource);
+  if (!kind) throw new Error("FOLLOW_THROUGH_NOT_ACTIONABLE");
   const startedAt = current?.startedAt ?? timestamp;
   const completedEntryIds = new Set(current?.completedEntryIds.filter((id) => validEntryIds.has(id)) ?? []);
 
@@ -256,7 +269,7 @@ export async function updateResourceFollowThrough(
   const engagement = resourceEngagementSchema.parse({
     ...existing,
     followThrough: {
-      kind: current?.kind ?? followThroughKindFor(resource),
+      kind,
       state: update.action === "complete" ? "completed" : "active",
       completedEntryIds: [...completedEntryIds],
       startedAt,

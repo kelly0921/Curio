@@ -27,6 +27,7 @@ import {
   type KnowledgeResource,
   type KnowledgeSearchResult,
 } from '@/lib/curio-api';
+import { resourceFollowThroughKind } from '@/lib/resource-presentation';
 
 function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
@@ -148,6 +149,9 @@ export default function HomeScreen() {
   const hasQuery = Boolean(query.trim());
   const resolvedSearch = searchResult?.query.toLocaleLowerCase() === query.trim().toLocaleLowerCase() ? searchResult : null;
   const answer = resolvedSearch?.answer ?? null;
+  const answerResourcesById = useMemo(() => new Map(
+    (resolvedSearch?.results ?? []).map((result) => [result.resource.id, result.resource]),
+  ), [resolvedSearch]);
   const questionMode = hasQuery && looksLikeQuestion(query);
 
   async function handleFollowThrough(resourceId: string) {
@@ -231,6 +235,8 @@ export default function HomeScreen() {
                   <Text style={styles.answerSummary}>{answer.summary}</Text>
                   <View style={styles.answerPoints}>
                     {answer.points.slice(0, 4).map((point) => {
+                      const answerResource = answerResourcesById.get(point.resourceId);
+                      const actionable = answerResource ? resourceFollowThroughKind(answerResource) !== null : false;
                       const active = followThroughResourceIds.has(point.resourceId);
                       const updating = followThroughUpdatingId === point.resourceId;
                       return (
@@ -248,7 +254,7 @@ export default function HomeScreen() {
                           </Pressable>
                           <View style={styles.answerPointActions}>
                             <Text style={styles.answerEvidence}>{point.evidence}</Text>
-                            <Pressable
+                            {actionable && <Pressable
                               accessibilityLabel={active ? `Open ${point.resourceTitle} in For You` : `Add ${point.resourceTitle} to For You`}
                               disabled={Boolean(followThroughUpdatingId)}
                               onPress={() => void handleFollowThrough(point.resourceId)}
@@ -256,7 +262,7 @@ export default function HomeScreen() {
                               {updating
                                 ? <ActivityIndicator color={colors.ink} size="small" />
                                 : <Text style={[styles.answerUseButtonText, active && styles.answerUseButtonTextActive]}>{active ? '✓ In For You' : 'Use this'}</Text>}
-                            </Pressable>
+                            </Pressable>}
                           </View>
                         </View>
                       );

@@ -436,6 +436,43 @@ describe("cross-save synthesis", () => {
     expect(completed.recommendations.some((recommendation) => recommendation.resourceId === "use")).toBe(false);
   });
 
+  it("ignores legacy generic review rows instead of hiding useful informational suggestions", () => {
+    const informational = resource("learn", "finance", ["save-1"], {
+      resourceType: "glossary",
+      intent: "understand",
+      title: "Financial terms in plain English",
+    });
+    const result = buildCrossSaveSynthesis({
+      items: [item("save-1")],
+      resources: [informational],
+      engagement: [{
+        profileId: informational.profileId,
+        resourceId: informational.id,
+        openCount: 1,
+        expandedCount: 0,
+        sourceOpenCount: 0,
+        deepDiveCount: 0,
+        lastOpenedAt: RECENT,
+        lastExpandedAt: null,
+        lastSourceOpenedAt: null,
+        lastDeepDiveAt: null,
+        followThrough: {
+          kind: "review",
+          state: "active",
+          completedEntryIds: [],
+          startedAt: RECENT,
+          completedAt: null,
+          updatedAt: RECENT,
+        },
+        updatedAt: RECENT,
+      }],
+      now: NOW,
+    });
+
+    expect(result.followThrough).toEqual([]);
+    expect(result.recommendations.some((recommendation) => recommendation.resourceId === informational.id)).toBe(true);
+  });
+
   it("hides completed recommendations and restores reminders only after their revisit time", () => {
     const practical = resource("use", "ai_work", ["save-1"], {
       resourceType: "playbook",

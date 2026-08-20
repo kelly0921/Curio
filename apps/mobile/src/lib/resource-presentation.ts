@@ -14,7 +14,7 @@ export interface ResourceUseGuide {
   title: string;
 }
 
-export type FollowThroughKind = 'checklist' | 'trip_plan' | 'watchlist' | 'shortlist' | 'review';
+export type FollowThroughKind = 'checklist' | 'trip_plan' | 'watchlist' | 'shortlist';
 
 export interface FollowThroughPresentation {
   eyebrow: string;
@@ -67,28 +67,27 @@ function namedFocus(resource: ResourceUseInput, fallback: string): string {
   return fallback;
 }
 
-export function resourceFollowThroughKind(resource: ResourceUseInput): FollowThroughKind {
+export function resourceFollowThroughKind(resource: ResourceUseInput): FollowThroughKind | null {
   if (resource.intent === 'track' || resource.resourceType === 'watchlist') return 'watchlist';
   if (resource.intent === 'visit') return 'trip_plan';
   if (resource.intent === 'buy' || resource.intent === 'compare') return 'shortlist';
   if (resource.intent === 'try' || resource.resourceType === 'playbook') return 'checklist';
-  return 'review';
+  return null;
 }
 
 export function followThroughPresentation(kind: FollowThroughKind): FollowThroughPresentation {
   if (kind === 'watchlist') return { eyebrow: 'WATCHLIST', startLabel: 'Follow this watchlist', activeLabel: 'In your watchlist', progressNoun: 'items reviewed', completeLabel: 'Finish review' };
   if (kind === 'trip_plan') return { eyebrow: 'TRIP PREP', startLabel: 'Add to trip prep', activeLabel: 'In your trip prep', progressNoun: 'tips prepared', completeLabel: 'Finish trip prep' };
   if (kind === 'shortlist') return { eyebrow: 'SHORTLIST', startLabel: 'Build this shortlist', activeLabel: 'In your shortlist', progressNoun: 'options reviewed', completeLabel: 'Finish shortlist' };
-  if (kind === 'checklist') return { eyebrow: 'CHECKLIST', startLabel: 'Start this checklist', activeLabel: 'Checklist in progress', progressNoun: 'steps done', completeLabel: 'Finish checklist' };
-  return { eyebrow: 'REVIEW LATER', startLabel: 'Review this later', activeLabel: 'In your review queue', progressNoun: 'points reviewed', completeLabel: 'Finish review' };
+  return { eyebrow: 'CHECKLIST', startLabel: 'Start this checklist', activeLabel: 'Checklist in progress', progressNoun: 'steps done', completeLabel: 'Finish checklist' };
 }
 
 export function followThroughAttentionPresentation(
   attention: 'now' | 'soon' | 'on_track',
 ): FollowThroughAttentionPresentation {
-  if (attention === 'now') return { label: 'REVIEW NOW', showReason: true };
+  if (attention === 'now') return { label: 'NEEDS ATTENTION', showReason: true };
   if (attention === 'soon') return { label: 'COMING UP', showReason: true };
-  return { label: 'NEXT REVIEW', showReason: false };
+  return { label: 'NEXT CHECK', showReason: false };
 }
 
 export function resourceUseGuide(resource: ResourceUseInput): ResourceUseGuide {
