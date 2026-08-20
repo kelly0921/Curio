@@ -13,6 +13,10 @@ for (const name of [
   "CURIO_API_TOKEN",
   "SUPABASE_SECRET_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
+  "SUPABASE_AUTH_URL",
+  "SUPABASE_PUBLISHABLE_KEY",
+  "SUPABASE_ANON_KEY",
+  "CURIO_INVITED_EMAILS",
 ]) {
   buildEnvironment[name] = "";
 }

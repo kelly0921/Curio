@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { OpenAILearningServices } from "@/lib/ai/services";
-import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
+import { apiResponseHeaders, authenticateApiRequest } from "@/lib/api/access-control";
 import { getLearningItemRepository } from "@/lib/data/provider";
 import { resourceDeepDiveKindSchema } from "@/lib/domain";
 import { deepenKnowledgeResourceEntry } from "@/lib/knowledge/deep-dive";
@@ -18,9 +18,8 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string; entryId: string }> },
 ) {
-  if (!await isApiRequestAuthorized(request)) {
-    return errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401);
-  }
+  const viewer = await authenticateApiRequest(request);
+  if (!viewer) return errorResponse(request, "UNAUTHORIZED", "Sign in to Curio to continue.", 401);
   const { id, entryId } = await context.params;
   if (!z.string().uuid().safeParse(id).success || !z.string().uuid().safeParse(entryId).success) {
     return errorResponse(request, "INVALID_RESOURCE_ENTRY_ID", "This living-resource entry is invalid.", 400);
@@ -36,6 +35,7 @@ export async function POST(
   try {
     const repository = await getLearningItemRepository();
     const result = await deepenKnowledgeResourceEntry(
+      viewer.profileId,
       id,
       entryId,
       parsedBody.data.kind,

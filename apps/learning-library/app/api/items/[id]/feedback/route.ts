@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
+import { apiResponseHeaders, authenticateApiRequest } from "@/lib/api/access-control";
 import { getPersonalContextSnapshot } from "@/lib/context/provider";
 import { personalizeLearningItem } from "@/lib/context/personalization";
 import { getLearningItemRepository } from "@/lib/data/provider";
@@ -20,9 +20,8 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  if (!await isApiRequestAuthorized(request)) {
-    return errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401);
-  }
+  const viewer = await authenticateApiRequest(request);
+  if (!viewer) return errorResponse(request, "UNAUTHORIZED", "Sign in to Curio to continue.", 401);
 
   const { id } = await context.params;
   if (!z.string().uuid().safeParse(id).success) {
@@ -38,7 +37,7 @@ export async function POST(
 
   try {
     const repository = await getLearningItemRepository();
-    const existing = await repository.findById(id);
+    const existing = await repository.findById(viewer.profileId, id);
     if (!existing) return errorResponse(request, "ITEM_NOT_FOUND", "This learning item could not be found.", 404);
 
     const now = new Date();
@@ -54,7 +53,7 @@ export async function POST(
       },
       updatedAt: now.toISOString(),
     }));
-    const snapshot = await getPersonalContextSnapshot();
+    const snapshot = await getPersonalContextSnapshot(viewer.profileId);
     return NextResponse.json({
       ok: true,
       data: { item: personalizeLearningItem(saved, snapshot, now.toISOString()) },

@@ -17,6 +17,10 @@ interface LearningItemRow {
   record_json: unknown;
 }
 
+function scopedFingerprint(profileId: string, fingerprint: string): string {
+  return `${profileId}:${fingerprint}`;
+}
+
 export function createSupabaseServerFetch(secretKey: string, fetchImpl: typeof fetch = fetch): typeof fetch {
   const isOpaqueApiKey = secretKey.startsWith("sb_secret_") || secretKey.startsWith("sb_publishable_");
   return async (input, init) => {
@@ -39,19 +43,29 @@ export class SupabaseLearningItemRepository implements CurioRepository {
     });
   }
 
-  async list(): Promise<LearningItem[]> {
+  private async ensureProfile(profileId: string): Promise<void> {
+    const result = await this.client.from("learning_profile").upsert({
+      id: profileId,
+      display_name: "Curio user",
+    }, { onConflict: "id", ignoreDuplicates: true });
+    if (result.error) throw new Error(`Supabase ensure learning profile failed: ${result.error.message}`);
+  }
+
+  async list(profileId: string): Promise<LearningItem[]> {
     const result = await this.client
       .from("learning_item")
       .select("id,source_fingerprint,record_json")
+      .eq("profile_id", profileId)
       .order("created_at", { ascending: false });
     if (result.error) throw new Error(`Supabase list learning items failed: ${result.error.message}`);
     return ((result.data ?? []) as LearningItemRow[]).map((row) => learningItemSchema.parse(row.record_json));
   }
 
-  async findById(id: string): Promise<LearningItem | null> {
+  async findById(profileId: string, id: string): Promise<LearningItem | null> {
     const result = await this.client
       .from("learning_item")
       .select("id,source_fingerprint,record_json")
+      .eq("profile_id", profileId)
       .eq("id", id)
       .maybeSingle();
     if (result.error) throw new Error(`Supabase find learning item failed: ${result.error.message}`);
@@ -59,11 +73,12 @@ export class SupabaseLearningItemRepository implements CurioRepository {
     return row ? learningItemSchema.parse(row.record_json) : null;
   }
 
-  async findByFingerprint(fingerprint: string): Promise<LearningItem | null> {
+  async findByFingerprint(profileId: string, fingerprint: string): Promise<LearningItem | null> {
     const result = await this.client
       .from("learning_item")
       .select("id,source_fingerprint,record_json")
-      .eq("source_fingerprint", fingerprint)
+      .eq("profile_id", profileId)
+      .eq("source_fingerprint", scopedFingerprint(profileId, fingerprint))
       .maybeSingle();
     if (result.error) throw new Error(`Supabase find duplicate failed: ${result.error.message}`);
     const row = result.data as LearningItemRow | null;
@@ -72,13 +87,14 @@ export class SupabaseLearningItemRepository implements CurioRepository {
 
   async save(item: LearningItem): Promise<LearningItem> {
     const validated = learningItemSchema.parse(item);
+    await this.ensureProfile(validated.profileId);
     const result = await this.client.from("learning_item").upsert({
       id: validated.id,
       profile_id: validated.profileId,
       source_url: validated.sourceUrl,
       platform: validated.platform,
       source_type: validated.sourceType,
-      source_fingerprint: validated.sourceFingerprint,
+      source_fingerprint: scopedFingerprint(validated.profileId, validated.sourceFingerprint),
       creator: validated.creator,
       processing_status: validated.processingStatus,
       access_level: validated.accessLevel,
@@ -105,10 +121,11 @@ export class SupabaseLearningItemRepository implements CurioRepository {
     return (result.data ?? []).map((row) => knowledgeResourceSchema.parse(row.record_json));
   }
 
-  async findResourceById(id: string): Promise<KnowledgeResource | null> {
+  async findResourceById(profileId: string, id: string): Promise<KnowledgeResource | null> {
     const result = await this.client
       .from("knowledge_resource")
       .select("id,record_json")
+      .eq("profile_id", profileId)
       .eq("id", id)
       .maybeSingle();
     if (result.error) throw new Error(`Supabase find knowledge resource failed: ${result.error.message}`);

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
+import { apiResponseHeaders, authenticateApiRequest } from "@/lib/api/access-control";
 import { getLearningItemRepository } from "@/lib/data/provider";
-import { contextDomainSchema, personalProfile } from "@/lib/domain";
+import { contextDomainSchema } from "@/lib/domain";
 import { searchKnowledge } from "@/lib/knowledge/retrieval";
 import { synchronizeKnowledgeResources } from "@/lib/knowledge/resources";
 
@@ -23,11 +23,11 @@ function errorResponse(request: Request, code: string, message: string, status: 
   return NextResponse.json({ ok: false, error: { code, message } }, { status, headers: responseHeaders(request) });
 }
 
-async function runLibrarySearch(input: z.infer<typeof searchInputSchema>) {
+async function runLibrarySearch(profileId: string, input: z.infer<typeof searchInputSchema>) {
   const repository = await getLearningItemRepository();
   const [items, engagement] = await Promise.all([
-    repository.list(),
-    repository.listResourceEngagement(personalProfile.id),
+    repository.list(profileId),
+    repository.listResourceEngagement(profileId),
   ]);
   const resources = await synchronizeKnowledgeResources(items, repository);
   const result = searchKnowledge({
@@ -49,9 +49,8 @@ function successResponse(request: Request, data: Awaited<ReturnType<typeof runLi
 }
 
 export async function GET(request: Request) {
-  if (!await isApiRequestAuthorized(request)) {
-    return errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401);
-  }
+  const viewer = await authenticateApiRequest(request);
+  if (!viewer) return errorResponse(request, "UNAUTHORIZED", "Sign in to Curio to continue.", 401);
   const url = new URL(request.url);
   const parsed = searchInputSchema.safeParse({
     query: url.searchParams.get("q") ?? "",
@@ -61,7 +60,7 @@ export async function GET(request: Request) {
     return errorResponse(request, "INVALID_SEARCH_QUERY", "Search with 2 to 300 characters in a supported knowledge area.", 400);
   }
   try {
-    return successResponse(request, await runLibrarySearch(parsed.data));
+    return successResponse(request, await runLibrarySearch(viewer.profileId, parsed.data));
   } catch (error) {
     console.error(JSON.stringify({ event: "knowledge_search_failed", errorType: error instanceof Error ? error.name : "unknown" }));
     return errorResponse(request, "SEARCH_UNAVAILABLE", "Curio could not search your knowledge right now.", 500);

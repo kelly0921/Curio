@@ -149,9 +149,9 @@ describe("Living resources", () => {
     await repository.saveResource({ ...created!.resource, intent: "understand" });
     await repository.save({ ...created!.item, inferredIntent: "understand" });
 
-    const currentItem = await repository.findById(source.id);
+    const currentItem = await repository.findById(profileId, source.id);
     const repaired = await synchronizeKnowledgeResources([currentItem!], repository);
-    const savedItem = await repository.findById(source.id);
+    const savedItem = await repository.findById(profileId, source.id);
 
     expect(repaired[0].intent).toBe("visit");
     expect(repaired[0].updatedAt).toBe("2026-08-18T12:00:00.000Z");

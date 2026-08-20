@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
+import { apiResponseHeaders, authenticateApiRequest } from "@/lib/api/access-control";
 import { getLearningItemRepository } from "@/lib/data/provider";
 import { synchronizeKnowledgeResources } from "@/lib/knowledge/resources";
 
@@ -10,12 +10,11 @@ function errorResponse(request: Request, code: string, message: string, status: 
 }
 
 export async function GET(request: Request) {
-  if (!await isApiRequestAuthorized(request)) {
-    return errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401);
-  }
+  const viewer = await authenticateApiRequest(request);
+  if (!viewer) return errorResponse(request, "UNAUTHORIZED", "Sign in to Curio to continue.", 401);
   try {
     const repository = await getLearningItemRepository();
-    const items = await repository.list();
+    const items = await repository.list(viewer.profileId);
     const resources = await synchronizeKnowledgeResources(items, repository);
     return NextResponse.json(
       { ok: true, data: { resources } },

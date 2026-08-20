@@ -69,11 +69,11 @@ describe("resource entry deep dives", () => {
       },
     };
 
-    const first = await deepenKnowledgeResourceEntry(resourceId, entryId, "how_it_works", repository, deepDiver, {
+    const first = await deepenKnowledgeResourceEntry(profileId, resourceId, entryId, "how_it_works", repository, deepDiver, {
       id: () => "40000000-0000-4000-8000-000000000801",
       now: () => "2026-08-19T12:00:00.000Z",
     });
-    const second = await deepenKnowledgeResourceEntry(resourceId, entryId, "how_it_works", repository, deepDiver);
+    const second = await deepenKnowledgeResourceEntry(profileId, resourceId, entryId, "how_it_works", repository, deepDiver);
 
     expect(first?.generated).toBe(true);
     expect(first?.resource.version).toBe(2);
@@ -93,6 +93,7 @@ describe("resource entry deep dives", () => {
     const repository = new MemoryLearningItemRepository();
     await repository.saveResource(saved);
     await expect(deepenKnowledgeResourceEntry(
+      profileId,
       resourceId,
       "20000000-0000-4000-8000-000000000899",
       "how_it_works",

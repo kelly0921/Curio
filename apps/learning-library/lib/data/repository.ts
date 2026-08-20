@@ -6,15 +6,15 @@ import type {
 } from "../domain";
 
 export interface LearningItemRepository {
-  list(): Promise<LearningItem[]>;
-  findById(id: string): Promise<LearningItem | null>;
-  findByFingerprint(fingerprint: string): Promise<LearningItem | null>;
+  list(profileId: string): Promise<LearningItem[]>;
+  findById(profileId: string, id: string): Promise<LearningItem | null>;
+  findByFingerprint(profileId: string, fingerprint: string): Promise<LearningItem | null>;
   save(item: LearningItem): Promise<LearningItem>;
 }
 
 export interface KnowledgeResourceRepository {
   listResources(profileId: string): Promise<KnowledgeResource[]>;
-  findResourceById(id: string): Promise<KnowledgeResource | null>;
+  findResourceById(profileId: string, id: string): Promise<KnowledgeResource | null>;
   saveResource(resource: KnowledgeResource): Promise<KnowledgeResource>;
 }
 

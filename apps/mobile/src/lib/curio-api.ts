@@ -531,8 +531,21 @@ export function getCurioApiUrl(): string {
   return (process.env.EXPO_PUBLIC_CURIO_API_URL?.trim() || inferredDevelopmentUrl()).replace(/\/$/, '');
 }
 
+let authenticatedAccessToken: string | null = null;
+let authenticatedSessionEnabled = false;
+
+export function setCurioAccessToken(token: string | null, sessionEnabled = true): void {
+  authenticatedAccessToken = token;
+  authenticatedSessionEnabled = sessionEnabled;
+}
+
+function curioAccessToken(): string | null {
+  if (authenticatedSessionEnabled) return authenticatedAccessToken;
+  return process.env.EXPO_PUBLIC_CURIO_API_TOKEN?.trim() || null;
+}
+
 export function getSourceCoverImageSource(itemId: string, capturedAt?: string | null): { uri: string; headers?: Record<string, string> } {
-  const personalAccessToken = process.env.EXPO_PUBLIC_CURIO_API_TOKEN?.trim();
+  const personalAccessToken = curioAccessToken();
   const version = capturedAt ? `?v=${encodeURIComponent(capturedAt)}` : '';
   return {
     uri: `${getCurioApiUrl()}/api/items/${encodeURIComponent(itemId)}/cover${version}`,
@@ -576,7 +589,7 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 150_000);
   const headers = new Headers(init?.headers);
-  const personalAccessToken = process.env.EXPO_PUBLIC_CURIO_API_TOKEN?.trim();
+  const personalAccessToken = curioAccessToken();
   if (personalAccessToken) headers.set('Authorization', `Bearer ${personalAccessToken}`);
   try {
     return await fetch(`${getCurioApiUrl()}${path}`, { ...init, headers, signal: controller.signal, cache: 'no-store' });

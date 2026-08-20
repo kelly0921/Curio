@@ -32,6 +32,7 @@ export function resourceEntryDeepDiveQuestion(
 }
 
 export async function deepenKnowledgeResourceEntry(
+  profileId: string,
   resourceId: string,
   entryId: string,
   kind: ResourceDeepDiveKind,
@@ -43,7 +44,7 @@ export async function deepenKnowledgeResourceEntry(
     refresh?: boolean;
   } = {},
 ): Promise<ResourceEntryDeepDiveResult | null> {
-  const resource = await repository.findResourceById(resourceId);
+  const resource = await repository.findResourceById(profileId, resourceId);
   if (!resource) return null;
   const entry = resource.entries.find((candidate) => candidate.id === entryId);
   if (!entry) throw new Error("RESOURCE_ENTRY_NOT_FOUND");

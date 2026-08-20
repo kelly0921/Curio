@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CurioBrand } from '@/components/curio-brand';
 import { colors, fonts, shadows } from '@/constants/curio-theme';
+import { useCurioAuth } from '@/lib/curio-auth';
 import { getPersonalContext, type ContextSnapshot } from '@/lib/curio-api';
 
 function label(value: string): string {
@@ -12,9 +13,12 @@ function label(value: string): string {
 }
 
 export default function SettingsScreen() {
+  const auth = useCurioAuth();
   const [context, setContext] = useState<ContextSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -80,6 +84,27 @@ export default function SettingsScreen() {
           <View style={styles.plannedPill}><Text style={styles.plannedText}>PLANNED</Text></View>
           <Text style={styles.nextCopy}>Once connected, Curio can sync goals, plans, constraints, and preferences automatically. No repeated profile setup.</Text>
         </View>
+
+        <View style={styles.accountSection}>
+          <Text style={styles.eyebrow}>ACCOUNT</Text>
+          <Text style={styles.accountEmail}>{auth.session?.user.email ?? 'Personal beta mode'}</Text>
+          <Text style={styles.accountCopy}>{auth.configured ? 'Your Curio library is isolated to this signed-in account.' : 'Passwordless accounts are ready in the app and will appear when Supabase Auth is configured.'}</Text>
+          {accountError && <Text style={styles.accountError}>{accountError}</Text>}
+          {auth.configured && (
+            <Pressable
+              disabled={signingOut}
+              onPress={() => {
+                setSigningOut(true);
+                setAccountError(null);
+                void auth.signOut().catch((signOutError: unknown) => {
+                  setAccountError(signOutError instanceof Error ? signOutError.message : 'Curio could not sign you out.');
+                }).finally(() => setSigningOut(false));
+              }}
+              style={styles.signOutButton}>
+              {signingOut ? <ActivityIndicator color={colors.ink} size="small" /> : <Text style={styles.signOutText}>Sign out</Text>}
+            </Pressable>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -124,4 +149,10 @@ const styles = StyleSheet.create({
   plannedPill: { alignSelf: 'flex-start', backgroundColor: colors.lilac, borderRadius: 11, marginTop: 11, paddingHorizontal: 9, paddingVertical: 6 },
   plannedText: { color: colors.ink, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.7 },
   nextCopy: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 13 },
+  accountSection: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 34, paddingTop: 26 },
+  accountEmail: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: '700', marginTop: 7 },
+  accountCopy: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 7 },
+  accountError: { color: colors.danger, fontFamily: fonts.body, fontSize: 11, marginTop: 10 },
+  signOutButton: { alignItems: 'center', alignSelf: 'flex-start', borderColor: colors.line, borderRadius: 14, borderWidth: 1, justifyContent: 'center', marginTop: 16, minHeight: 42, minWidth: 92, paddingHorizontal: 15 },
+  signOutText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '700' },
 });

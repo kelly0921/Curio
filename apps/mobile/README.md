@@ -28,13 +28,13 @@ Incoming sharing is experimental in Expo SDK 57. On iOS, the share extension ope
 
 ## Processor connection
 
-The personal beta is deployed at:
+The processor is deployed at:
 
 ```text
 https://curio-processor.kellychenmeiyi.workers.dev
 ```
 
-The Git-ignored `apps/mobile/.env.local` contains this URL and the matching personal-beta token. The Expo `development`, `preview`, and `production` environments are also configured, so the app can reach Curio without the computer running.
+The Git-ignored `apps/mobile/.env.local` contains this URL and currently uses the legacy personal-beta token. Once Supabase Auth is configured, the app uses each person’s passwordless session instead and keeps that session in native secure storage.
 
 To use the local processor instead, update `EXPO_PUBLIC_CURIO_API_URL`, then run:
 
@@ -55,7 +55,7 @@ EXPO_PUBLIC_CURIO_API_URL=http://YOUR_COMPUTER_LAN_IP:3031
 EXPO_PUBLIC_CURIO_API_TOKEN=YOUR_PERSONAL_BETA_TOKEN
 ```
 
-Both devices must be on the same Wi-Fi network and Windows Firewall must allow the Node development servers. `EXPO_PUBLIC_` values are bundled into the app and should never contain OpenAI or database credentials; this token is only a temporary personal-beta gate.
+Both devices must be on the same Wi-Fi network and Windows Firewall must allow the Node development servers. `EXPO_PUBLIC_` values are bundled into the app and should never contain OpenAI, database, or Supabase secret/service-role credentials.
 
 ## Visual preview
 
@@ -115,7 +115,7 @@ node node_modules/expo/bin/cli config --type public
 ## Production gates still open
 
 - Replace the personal prototype identifiers (`com.kelly.curio`) before store submission if needed.
-- Add real user authentication and user-scoped storage before inviting external testers.
+- Configure the implemented Supabase passwordless auth flow, invite allowlist, and `curio://auth/callback` redirect before inviting external testers.
 - Replace the labeled mock context connection with user-authorized Notion sync.
 - Replace the personal-beta bearer gate before distributing the binary.
 - Move uploaded media to signed R2 uploads and processing to a Queue.

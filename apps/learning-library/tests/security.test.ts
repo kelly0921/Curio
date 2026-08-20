@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { isApiRequestAuthorized } from "@/lib/api/access-control";
+import { authenticateApiRequest, isApiRequestAuthorized } from "@/lib/api/access-control";
 import { developmentAppOrigin, isSameOriginRequest } from "@/lib/api/same-origin";
 import { createSupabaseServerFetch } from "@/lib/data/supabase-repository";
 
@@ -76,6 +76,55 @@ describe("server boundaries", () => {
       expect(await isApiRequestAuthorized(new Request("https://curio.example/api/items"), "production")).toBe(false);
     } finally {
       if (previous !== undefined) process.env.CURIO_API_TOKEN = previous;
+    }
+  });
+
+  it("uses a verified Supabase identity and enforces the private-beta invite list", async () => {
+    const previous = {
+      authUrl: process.env.SUPABASE_AUTH_URL,
+      publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY,
+      invitedEmails: process.env.CURIO_INVITED_EMAILS,
+      personalToken: process.env.CURIO_API_TOKEN,
+    };
+    process.env.SUPABASE_AUTH_URL = "https://curio-auth.example";
+    process.env.SUPABASE_PUBLISHABLE_KEY = "sb_publishable_example";
+    process.env.CURIO_INVITED_EMAILS = "invited@example.com";
+    process.env.CURIO_API_TOKEN = "legacy-token-must-not-bypass-auth";
+    const request = new Request("https://curio.example/api/items", {
+      headers: { Authorization: "Bearer verified-user-token" },
+    });
+    try {
+      const viewer = await authenticateApiRequest(request, {
+        environment: "production",
+        verifySupabaseToken: async (token) => token === "verified-user-token" ? {
+          profileId: "10000000-0000-4000-8000-000000000001",
+          email: "invited@example.com",
+        } : null,
+      });
+      expect(viewer).toEqual({
+        profileId: "10000000-0000-4000-8000-000000000001",
+        email: "invited@example.com",
+        authMode: "supabase",
+      });
+
+      const notInvited = await authenticateApiRequest(request, {
+        environment: "production",
+        verifySupabaseToken: async () => ({
+          profileId: "20000000-0000-4000-8000-000000000002",
+          email: "stranger@example.com",
+        }),
+      });
+      expect(notInvited).toBeNull();
+    } finally {
+      for (const [name, value] of Object.entries({
+        SUPABASE_AUTH_URL: previous.authUrl,
+        SUPABASE_PUBLISHABLE_KEY: previous.publishableKey,
+        CURIO_INVITED_EMAILS: previous.invitedEmails,
+        CURIO_API_TOKEN: previous.personalToken,
+      })) {
+        if (value === undefined) Reflect.deleteProperty(process.env, name);
+        else process.env[name] = value;
+      }
     }
   });
 

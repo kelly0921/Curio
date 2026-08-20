@@ -7,6 +7,8 @@ import { processLearningItem, sourceFingerprint } from "@/lib/processing/pipelin
 import { PUBLIC_SOURCE_RETRIEVAL_VERSION } from "@/lib/retrieval/instagram-reel";
 import type { SourceVisualStore } from "@/lib/media/source-visual-store";
 
+const profileId = "00000000-0000-4000-8000-000000000031";
+
 const card: LearningCard = {
   title: "A grounded card",
   primaryTopic: "career",
@@ -47,6 +49,7 @@ describe("Learning Item pipeline", () => {
     const transcriber: MediaTranscriber = { transcribe: vi.fn().mockResolvedValue({ text: "Keep a small decision log.", model: "test-transcriber" }) };
     const analyzer: LearningCardAnalyzer = { analyze: vi.fn().mockResolvedValue({ card, mode: "live_openai", model: "test-analyzer", promptVersion: LEARNING_CARD_PROMPT_VERSION }) };
     const result = await processLearningItem(uploadInput(new File(["video"], "lesson.mp4", { type: "video/mp4" })), {
+      profileId,
       repository,
       transcriber,
       analyzer,
@@ -72,6 +75,7 @@ describe("Learning Item pipeline", () => {
       intent: "reference",
       mediaFile: null,
     }, {
+      profileId,
       repository: new MemoryLearningItemRepository(),
       transcriber: null,
       analyzer,
@@ -121,6 +125,7 @@ describe("Learning Item pipeline", () => {
       intent: "remember",
       mediaFile: null,
     }, {
+      profileId,
       repository: new MemoryLearningItemRepository(),
       transcriber: null,
       retriever,
@@ -169,6 +174,7 @@ describe("Learning Item pipeline", () => {
       intent: "verify",
       mediaFile: null,
     }, {
+      profileId,
       repository: new MemoryLearningItemRepository(),
       transcriber: null,
       analyzer,
@@ -214,8 +220,8 @@ describe("Learning Item pipeline", () => {
       mediaFile: null,
     };
 
-    const first = await processLearningItem(input, { repository, transcriber: null, retriever, analyzer });
-    const retried = await processLearningItem(input, { repository, transcriber: null, retriever, analyzer });
+    const first = await processLearningItem(input, { profileId, repository, transcriber: null, retriever, analyzer });
+    const retried = await processLearningItem(input, { profileId, repository, transcriber: null, retriever, analyzer });
 
     expect(first.item.accessLevel).toBe("link_only");
     expect(retried.duplicate).toBe(false);
@@ -265,17 +271,20 @@ describe("Learning Item pipeline", () => {
     };
 
     const captionOnly = await processLearningItem(input, {
+      profileId,
       repository,
       transcriber: null,
       analyzer: { analyze },
     });
     const upgraded = await processLearningItem(input, {
+      profileId,
       repository,
       transcriber: null,
       retriever,
       analyzer: { analyze },
     });
     const duplicate = await processLearningItem(input, {
+      profileId,
       repository,
       transcriber: null,
       retriever,
@@ -307,7 +316,7 @@ describe("Learning Item pipeline", () => {
       intent: "remember",
       mediaFile: null,
     };
-    const captionOnly = await processLearningItem(input, { repository, transcriber: null, analyzer: { analyze } });
+    const captionOnly = await processLearningItem(input, { profileId, repository, transcriber: null, analyzer: { analyze } });
     await repository.save({ ...captionOnly.item, sourceRetrievalVersion: PUBLIC_SOURCE_RETRIEVAL_VERSION });
 
     const retrieve = vi.fn().mockResolvedValue({
@@ -325,6 +334,7 @@ describe("Learning Item pipeline", () => {
     });
     const mediaUrls = ["https://media.cdninstagram.com/reel.mp4?efg=encoded"];
     const retried = await processLearningItem({ ...input, publicMediaUrls: mediaUrls }, {
+      profileId,
       repository,
       transcriber: null,
       retriever: { retrieve },
@@ -341,6 +351,7 @@ describe("Learning Item pipeline", () => {
     const transcribe = vi.fn().mockResolvedValue({ text: "Same source.", model: "test-transcriber" });
     const analyze = vi.fn().mockResolvedValue({ card, mode: "live_openai", model: "test-analyzer", promptVersion: LEARNING_CARD_PROMPT_VERSION });
     const dependencies = {
+      profileId,
       repository,
       transcriber: { transcribe },
       analyzer: { analyze },
@@ -385,8 +396,9 @@ describe("Learning Item pipeline", () => {
       intent: "remember",
       mediaFile: null,
     };
-    const first = await processLearningItem(base, { repository, transcriber: null, analyzer });
+    const first = await processLearningItem(base, { profileId, repository, transcriber: null, analyzer });
     const enriched = await processLearningItem({ ...base, sourceCaption: "A useful lesson with enough evidence to process." }, {
+      profileId,
       repository,
       transcriber: null,
       analyzer,
@@ -415,8 +427,8 @@ describe("Learning Item pipeline", () => {
       mediaFile: null,
     };
 
-    const first = await processLearningItem(input, { repository, transcriber: null, analyzer: { analyze } });
-    const refreshed = await processLearningItem(input, { repository, transcriber: null, analyzer: { analyze } });
+    const first = await processLearningItem(input, { profileId, repository, transcriber: null, analyzer: { analyze } });
+    const refreshed = await processLearningItem(input, { profileId, repository, transcriber: null, analyzer: { analyze } });
 
     expect(refreshed.duplicate).toBe(false);
     expect(refreshed.item.id).toBe(first.item.id);

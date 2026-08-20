@@ -116,8 +116,11 @@ The recorded sample works without credentials and is clearly labeled as `determi
 | `OPENAI_ANALYSIS_MODEL` | No | Defaults to `gpt-5.4-mini` |
 | `OPENAI_RETRIEVAL_MODEL` | No | Defaults to `gpt-5.4-mini`; uses the Responses API web-search tool |
 | `ENABLE_EXPERIMENTAL_INSTAGRAM_EMBED` | No | Local default: on. Production default: off; enables bounded public Reel caption/media retrieval |
-| `CURIO_API_TOKEN` | Production | Server-side copy of the personal-beta bearer token; store as an encrypted Worker secret |
+| `CURIO_API_TOKEN` | Personal-beta fallback | Server-side copy of the legacy shared bearer token; remove after account auth is enabled |
 | `CURIO_ALLOWED_ORIGINS` | Browser previews | Optional comma-separated exact browser origins; native mobile requests do not require CORS |
+| `SUPABASE_AUTH_URL` | Multi-user beta | Supabase project URL used to verify passwordless user sessions |
+| `SUPABASE_PUBLISHABLE_KEY` | Multi-user beta | Supabase publishable key used only for session verification |
+| `CURIO_INVITED_EMAILS` | Private beta | Optional comma-separated allowlist stored as an encrypted Worker secret |
 | `SUPABASE_URL` | Durable storage | Supabase project URL; set with the secret key |
 | `SUPABASE_SECRET_KEY` | Durable storage | Preferred `sb_secret_...` server key; never expose in `NEXT_PUBLIC_` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Legacy fallback | Accepted only when a newer secret key is unavailable |
@@ -189,7 +192,7 @@ The app uses the OpenNext Cloudflare adapter because it needs server route handl
 
 For Workers Builds, set the root directory to `apps/learning-library`, the build command to `npm ci && npm run build:cloudflare`, and the deploy command to `npx wrangler deploy --keep-vars`.
 
-The deployed personal beta requires a bearer token on item and context APIs. Because the Expo copy is bundled into the client, this reduces accidental public use but is not user authentication. Add real account authentication before inviting testers. Direct media uploads should move to presigned R2 URLs; do not raise the in-memory route limit as a substitute.
+When Supabase Auth is configured, every API route verifies the user session and scopes items, duplicate detection, resources, context, engagement, and For You state to that user ID. Without auth configuration, the existing bearer token remains available only as a personal-beta fallback. Direct media uploads should still move to presigned R2 URLs; do not raise the in-memory route limit as a substitute.
 
 ## Important prototype limitations
 
@@ -199,7 +202,7 @@ The deployed personal beta requires a bearer token on item and context APIs. Bec
 - No automated video-frame OCR yet
 - Uploaded media itself is not durably stored; the transcript and an ephemeral filename reference are retained
 - No retry endpoint yet; resubmit after correcting a recoverable failure
-- No user auth; one configured personal profile protected by a personal-beta bearer gate
+- Supabase passwordless auth is implemented but still needs a project, redirect URL, invite list, and production environment configuration
 - The active context connector is labeled mock data; Notion OAuth and durable context synchronization are not connected yet
 - No semantic search, pgvector, weekly recap generation, R2, or Queues yet
 - Research provides cited context and corrections, but it is not personalized professional advice

@@ -1,6 +1,5 @@
 import {
   learningItemSchema,
-  personalProfile,
   type AccessLevel,
   type IngestionInput,
   type LearningItem,
@@ -28,6 +27,7 @@ import type { SourceVisualStore } from "../media/source-visual-store";
 export const DEMO_TRANSCRIPT = `Most people make their work visible by creating more status updates. Try documenting instead of reporting. When you make a decision, write down the decision, the outcome, and one lesson while the context is still fresh. That small work log can become evidence for a performance review, an example for someone you mentor, or the seed of a useful post. The goal is not to count activity. It is to preserve the outcomes that would otherwise disappear.`;
 
 export interface PipelineDependencies {
+  profileId: string;
   repository: LearningItemRepository;
   transcriber: MediaTranscriber | null;
   retriever?: PublicSourceRetriever | null;
@@ -194,7 +194,7 @@ export async function processLearningItem(
   const now = dependencies.now ?? (() => new Date().toISOString());
   const id = dependencies.id ?? (() => crypto.randomUUID());
   const fingerprint = await sourceFingerprint(input);
-  const existing = await dependencies.repository.findByFingerprint(fingerprint);
+  const existing = await dependencies.repository.findByFingerprint(dependencies.profileId, fingerprint);
   const incomingMaterials = initialMaterials(input);
   const isUrlSource = input.sourceType === "instagram_url" || input.sourceType === "external_url";
   const isInstagramSource = isUrlSource && sourcePlatform(input) === "instagram";
@@ -241,7 +241,7 @@ export async function processLearningItem(
     const createdAt = now();
     item = learningItemSchema.parse({
       id: id(),
-      profileId: personalProfile.id,
+      profileId: dependencies.profileId,
       sourceType: input.sourceType,
       sourceUrl: input.sourceUrl,
       platform: sourcePlatform(input),

@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
+import { apiResponseHeaders, authenticateApiRequest } from "@/lib/api/access-control";
 import { getPersonalContextSnapshot } from "@/lib/context/provider";
 import { getLearningItemRepository } from "@/lib/data/provider";
-import { personalProfile } from "@/lib/domain";
 import { synchronizeKnowledgeResources } from "@/lib/knowledge/resources";
 import { buildCrossSaveSynthesis } from "@/lib/knowledge/synthesis";
 
@@ -19,16 +18,15 @@ function errorResponse(request: Request, code: string, message: string, status: 
 }
 
 export async function GET(request: Request) {
-  if (!await isApiRequestAuthorized(request)) {
-    return errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401);
-  }
+  const viewer = await authenticateApiRequest(request);
+  if (!viewer) return errorResponse(request, "UNAUTHORIZED", "Sign in to Curio to continue.", 401);
   try {
     const repository = await getLearningItemRepository();
     const [items, context, engagement, feedback] = await Promise.all([
-      repository.list(),
-      getPersonalContextSnapshot(),
-      repository.listResourceEngagement(personalProfile.id),
-      repository.listForYouFeedback(personalProfile.id),
+      repository.list(viewer.profileId),
+      getPersonalContextSnapshot(viewer.profileId),
+      repository.listResourceEngagement(viewer.profileId),
+      repository.listForYouFeedback(viewer.profileId),
     ]);
     const resources = await synchronizeKnowledgeResources(items, repository);
     const synthesis = buildCrossSaveSynthesis({ items, resources, context, engagement, feedback });

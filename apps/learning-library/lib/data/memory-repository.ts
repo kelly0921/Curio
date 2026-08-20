@@ -16,19 +16,22 @@ export class MemoryLearningItemRepository implements CurioRepository {
   private readonly engagements = new Map<string, ResourceEngagement>();
   private readonly feedback = new Map<string, ForYouFeedback>();
 
-  async list(): Promise<LearningItem[]> {
+  async list(profileId: string): Promise<LearningItem[]> {
     return [...this.items.values()]
+      .filter((item) => item.profileId === profileId)
       .map((item) => learningItemSchema.parse(item))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
-  async findById(id: string): Promise<LearningItem | null> {
+  async findById(profileId: string, id: string): Promise<LearningItem | null> {
     const item = this.items.get(id);
-    return item ? learningItemSchema.parse(item) : null;
+    return item?.profileId === profileId ? learningItemSchema.parse(item) : null;
   }
 
-  async findByFingerprint(fingerprint: string): Promise<LearningItem | null> {
-    const item = [...this.items.values()].find((candidate) => candidate.sourceFingerprint === fingerprint);
+  async findByFingerprint(profileId: string, fingerprint: string): Promise<LearningItem | null> {
+    const item = [...this.items.values()].find((candidate) => (
+      candidate.profileId === profileId && candidate.sourceFingerprint === fingerprint
+    ));
     return item ? learningItemSchema.parse(item) : null;
   }
 
@@ -45,9 +48,9 @@ export class MemoryLearningItemRepository implements CurioRepository {
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
-  async findResourceById(id: string): Promise<KnowledgeResource | null> {
+  async findResourceById(profileId: string, id: string): Promise<KnowledgeResource | null> {
     const resource = this.resources.get(id);
-    return resource ? knowledgeResourceSchema.parse(resource) : null;
+    return resource?.profileId === profileId ? knowledgeResourceSchema.parse(resource) : null;
   }
 
   async saveResource(resource: KnowledgeResource): Promise<KnowledgeResource> {

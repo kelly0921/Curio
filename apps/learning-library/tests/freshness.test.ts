@@ -179,7 +179,7 @@ describe("resource research freshness", () => {
       }),
     };
 
-    const refreshed = await refreshKnowledgeResourceResearch(created!.resource.id, repository, researcher, {
+    const refreshed = await refreshKnowledgeResourceResearch(profileId, created!.resource.id, repository, researcher, {
       now: () => "2026-08-18T12:00:00.000Z",
     });
 
@@ -193,7 +193,7 @@ describe("resource research freshness", () => {
       summary: "Research refreshed: 1 correction.",
     }));
     expect(refreshed?.resource.contributions.at(-1)?.summary).toBe("Research refreshed: 1 correction.");
-    expect((await repository.findById(sourceId))?.card?.researchBrief?.findings[0].verdict).toBe("corrected");
+    expect((await repository.findById(profileId, sourceId))?.card?.researchBrief?.findings[0].verdict).toBe("corrected");
   });
 
   it("keeps the receipt quiet when current research does not materially change", async () => {
@@ -211,7 +211,7 @@ describe("resource research freshness", () => {
       }),
     };
 
-    const refreshed = await refreshKnowledgeResourceResearch(created!.resource.id, repository, researcher, {
+    const refreshed = await refreshKnowledgeResourceResearch(profileId, created!.resource.id, repository, researcher, {
       now: () => "2026-08-18T12:00:00.000Z",
     });
 

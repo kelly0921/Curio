@@ -2,7 +2,7 @@ import type { BrowserWorker } from "@cloudflare/puppeteer";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
+import { apiResponseHeaders, authenticateApiRequest } from "@/lib/api/access-control";
 import { getLearningItemRepository } from "@/lib/data/provider";
 import { learningItemSchema } from "@/lib/domain";
 import { synchronizeKnowledgeResources } from "@/lib/knowledge/resources";
@@ -29,18 +29,17 @@ async function browserWorker(): Promise<BrowserWorker | null> {
 }
 
 async function authorizedItem(request: Request, id: string) {
-  if (!await isApiRequestAuthorized(request)) {
-    return { response: errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401) } as const;
-  }
+  const viewer = await authenticateApiRequest(request);
+  if (!viewer) return { response: errorResponse(request, "UNAUTHORIZED", "Sign in to Curio to continue.", 401) } as const;
   if (!z.string().uuid().safeParse(id).success) {
     return { response: errorResponse(request, "INVALID_ITEM_ID", "This source ID is invalid.", 400) } as const;
   }
   const repository = await getLearningItemRepository();
-  const item = await repository.findById(id);
+  const item = await repository.findById(viewer.profileId, id);
   if (!item) {
     return { response: errorResponse(request, "ITEM_NOT_FOUND", "This source could not be found.", 404) } as const;
   }
-  return { item, repository } as const;
+  return { item, repository, viewer } as const;
 }
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -93,7 +92,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       capturedAt: new Date().toISOString(),
     });
     await result.repository.save(learningItemSchema.parse({ ...result.item, sourceVisual: visual }));
-    await synchronizeKnowledgeResources(await result.repository.list(), result.repository);
+    await synchronizeKnowledgeResources(await result.repository.list(result.viewer.profileId), result.repository);
     return NextResponse.json(
       { ok: true, data: { sourceVisual: visual, captured: true, refreshed: Boolean(result.item.sourceVisual) } },
       { status: result.item.sourceVisual ? 200 : 201, headers: apiResponseHeaders(request) },

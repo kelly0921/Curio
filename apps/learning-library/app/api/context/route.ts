@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
+import { apiResponseHeaders, authenticateApiRequest } from "@/lib/api/access-control";
 import { getPersonalContextSnapshot, refreshPersonalContext } from "@/lib/context/provider";
 
 export const dynamic = "force-dynamic";
@@ -9,11 +9,10 @@ function errorResponse(request: Request, code: string, message: string, status: 
 }
 
 export async function GET(request: Request) {
-  if (!await isApiRequestAuthorized(request)) {
-    return errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401);
-  }
+  const viewer = await authenticateApiRequest(request);
+  if (!viewer) return errorResponse(request, "UNAUTHORIZED", "Sign in to Curio to continue.", 401);
   try {
-    const context = await getPersonalContextSnapshot();
+    const context = await getPersonalContextSnapshot(viewer.profileId);
     return NextResponse.json({ ok: true, data: { context } }, { headers: apiResponseHeaders(request) });
   } catch (error) {
     console.error(JSON.stringify({ event: "personal_context_load_failed", errorType: error instanceof Error ? error.name : "unknown" }));
@@ -22,11 +21,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!await isApiRequestAuthorized(request)) {
-    return errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401);
-  }
+  const viewer = await authenticateApiRequest(request);
+  if (!viewer) return errorResponse(request, "UNAUTHORIZED", "Sign in to Curio to continue.", 401);
   try {
-    const context = await refreshPersonalContext();
+    const context = await refreshPersonalContext(viewer.profileId);
     return NextResponse.json({ ok: true, data: { context } }, { headers: apiResponseHeaders(request) });
   } catch (error) {
     console.error(JSON.stringify({ event: "personal_context_sync_failed", errorType: error instanceof Error ? error.name : "unknown" }));

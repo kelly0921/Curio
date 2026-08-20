@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
+import { apiResponseHeaders, authenticateApiRequest } from "@/lib/api/access-control";
 import { getLearningItemRepository } from "@/lib/data/provider";
-import { forYouLaneSchema, personalProfile } from "@/lib/domain";
+import { forYouLaneSchema } from "@/lib/domain";
 import { saveForYouRecommendationFeedback } from "@/lib/knowledge/engagement";
 
 export const dynamic = "force-dynamic";
@@ -25,9 +25,8 @@ function errorResponse(request: Request, code: string, message: string, status: 
 }
 
 export async function POST(request: Request) {
-  if (!await isApiRequestAuthorized(request)) {
-    return errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401);
-  }
+  const viewer = await authenticateApiRequest(request);
+  if (!viewer) return errorResponse(request, "UNAUTHORIZED", "Sign in to Curio to continue.", 401);
   if (Number(request.headers.get("content-length") ?? 0) > 2_048) {
     return errorResponse(request, "INVALID_FOR_YOU_FEEDBACK", "This feedback request is too large.", 413);
   }
@@ -39,13 +38,13 @@ export async function POST(request: Request) {
   }
   try {
     const repository = await getLearningItemRepository();
-    const resource = await repository.findResourceById(input.resourceId);
-    if (!resource || resource.profileId !== personalProfile.id) {
+    const resource = await repository.findResourceById(viewer.profileId, input.resourceId);
+    if (!resource) {
       return errorResponse(request, "RESOURCE_NOT_FOUND", "This living resource could not be found.", 404);
     }
     const feedback = await saveForYouRecommendationFeedback({
       ...input,
-      profileId: personalProfile.id,
+      profileId: viewer.profileId,
     }, repository);
     return NextResponse.json({ ok: true, data: { feedback } }, { headers: responseHeaders(request) });
   } catch (error) {

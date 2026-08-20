@@ -30,28 +30,33 @@ function parseForYouFeedbackRow(row: LearningItemRow): ForYouFeedback {
   return forYouFeedbackSchema.parse(JSON.parse(row.record_json));
 }
 
+function scopedFingerprint(profileId: string, fingerprint: string): string {
+  return `${profileId}:${fingerprint}`;
+}
+
 export class D1LearningItemRepository implements CurioRepository {
   constructor(private readonly database: D1Database) {}
 
-  async list(): Promise<LearningItem[]> {
+  async list(profileId: string): Promise<LearningItem[]> {
     const result = await this.database
-      .prepare("SELECT record_json FROM learning_item ORDER BY created_at DESC")
+      .prepare("SELECT record_json FROM learning_item WHERE profile_id = ? ORDER BY created_at DESC")
+      .bind(profileId)
       .all<LearningItemRow>();
     return result.results.map(parseRow);
   }
 
-  async findById(id: string): Promise<LearningItem | null> {
+  async findById(profileId: string, id: string): Promise<LearningItem | null> {
     const row = await this.database
-      .prepare("SELECT record_json FROM learning_item WHERE id = ? LIMIT 1")
-      .bind(id)
+      .prepare("SELECT record_json FROM learning_item WHERE profile_id = ? AND id = ? LIMIT 1")
+      .bind(profileId, id)
       .first<LearningItemRow>();
     return row ? parseRow(row) : null;
   }
 
-  async findByFingerprint(fingerprint: string): Promise<LearningItem | null> {
+  async findByFingerprint(profileId: string, fingerprint: string): Promise<LearningItem | null> {
     const row = await this.database
-      .prepare("SELECT record_json FROM learning_item WHERE source_fingerprint = ? LIMIT 1")
-      .bind(fingerprint)
+      .prepare("SELECT record_json FROM learning_item WHERE profile_id = ? AND source_fingerprint = ? LIMIT 1")
+      .bind(profileId, scopedFingerprint(profileId, fingerprint))
       .first<LearningItemRow>();
     return row ? parseRow(row) : null;
   }
@@ -87,7 +92,7 @@ export class D1LearningItemRepository implements CurioRepository {
       validated.sourceUrl,
       validated.platform,
       validated.sourceType,
-      validated.sourceFingerprint,
+      scopedFingerprint(validated.profileId, validated.sourceFingerprint),
       validated.creator,
       validated.processingStatus,
       validated.accessLevel,
@@ -111,10 +116,10 @@ export class D1LearningItemRepository implements CurioRepository {
     return result.results.map(parseResourceRow);
   }
 
-  async findResourceById(id: string): Promise<KnowledgeResource | null> {
+  async findResourceById(profileId: string, id: string): Promise<KnowledgeResource | null> {
     const row = await this.database
-      .prepare("SELECT record_json FROM knowledge_resource WHERE id = ? LIMIT 1")
-      .bind(id)
+      .prepare("SELECT record_json FROM knowledge_resource WHERE profile_id = ? AND id = ? LIMIT 1")
+      .bind(profileId, id)
       .first<LearningItemRow>();
     return row ? parseResourceRow(row) : null;
   }

@@ -62,6 +62,7 @@ function receiptSummary(changes: ResourceResearchChange[], wasResearched: boolea
 }
 
 export async function refreshKnowledgeResourceResearch(
+  profileId: string,
   resourceId: string,
   repository: CurioRepository,
   researcher: LearningCardResearcher,
@@ -69,9 +70,9 @@ export async function refreshKnowledgeResourceResearch(
 ): Promise<ResourceResearchRefreshResult | null> {
   const now = options.now ?? (() => new Date().toISOString());
   const checkedAt = now();
-  const before = await repository.findResourceById(resourceId);
+  const before = await repository.findResourceById(profileId, resourceId);
   if (!before) return null;
-  const allItems = await repository.list();
+  const allItems = await repository.list(profileId);
   const sources = allItems
     .filter((item) => before.sourceItemIds.includes(item.id) && item.card && item.sourceMaterials.length > 0)
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
@@ -110,7 +111,7 @@ export async function refreshKnowledgeResourceResearch(
     await upsertKnowledgeResourceForItem(refreshedItem, repository, { now: () => checkedAt });
   }
 
-  const rebuilt = await repository.findResourceById(resourceId);
+  const rebuilt = await repository.findResourceById(profileId, resourceId);
   if (!rebuilt) throw new Error("RESOURCE_REBUILD_FAILED");
   const beforeEntries = new Map(before.entries.map((entry) => [entryKey(entry), entry]));
   const changes = rebuilt.entries

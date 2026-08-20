@@ -3,7 +3,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import type { BrowserWorker } from "@cloudflare/puppeteer";
 import { ZodError } from "zod";
 import { OpenAILearningServices } from "@/lib/ai/services";
-import { apiResponseHeaders, isApiRequestAuthorized } from "@/lib/api/access-control";
+import { apiResponseHeaders, authenticateApiRequest } from "@/lib/api/access-control";
 import { IngestionValidationError, MAX_REQUEST_BYTES, parseIngestionForm } from "@/lib/api/ingestion";
 import { getLearningItemRepository } from "@/lib/data/provider";
 import { getPersonalContextSnapshot } from "@/lib/context/provider";
@@ -43,13 +43,12 @@ async function cloudflareBrowserWorker(): Promise<BrowserWorker | null> {
 }
 
 export async function GET(request: Request) {
-  if (!await isApiRequestAuthorized(request)) {
-    return errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401);
-  }
+  const viewer = await authenticateApiRequest(request);
+  if (!viewer) return errorResponse(request, "UNAUTHORIZED", "Sign in to Curio to continue.", 401);
   try {
     const repository = await getLearningItemRepository();
-    const items = await repository.list();
-    const context = await getPersonalContextSnapshot();
+    const items = await repository.list(viewer.profileId);
+    const context = await getPersonalContextSnapshot(viewer.profileId);
     return NextResponse.json(
       { ok: true, data: { items: personalizeLearningItems(items, context) } },
       { headers: apiResponseHeaders(request) },
@@ -67,9 +66,8 @@ export function OPTIONS(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!await isApiRequestAuthorized(request)) {
-    return errorResponse(request, "UNAUTHORIZED", "A valid Curio personal access token is required.", 401);
-  }
+  const viewer = await authenticateApiRequest(request);
+  if (!viewer) return errorResponse(request, "UNAUTHORIZED", "Sign in to Curio to continue.", 401);
   const contentLength = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
     return errorResponse(request, "REQUEST_TOO_LARGE", "V0.1 accepts requests up to about 20 MB.", 413);
@@ -93,6 +91,7 @@ export async function POST(request: Request) {
       ])
       : null;
     const result = await processLearningItem(input, {
+      profileId: viewer.profileId,
       repository,
       transcriber: services,
       retriever,
@@ -105,7 +104,7 @@ export async function POST(request: Request) {
       ? await upsertKnowledgeResourceForItem(result.item, repository, { merger: resourceMerger })
       : null;
     const savedItem = resourceUpdate?.item ?? result.item;
-    const context = await getPersonalContextSnapshot();
+    const context = await getPersonalContextSnapshot(viewer.profileId);
     return NextResponse.json(
       {
         ok: true,
