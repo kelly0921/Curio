@@ -24,6 +24,11 @@ export interface FollowThroughPresentation {
   completeLabel: string;
 }
 
+export interface FollowThroughAttentionPresentation {
+  label: string;
+  showReason: boolean;
+}
+
 export interface ResearchSourceLike {
   publisher: string;
   title: string;
@@ -76,6 +81,14 @@ export function followThroughPresentation(kind: FollowThroughKind): FollowThroug
   if (kind === 'shortlist') return { eyebrow: 'SHORTLIST', startLabel: 'Build this shortlist', activeLabel: 'In your shortlist', progressNoun: 'options reviewed', completeLabel: 'Finish shortlist' };
   if (kind === 'checklist') return { eyebrow: 'CHECKLIST', startLabel: 'Start this checklist', activeLabel: 'Checklist in progress', progressNoun: 'steps done', completeLabel: 'Finish checklist' };
   return { eyebrow: 'REVIEW LATER', startLabel: 'Review this later', activeLabel: 'In your review queue', progressNoun: 'points reviewed', completeLabel: 'Finish review' };
+}
+
+export function followThroughAttentionPresentation(
+  attention: 'now' | 'soon' | 'on_track',
+): FollowThroughAttentionPresentation {
+  if (attention === 'now') return { label: 'REVIEW NOW', showReason: true };
+  if (attention === 'soon') return { label: 'COMING UP', showReason: true };
+  return { label: 'NEXT REVIEW', showReason: false };
 }
 
 export function resourceUseGuide(resource: ResourceUseInput): ResourceUseGuide {

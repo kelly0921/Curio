@@ -19,7 +19,7 @@ import {
   type FollowThroughPlan,
   type FollowThroughUpdate,
 } from '@/lib/curio-api';
-import { followThroughPresentation } from '@/lib/resource-presentation';
+import { followThroughAttentionPresentation, followThroughPresentation } from '@/lib/resource-presentation';
 
 type FeedbackAction = ForYouFeedback['state'];
 
@@ -37,6 +37,19 @@ function recommendationTone(lane: ForYouLane) {
   if (lane === 'learn_next') return styles.cardButter;
   if (lane === 'use_now') return styles.cardSage;
   return styles.cardPeach;
+}
+
+function shortReviewDate(value: string | null): string {
+  if (!value) return 'When something changes';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return 'When something changes';
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
+}
+
+function planTimingTone(attention: FollowThroughPlan['attention']) {
+  if (attention === 'now') return styles.planTimingNow;
+  if (attention === 'soon') return styles.planTimingSoon;
+  return styles.planTimingOnTrack;
 }
 
 function RecommendationCard({
@@ -101,6 +114,7 @@ function ActivePlanCard({
   onUpdate: (update: FollowThroughUpdate) => void;
 }) {
   const copy = followThroughPresentation(plan.kind);
+  const timing = followThroughAttentionPresentation(plan.attention);
   const visibleEntries = plan.entries.slice(0, 4);
   return (
     <View style={[styles.planCard, shadows.card]}>
@@ -109,6 +123,12 @@ function ActivePlanCard({
         <Text style={styles.planProgress}>{plan.completedCount}/{plan.totalCount} {copy.progressNoun}</Text>
       </View>
       <Text style={styles.planTitle}>{plan.resourceTitle}</Text>
+      <View style={[styles.planTiming, planTimingTone(plan.attention)]}>
+        <Text style={styles.planTimingLabel}>{timing.label}</Text>
+        <Text numberOfLines={2} style={styles.planTimingText}>
+          {timing.showReason ? plan.whyNow : shortReviewDate(plan.nextReviewAt)}
+        </Text>
+      </View>
       <View style={styles.planEntries}>
         {visibleEntries.map((entry) => {
           const key = `${plan.resourceId}:${entry.id}`;
@@ -185,7 +205,8 @@ export default function PrioritiesScreen() {
   const realConnection = context?.connections.find((connection) => !connection.isDemo) ?? null;
   const recommendations = synthesis?.recommendations ?? [];
   const activePlans = synthesis?.followThrough ?? [];
-  const attentionCount = activePlans.length + recommendations.length;
+  const timelyPlanCount = activePlans.filter((plan) => plan.attention !== 'on_track').length;
+  const attentionCount = timelyPlanCount + recommendations.length;
 
   async function saveFeedback(recommendation: ForYouRecommendation, action: FeedbackAction) {
     if (updatingId) return;
@@ -273,7 +294,11 @@ export default function PrioritiesScreen() {
                 ? `${attentionCount} thing${attentionCount === 1 ? '' : 's'} worth your attention`
                 : 'You are caught up for now'}</Text>
               <Text style={styles.heroDetail}>{activePlans.length
-                ? 'What you chose to use stays first. Curio fills the rest with a few timely suggestions.'
+                ? timelyPlanCount
+                  ? 'What changed or became due is first. Curio keeps the rest quietly on track.'
+                  : recommendations.length
+                    ? 'Your plans are on track. The count above is only the timely suggestions Curio found.'
+                    : 'Your plans are on track. Curio will move one up when something changes or a review is due.'
                 : recommendations.length === 3
                 ? 'One to learn, one to use, and one worth revisiting—without digging through your saves.'
                 : recommendations.length
@@ -290,7 +315,7 @@ export default function PrioritiesScreen() {
             <View style={styles.plansSection}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>You chose</Text>
-                <Text style={styles.sectionSubtitle}>Curio turned each resource into a lightweight plan. Check off only what is useful.</Text>
+                <Text style={styles.sectionSubtitle}>Sorted by what changed and what is due. Quieter plans keep their next review date.</Text>
               </View>
               {activePlans.map((plan) => (
                 <ActivePlanCard
@@ -320,7 +345,7 @@ export default function PrioritiesScreen() {
             </View>
           ) : null}
 
-          {!loading && synthesis && attentionCount === 0 ? (
+          {!loading && synthesis && activePlans.length === 0 && attentionCount === 0 ? (
             <View style={[styles.empty, shadows.card]}>
               <Text style={styles.emptyMark}>✓</Text>
               <Text style={styles.emptyTitle}>Nothing needs your attention</Text>
@@ -372,6 +397,12 @@ const styles = StyleSheet.create({
   planEyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
   planProgress: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '800' },
   planTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.6, lineHeight: 31, marginTop: 12 },
+  planTiming: { alignItems: 'center', borderRadius: 13, flexDirection: 'row', gap: 9, marginTop: 12, paddingHorizontal: 10, paddingVertical: 8 },
+  planTimingNow: { backgroundColor: '#F3DFD4' },
+  planTimingSoon: { backgroundColor: '#F1E7BE' },
+  planTimingOnTrack: { backgroundColor: '#ECE8DE' },
+  planTimingLabel: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+  planTimingText: { color: colors.muted, flex: 1, fontFamily: fonts.body, fontSize: 9, fontWeight: '700', lineHeight: 13 },
   planEntries: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, gap: 4, marginTop: 15, paddingTop: 10 },
   planEntry: { alignItems: 'center', flexDirection: 'row', gap: 10, minHeight: 43, paddingVertical: 5 },
   planCheck: { alignItems: 'center', borderColor: colors.muted, borderRadius: 10, borderWidth: 1, height: 24, justifyContent: 'center', width: 24 },

@@ -266,6 +266,9 @@ export interface FollowThroughPlan {
   startedAt: string;
   completedAt: string | null;
   updatedAt: string;
+  attention: 'now' | 'soon' | 'on_track';
+  whyNow: string;
+  nextReviewAt: string | null;
 }
 
 export type FollowThroughUpdate =
@@ -545,6 +548,15 @@ function remember(item: LearningItem): LearningItem {
   return item;
 }
 
+function normalizeFollowThroughPlan(plan: FollowThroughPlan): FollowThroughPlan {
+  return {
+    ...plan,
+    attention: plan.attention ?? 'on_track',
+    whyNow: plan.whyNow?.trim() || 'Curio will bring this plan back when it needs attention.',
+    nextReviewAt: plan.nextReviewAt ?? null,
+  };
+}
+
 async function readEnvelope<T>(response: Response): Promise<T> {
   let body: T | ErrorEnvelope;
   try {
@@ -605,7 +617,7 @@ export async function getKnowledgeResource(id: string): Promise<{ resource: Know
     resource: cached ? { ...cached, ...body.data.resource } : body.data.resource,
     sources: body.data.sources,
     freshness: body.data.freshness,
-    followThrough: body.data.followThrough ?? null,
+    followThrough: body.data.followThrough ? normalizeFollowThroughPlan(body.data.followThrough) : null,
   };
 }
 
@@ -656,7 +668,7 @@ export async function getCrossSaveSynthesis(): Promise<CrossSaveSynthesis> {
     ...body.data.synthesis,
     interests: body.data.synthesis.interests ?? [],
     nextUse: body.data.synthesis.nextUse ?? null,
-    followThrough: body.data.synthesis.followThrough ?? [],
+    followThrough: (body.data.synthesis.followThrough ?? []).map(normalizeFollowThroughPlan),
     recommendations: body.data.synthesis.recommendations ?? [],
   };
 }
@@ -670,7 +682,7 @@ export async function updateResourceFollowThrough(
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify(update),
   }));
-  return body.data.plan;
+  return normalizeFollowThroughPlan(body.data.plan);
 }
 
 export async function recordResourceEngagement(

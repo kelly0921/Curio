@@ -13,7 +13,7 @@ import type {
 import { assessKnowledgeResourceFreshness } from "./freshness";
 import { buildActiveFollowThroughPlans, type FollowThroughPlan } from "./follow-through";
 
-export const CROSS_SAVE_SYNTHESIS_VERSION = "cross-save-synthesis-v5-follow-through" as const;
+export const CROSS_SAVE_SYNTHESIS_VERSION = "cross-save-synthesis-v6-right-time" as const;
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1_000;
 
@@ -937,7 +937,7 @@ export function buildCrossSaveSynthesis({
     .slice(0, 4)
     .map((resource) => resource.id);
   const recommendations = buildForYouRecommendations(resources, context, engagement, feedback, now);
-  const followThrough = buildActiveFollowThroughPlans(resources, engagement);
+  const followThrough = buildActiveFollowThroughPlans(resources, engagement, context, now);
 
   return {
     generatedAt: now.toISOString(),
