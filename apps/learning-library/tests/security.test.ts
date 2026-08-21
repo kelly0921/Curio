@@ -84,6 +84,7 @@ describe("server boundaries", () => {
       authUrl: process.env.SUPABASE_AUTH_URL,
       publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY,
       invitedEmails: process.env.CURIO_INVITED_EMAILS,
+      legacyOwnerEmail: process.env.CURIO_LEGACY_OWNER_EMAIL,
       personalToken: process.env.CURIO_API_TOKEN,
     };
     process.env.SUPABASE_AUTH_URL = "https://curio-auth.example";
@@ -115,11 +116,26 @@ describe("server boundaries", () => {
         }),
       });
       expect(notInvited).toBeNull();
+
+      process.env.CURIO_LEGACY_OWNER_EMAIL = "invited@example.com";
+      const legacyOwner = await authenticateApiRequest(request, {
+        environment: "production",
+        verifySupabaseToken: async () => ({
+          profileId: "10000000-0000-4000-8000-000000000001",
+          email: "INVITED@example.com",
+        }),
+      });
+      expect(legacyOwner).toEqual({
+        profileId: "00000000-0000-4000-8000-000000000031",
+        email: "INVITED@example.com",
+        authMode: "supabase",
+      });
     } finally {
       for (const [name, value] of Object.entries({
         SUPABASE_AUTH_URL: previous.authUrl,
         SUPABASE_PUBLISHABLE_KEY: previous.publishableKey,
         CURIO_INVITED_EMAILS: previous.invitedEmails,
+        CURIO_LEGACY_OWNER_EMAIL: previous.legacyOwnerEmail,
         CURIO_API_TOKEN: previous.personalToken,
       })) {
         if (value === undefined) Reflect.deleteProperty(process.env, name);

@@ -1,6 +1,6 @@
 import 'react-native-url-polyfill/auto';
 
-import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient, processLock, type Session, type SupabaseClient } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import { PropsWithChildren, createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 
 import { colors, fonts, shadows } from '@/constants/curio-theme';
+import { parseAuthCallback } from '@/lib/auth-callback';
 import { curioAuthStorage } from '@/lib/auth-storage';
 import { setCurioAccessToken } from '@/lib/curio-api';
 
@@ -34,6 +35,7 @@ const supabase: SupabaseClient | null = authConfigured
         persistSession: true,
         detectSessionInUrl: false,
         flowType: 'pkce',
+        lock: processLock,
       },
     })
   : null;
@@ -49,12 +51,17 @@ interface CurioAuthContextValue {
 
 const CurioAuthContext = createContext<CurioAuthContextValue | null>(null);
 
-async function exchangeAuthCode(url: string): Promise<void> {
+async function completeAuthCallback(url: string): Promise<void> {
   if (!supabase) return;
-  const parsed = Linking.parse(url);
-  const code = typeof parsed.queryParams?.code === 'string' ? parsed.queryParams.code : null;
-  if (!code) return;
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const callback = parseAuthCallback(url);
+  if (callback.kind === 'none') return;
+  if (callback.kind === 'error') throw new Error(callback.message);
+  const { error } = callback.kind === 'code'
+    ? await supabase.auth.exchangeCodeForSession(callback.code)
+    : await supabase.auth.setSession({
+        access_token: callback.accessToken,
+        refresh_token: callback.refreshToken,
+      });
   if (error) throw error;
 }
 
@@ -80,7 +87,7 @@ export function CurioAuthProvider({ children }: PropsWithChildren) {
     const initialize = async () => {
       try {
         const initialUrl = await Linking.getInitialURL();
-        if (initialUrl) await exchangeAuthCode(initialUrl);
+        if (initialUrl) await completeAuthCallback(initialUrl);
         const { data, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
         applySession(data.session);
@@ -93,11 +100,11 @@ export function CurioAuthProvider({ children }: PropsWithChildren) {
 
     const authSubscription = supabase.auth.onAuthStateChange((_event, nextSession) => applySession(nextSession));
     const linkSubscription = Linking.addEventListener('url', ({ url }) => {
-      void exchangeAuthCode(url).catch((linkError: unknown) => {
+      void completeAuthCallback(url).catch((linkError: unknown) => {
         setError(linkError instanceof Error ? linkError.message : 'Curio could not finish signing you in.');
       });
     });
-    const appStateSubscription = AppState.addEventListener('change', (state) => {
+    const appStateSubscription = Platform.OS === 'web' ? null : AppState.addEventListener('change', (state) => {
       if (state === 'active') supabase.auth.startAutoRefresh();
       else supabase.auth.stopAutoRefresh();
     });
@@ -106,7 +113,7 @@ export function CurioAuthProvider({ children }: PropsWithChildren) {
       active = false;
       authSubscription.data.subscription.unsubscribe();
       linkSubscription.remove();
-      appStateSubscription.remove();
+      appStateSubscription?.remove();
     };
   }, []);
 
@@ -116,7 +123,7 @@ export function CurioAuthProvider({ children }: PropsWithChildren) {
     const redirectTo = Linking.createURL('auth/callback');
     const { error: signInError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: redirectTo, shouldCreateUser: true },
+      options: { emailRedirectTo: redirectTo, shouldCreateUser: false },
     });
     if (signInError) throw signInError;
   }, []);
@@ -159,7 +166,7 @@ export function CurioAuthGate({ children }: PropsWithChildren) {
   if (auth.session) return children;
 
   const submit = async () => {
-    const normalized = email.trim().toLocaleLowerCase();
+    const normalized = email.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/u.test(normalized)) {
       setLocalError('Enter the email address on your Curio invite.');
       return;
@@ -197,7 +204,7 @@ export function CurioAuthGate({ children }: PropsWithChildren) {
             value={email}
           />
           {(localError || auth.error) && <Text style={styles.error}>{localError || auth.error}</Text>}
-          {sent && <Text style={styles.sent}>Check your email on this phone, then tap the Curio sign-in link.</Text>}
+          {sent && <Text style={styles.sent}>If this email is invited, check it on this phone and tap the Curio sign-in link.</Text>}
           <Pressable disabled={sending} onPress={() => void submit()} style={[styles.button, sending && styles.buttonDisabled]}>
             {sending ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.buttonText}>{sent ? 'Send another link' : 'Email me a sign-in link'}</Text>}
           </Pressable>

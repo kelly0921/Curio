@@ -77,6 +77,14 @@ function invitedEmail(email: string | null): boolean {
   return Boolean(email && invited.includes(email.toLocaleLowerCase()));
 }
 
+function profileIdForIdentity(identity: VerifiedSupabaseIdentity): string {
+  const legacyOwnerEmail = process.env.CURIO_LEGACY_OWNER_EMAIL?.trim().toLocaleLowerCase();
+  if (legacyOwnerEmail && identity.email?.toLocaleLowerCase() === legacyOwnerEmail) {
+    return personalProfile.id;
+  }
+  return identity.profileId;
+}
+
 async function verifySupabaseToken(token: string): Promise<VerifiedSupabaseIdentity | null> {
   const configuration = supabaseAuthConfiguration();
   if (!configuration) return null;
@@ -99,7 +107,7 @@ export async function authenticateApiRequest(
     if (!token) return null;
     const identity = await (options.verifySupabaseToken ?? verifySupabaseToken)(token);
     if (!identity || !invitedEmail(identity.email)) return null;
-    return { ...identity, authMode: "supabase" };
+    return { ...identity, profileId: profileIdForIdentity(identity), authMode: "supabase" };
   }
 
   const expected = process.env.CURIO_API_TOKEN?.trim();

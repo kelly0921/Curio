@@ -121,11 +121,12 @@ The recorded sample works without credentials and is clearly labeled as `determi
 | `SUPABASE_AUTH_URL` | Multi-user beta | Supabase project URL used to verify passwordless user sessions |
 | `SUPABASE_PUBLISHABLE_KEY` | Multi-user beta | Supabase publishable key used only for session verification |
 | `CURIO_INVITED_EMAILS` | Private beta | Optional comma-separated allowlist stored as an encrypted Worker secret |
+| `CURIO_LEGACY_OWNER_EMAIL` | Personal-beta migration | Optional verified account email that retains the existing personal-profile data while account auth is activated |
 | `SUPABASE_URL` | Durable storage | Supabase project URL; set with the secret key |
 | `SUPABASE_SECRET_KEY` | Durable storage | Preferred `sb_secret_...` server key; never expose in `NEXT_PUBLIC_` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Legacy fallback | Accepted only when a newer secret key is unavailable |
 
-The personal relevance profile is intentionally configured in `lib/domain.ts`. The bearer gate is suitable only for this private beta; V0.1 still has no user accounts or onboarding.
+The personal relevance profile is intentionally configured in `lib/domain.ts`. Passwordless Supabase accounts provide private-beta authentication; `CURIO_LEGACY_OWNER_EMAIL` is a temporary migration bridge for the original personal-beta library.
 
 ## Cloudflare D1 setup
 
@@ -192,7 +193,7 @@ The app uses the OpenNext Cloudflare adapter because it needs server route handl
 
 For Workers Builds, set the root directory to `apps/learning-library`, the build command to `npm ci && npm run build:cloudflare`, and the deploy command to `npx wrangler deploy --keep-vars`.
 
-When Supabase Auth is configured, every API route verifies the user session and scopes items, duplicate detection, resources, context, engagement, and For You state to that user ID. Without auth configuration, the existing bearer token remains available only as a personal-beta fallback. Direct media uploads should still move to presigned R2 URLs; do not raise the in-memory route limit as a substitute.
+When Supabase Auth is configured, every API route verifies the user session and scopes items, duplicate detection, resources, context, engagement, and For You state to that user ID. The one optional exception is the verified legacy-owner email, which maps to the original personal profile so activation does not hide its existing saves. Without auth configuration, the existing bearer token remains available only as a personal-beta fallback. Direct media uploads should still move to presigned R2 URLs; do not raise the in-memory route limit as a substitute.
 
 ## Important prototype limitations
 

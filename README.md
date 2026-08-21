@@ -13,7 +13,7 @@ The long-term product direction is to treat saved posts as input sources and tur
 
 The protected processor is deployed at [https://curio-processor.kellychenmeiyi.workers.dev](https://curio-processor.kellychenmeiyi.workers.dev). Its health endpoint reports the OpenAI and D1 configuration without exposing secrets. Expo development, preview, and production environments point to this URL.
 
-The mobile app and Worker share a generated personal-beta access token stored only in Git-ignored local files, encrypted Worker secrets, and EAS environment variables. This gate prevents anonymous use during personal testing; replace it with real user authentication before distributing the app.
+The deployed private beta uses passwordless Supabase authentication. Public sign-ups are disabled, each invited user's library is isolated, and a narrow migration bridge keeps the original personal library intact. The former shared beta token is rejected whenever Supabase authentication is configured.
 
 ## Local development
 

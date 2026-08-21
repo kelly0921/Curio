@@ -17,6 +17,7 @@ for (const name of [
   "SUPABASE_PUBLISHABLE_KEY",
   "SUPABASE_ANON_KEY",
   "CURIO_INVITED_EMAILS",
+  "CURIO_LEGACY_OWNER_EMAIL",
 ]) {
   buildEnvironment[name] = "";
 }
