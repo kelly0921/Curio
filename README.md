@@ -4,6 +4,14 @@ Curio turns useful social videos and links into organized knowledge: detailed so
 
 The long-term product direction is to treat saved posts as input sources and turn them into deduplicated living resources rather than accumulating one card per source. See [Curio product direction](docs/PRODUCT_DIRECTION.md).
 
+## Product preview
+
+| Library | Add to Curio |
+| --- | --- |
+| ![Curio mobile library](assets/curio-library-mobile.png) | ![Curio mobile capture flow](assets/curio-capture-mobile.png) |
+| Learning resource | For You |
+| ![Curio synthesized learning resource](assets/curio-resource-mobile.png) | ![Curio personalized recommendations](assets/curio-for-you-mobile.png) |
+
 ## Repository layout
 
 - `apps/mobile` — Expo mobile-first capture, library, source viewer, and For You experience.
