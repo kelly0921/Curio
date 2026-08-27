@@ -35,7 +35,8 @@ The processor is kept separate from the Expo client so it can be deployed indepe
 - Verification flags for factual and potentially high-stakes claims
 - SHA-256 duplicate detection for identical files and normalized URLs
 - In-place enrichment when new source material is submitted for an existing link-only save
-- Optional Supabase persistence; active-process memory fallback for instant local use
+- Cloudflare D1 durable persistence in the deployed personal beta
+- Optional Supabase persistence and active-process memory fallback for other environments
 - Credential-free, visibly labeled recorded sample for UI and contract testing
 
 Uploaded video is currently classified as `partial` even when transcription succeeds. V0.1 analyzes the audio transcript, not the visual track, so it never claims to have watched the complete Reel.
@@ -54,8 +55,9 @@ Next.js client
             ├─ LearningCardAnalyzer (OpenAI structured output)
             ├─ LearningCardResearcher (OpenAI web search + consulted-URL validation)
             └─ LearningItemRepository
-                 ├─ Supabase (durable, when configured)
-                 └─ process memory (local fallback)
+                 ├─ Cloudflare D1 (deployed default)
+                 ├─ Supabase (optional override)
+                 └─ process memory (fallback)
 
 GET /api/context
   └─ ContextConnector
@@ -71,7 +73,7 @@ Important boundaries:
 - `lib/ai/services.ts` owns OpenAI calls behind small transcription, retrieval, and analysis interfaces.
 - `lib/processing/pipeline.ts` owns state transitions and can move behind a Queue without changing the UI or domain.
 - `lib/context/*` keeps connector sync, normalized context, domain routing, and derived personalization separate from source extraction.
-- `lib/data/*` keeps persistence replaceable; Supabase stores the validated canonical record plus searchable projections.
+- `lib/data/*` keeps persistence replaceable; D1 and Supabase store the validated canonical record plus searchable projections.
 - `app/api/items/route.ts` only validates HTTP input, selects dependencies, and returns response envelopes.
 
 The browser request is synchronous in V0.1. The UI presents the processing journey while the request runs. Longer media should move to direct R2 upload plus Cloudflare Queues before this is shared broadly.
@@ -114,13 +116,30 @@ The recorded sample works without credentials and is clearly labeled as `determi
 | `OPENAI_ANALYSIS_MODEL` | No | Defaults to `gpt-5.4-mini` |
 | `OPENAI_RETRIEVAL_MODEL` | No | Defaults to `gpt-5.4-mini`; uses the Responses API web-search tool |
 | `ENABLE_EXPERIMENTAL_INSTAGRAM_EMBED` | No | Local default: on. Production default: off; enables bounded public Reel caption/media retrieval |
+| `CURIO_API_TOKEN` | Personal-beta fallback | Server-side copy of the legacy shared bearer token; remove after account auth is enabled |
+| `CURIO_ALLOWED_ORIGINS` | Browser previews | Optional comma-separated exact browser origins; native mobile requests do not require CORS |
+| `SUPABASE_AUTH_URL` | Multi-user beta | Supabase project URL used to verify passwordless user sessions |
+| `SUPABASE_PUBLISHABLE_KEY` | Multi-user beta | Supabase publishable key used only for session verification |
+| `CURIO_INVITED_EMAILS` | Private beta | Optional comma-separated allowlist stored as an encrypted Worker secret |
+| `CURIO_LEGACY_OWNER_EMAIL` | Personal-beta migration | Optional verified account email that retains the existing personal-profile data while account auth is activated |
 | `SUPABASE_URL` | Durable storage | Supabase project URL; set with the secret key |
 | `SUPABASE_SECRET_KEY` | Durable storage | Preferred `sb_secret_...` server key; never expose in `NEXT_PUBLIC_` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Legacy fallback | Accepted only when a newer secret key is unavailable |
 
-The personal relevance profile is intentionally configured in `lib/domain.ts`; V0.1 has no auth or onboarding.
+The personal relevance profile is intentionally configured in `lib/domain.ts`. Passwordless Supabase accounts provide private-beta authentication; `CURIO_LEGACY_OWNER_EMAIL` is a temporary migration bridge for the original personal-beta library.
 
-## Supabase setup
+## Cloudflare D1 setup
+
+The deployed Worker uses the `CURIO_DB` binding configured in `wrangler.jsonc`. Apply the checked-in migration after creating or changing a database:
+
+```powershell
+npx wrangler d1 migrations apply curio-learning-library --local
+npx wrangler d1 migrations apply curio-learning-library --remote
+```
+
+Open `/api/health` and confirm `persistence.mode` is `d1` and `durable` is `true`.
+
+## Optional Supabase setup
 
 1. Create or select a Supabase project.
 2. Open **SQL Editor**.
@@ -149,32 +168,32 @@ npm run cf:dry-run
 The app uses the OpenNext Cloudflare adapter because it needs server route handlers and server-only credentials.
 
 1. Authenticate Wrangler locally or connect the repository through Workers Builds.
-2. From `apps/learning-library`, add encrypted runtime secrets:
+2. Create and migrate the D1 database defined in `wrangler.jsonc`.
+3. From `apps/learning-library`, add encrypted runtime secrets:
 
    ```powershell
    npx wrangler secret put OPENAI_API_KEY
-   npx wrangler secret put SUPABASE_SECRET_KEY
-   npx wrangler secret put SUPABASE_URL
+   npx wrangler secret put CURIO_API_TOKEN
    ```
 
-3. Generate binding types and run the production-runtime preview:
+4. Generate binding types and run the production-runtime preview:
 
    ```powershell
    npm run cf:typegen
    npm run preview:cloudflare
    ```
 
-4. Deploy:
+5. Deploy:
 
    ```powershell
    npm run deploy:cloudflare
    ```
 
-5. Verify `/api/health`, submit the recorded sample, then test one short upload that fits the request limit of the selected Workers plan.
+6. Verify `/api/health`, confirm an unauthorized `/api/items` request returns `401`, submit the recorded sample with the bearer token, then test one short upload.
 
 For Workers Builds, set the root directory to `apps/learning-library`, the build command to `npm ci && npm run build:cloudflare`, and the deploy command to `npx wrangler deploy --keep-vars`.
 
-This personal prototype has no application auth. Before making a deployment public, place it behind Cloudflare Access or add authentication. Direct media uploads should move to presigned R2 URLs before inviting testers; do not raise the in-memory route limit as a substitute.
+When Supabase Auth is configured, every API route verifies the user session and scopes items, duplicate detection, resources, context, engagement, and For You state to that user ID. The one optional exception is the verified legacy-owner email, which maps to the original personal profile so activation does not hide its existing saves. Without auth configuration, the existing bearer token remains available only as a personal-beta fallback. Direct media uploads should still move to presigned R2 URLs; do not raise the in-memory route limit as a substitute.
 
 ## Important prototype limitations
 
@@ -184,7 +203,7 @@ This personal prototype has no application auth. Before making a deployment publ
 - No automated video-frame OCR yet
 - Uploaded media itself is not durably stored; the transcript and an ephemeral filename reference are retained
 - No retry endpoint yet; resubmit after correcting a recoverable failure
-- No auth; one configured personal profile
+- Supabase passwordless auth is implemented but still needs a project, redirect URL, invite list, and production environment configuration
 - The active context connector is labeled mock data; Notion OAuth and durable context synchronization are not connected yet
 - No semantic search, pgvector, weekly recap generation, R2, or Queues yet
 - Research provides cited context and corrections, but it is not personalized professional advice

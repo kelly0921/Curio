@@ -8,10 +8,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --configLoader runner",
     "build": "next build",
-    "build:cloudflare": "opennextjs-cloudflare build",
+    "build:cloudflare": "node build-cloudflare.mjs",
     "preview:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -- --keep-vars",
-    "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "deploy:cloudflare": "node build-cloudflare.mjs && opennextjs-cloudflare deploy -- --keep-vars",
+    "cf:typegen": "wrangler types --env-interface CloudflareEnv --include-runtime false cloudflare-env.d.ts",
     "cf:dry-run": "opennextjs-cloudflare build && wrangler deploy --dry-run --keep-vars"
   },
   "dependencies": {
@@ -24,6 +24,8 @@
     "zod": "4.1.12"
   },
   "devDependencies": {
+    "@cloudflare/puppeteer": "^1.1.0",
+    "@cloudflare/workers-types": "5.20260817.1",
     "@types/node": "^24.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",

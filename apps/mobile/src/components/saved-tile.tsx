@@ -30,7 +30,7 @@ function platformMark(item: LearningItem): string {
 
 export function SavedTile({ item, index, onPress }: { item: LearningItem; index: number; onPress: () => void }) {
   const topic = item.card?.primaryTopic || (item.card ? 'Curiosity' : 'Needs source');
-  const priority = item.card?.personalization?.priority;
+  const isRecommended = Boolean(item.card?.personalization);
   return (
     <Pressable
       accessibilityHint="Open the saved Learning Card"
@@ -44,9 +44,11 @@ export function SavedTile({ item, index, onPress }: { item: LearningItem; index:
       <View style={styles.copy}>
         <Text numberOfLines={1} style={styles.topic}>{label(topic)}</Text>
         <Text numberOfLines={3} style={styles.title}>{itemTitle(item)}</Text>
-        <Text style={[styles.state, !item.card && styles.waiting]}>
-          {item.card ? priority ? `${label(priority)} priority` : 'Ready to use' : item.accessLevel === 'link_only' ? 'Saved · needs source' : label(item.processingStatus)}
-        </Text>
+        {!item.card ? (
+          <Text style={[styles.state, styles.waiting]}>{item.accessLevel === 'link_only' ? 'Needs source' : label(item.processingStatus)}</Text>
+        ) : isRecommended ? (
+          <Text style={styles.state}>For you</Text>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -58,7 +60,7 @@ const styles = StyleSheet.create({
   visual: { alignItems: 'center', height: 128, justifyContent: 'center', position: 'relative' },
   platformMark: { color: colors.ink, fontFamily: fonts.display, fontSize: 33, fontWeight: '700' },
   platform: { bottom: 12, color: 'rgba(23,23,19,0.68)', fontFamily: fonts.body, fontSize: 10, fontWeight: '700', letterSpacing: 1.2, position: 'absolute', textTransform: 'uppercase' },
-  copy: { minHeight: 144, paddingHorizontal: 14, paddingVertical: 15 },
+  copy: { minHeight: 132, paddingHorizontal: 14, paddingVertical: 15 },
   topic: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
   title: { color: colors.ink, fontFamily: fonts.display, fontSize: 18, fontWeight: '700', lineHeight: 21, marginTop: 7 },
   state: { color: colors.success, fontFamily: fonts.body, fontSize: 11, fontWeight: '700', marginTop: 'auto', paddingTop: 12 },

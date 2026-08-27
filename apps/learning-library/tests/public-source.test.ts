@@ -1,9 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MediaTranscriber } from "@/lib/ai/services";
+import type { MediaTranscriber, ReelFrameAnalyzer } from "@/lib/ai/services";
 import {
   InstagramPublicEmbedRetriever,
   parseInstagramEmbedPayload,
+  PublicSourceRetrieverChain,
 } from "@/lib/retrieval/public-source";
+import {
+  InstagramFullReelRetriever,
+  normalizeMetaMediaUrl,
+  reelFrameTimestamps,
+  selectInstagramAudioUrl,
+  selectInstagramVideoUrl,
+  type InstagramReelCapture,
+} from "@/lib/retrieval/instagram-reel";
 
 function embedFixture(): string {
   const mediaPayload = JSON.stringify({
@@ -68,5 +77,99 @@ describe("public Instagram retrieval", () => {
 
     expect(result.materials).toEqual([]);
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("normalizes ranged Meta CDN media and selects the audio encoding", () => {
+    const audioMetadata = btoa(JSON.stringify({ vencode_tag: "dash_baseline_audio", bitrate: 128000 }));
+    const videoMetadata = btoa(JSON.stringify({ vencode_tag: "dash_baseline_1080p", bitrate: 3500000 }));
+    const audioUrl = `https://media.cdninstagram.com/reel.mp4?efg=${encodeURIComponent(audioMetadata)}&bytestart=0&byteend=999`;
+    const videoUrl = `https://media.cdninstagram.com/reel.mp4?efg=${encodeURIComponent(videoMetadata)}&bytestart=0&byteend=999`;
+
+    expect(normalizeMetaMediaUrl(audioUrl)).not.toContain("bytestart");
+    expect(normalizeMetaMediaUrl(audioUrl)).not.toContain("byteend");
+    expect(selectInstagramAudioUrl([videoUrl, audioUrl])).toBe(normalizeMetaMediaUrl(audioUrl));
+    expect(selectInstagramVideoUrl([audioUrl, videoUrl])).toBe(normalizeMetaMediaUrl(videoUrl));
+    expect(normalizeMetaMediaUrl("https://example.com/reel.mp4")).toBeNull();
+  });
+
+  it("samples the complete Reel timeline with a bounded number of frames", () => {
+    const timestamps = reelFrameTimestamps(55.33);
+
+    expect(timestamps).toHaveLength(23);
+    expect(timestamps[0]).toBeGreaterThan(0);
+    expect(timestamps.at(-1)).toBeGreaterThan(53);
+    expect(reelFrameTimestamps(600)).toHaveLength(24);
+  });
+
+  it("uses full audio and timestamped frames before the caption", async () => {
+    const audioMetadata = btoa(JSON.stringify({ vencode_tag: "dash_baseline_audio", bitrate: 128000 }));
+    const capture: InstagramReelCapture = {
+      capture: vi.fn().mockResolvedValue({
+        sourceUrl: "https://www.instagram.com/reel/ABC123/",
+        durationSeconds: 55.33,
+        caption: "Five Japan trip tips.",
+        username: "public_teacher",
+        frames: [{ timestampSeconds: 2.5, mimeType: "image/jpeg", base64: "aW1hZ2U=" }],
+        coverFrame: { timestampSeconds: 2.5, mimeType: "image/jpeg", base64: "Y292ZXI=" },
+        mediaUrls: [`https://media.cdninstagram.com/reel.mp4?efg=${encodeURIComponent(audioMetadata)}&bytestart=0&byteend=3`],
+      }),
+    };
+    const transcriber: MediaTranscriber = {
+      transcribe: vi.fn().mockResolvedValue({ text: "Tip one. Tip two. Tip three. Tip four. Tip five.", model: "test-transcriber" }),
+    };
+    const frameAnalyzer: ReelFrameAnalyzer = {
+      analyzeReelFrames: vi.fn().mockResolvedValue({ text: "[00:02] On-screen text: Tip 1", model: "test-vision" }),
+    };
+    const fetcher = vi.fn().mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), {
+      status: 200,
+      headers: { "Content-Length": "3", "Content-Type": "audio/mp4" },
+    }));
+    const mediaHint = `https://media.cdninstagram.com/reel.mp4?efg=${encodeURIComponent(audioMetadata)}&bytestart=0&byteend=3`;
+    const result = await new InstagramFullReelRetriever(capture, transcriber, frameAnalyzer, fetcher)
+      .retrieve("https://www.instagram.com/reel/ABC123/?igsh=tracking", { publicMediaUrls: [mediaHint] });
+
+    expect(result.creator).toBe("@public_teacher");
+    expect(result.transcriptionModel).toBe("test-transcriber");
+    expect(result.sourceVisual).toEqual({ timestampSeconds: 2.5, mimeType: "image/jpeg", base64: "Y292ZXI=" });
+    expect(result.materials.map((material) => material.origin)).toEqual([
+      "instagram_browser_transcription",
+      "instagram_browser_visual_analysis",
+      "instagram_browser_caption",
+    ]);
+    expect(fetcher).toHaveBeenCalledWith(expect.not.stringContaining("bytestart"), expect.any(Object));
+    expect(transcriber.transcribe).toHaveBeenCalledOnce();
+    expect(frameAnalyzer.analyzeReelFrames).toHaveBeenCalledOnce();
+    expect(capture.capture).toHaveBeenCalledWith(
+      "https://www.instagram.com/reel/ABC123/?igsh=tracking",
+      [mediaHint],
+    );
+  });
+
+  it("falls through to text retrieval when full-Reel browser capture fails", async () => {
+    const fullReel = new InstagramFullReelRetriever(
+      { capture: vi.fn().mockRejectedValue(new Error("Browser blocked")) },
+      { transcribe: vi.fn() },
+      { analyzeReelFrames: vi.fn() },
+    );
+    const textFallback = {
+      retrieve: vi.fn().mockResolvedValue({
+        materials: [{
+          kind: "caption" as const,
+          label: "Fallback caption",
+          text: "Five Japan trip tips.",
+          origin: "openai_web_search" as const,
+          completeness: "partial" as const,
+        }],
+        creator: "@public_teacher",
+        model: "fallback",
+        consultedUrls: ["https://www.instagram.com/reel/ABC123/"],
+      }),
+    };
+
+    const result = await new PublicSourceRetrieverChain([fullReel, textFallback])
+      .retrieve("https://www.instagram.com/reel/ABC123/");
+
+    expect(result.materials[0]?.origin).toBe("openai_web_search");
+    expect(textFallback.retrieve).toHaveBeenCalledOnce();
   });
 });

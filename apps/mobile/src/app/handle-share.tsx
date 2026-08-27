@@ -1,21 +1,55 @@
 import { router } from 'expo-router';
-import { useIncomingShare } from 'expo-sharing';
+import * as Sharing from 'expo-sharing';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CurioBrand } from '@/components/curio-brand';
+import { InstagramMediaDiscovery } from '@/components/instagram-media-discovery';
 import { colors, fonts } from '@/constants/curio-theme';
 import { CurioApiError, saveLink, saveSharedMedia } from '@/lib/curio-api';
-import { parseIncomingShare } from '@/lib/incoming-share';
+import { type IncomingSharePayload, parseIncomingShare } from '@/lib/incoming-share';
+
+interface IncomingShareState {
+  clearSharedPayloads: () => void;
+  error: Error | null;
+  isResolving: boolean;
+  resolvedSharedPayloads: IncomingSharePayload[];
+  sharedPayloads: IncomingSharePayload[];
+}
+
+function useUnavailableIncomingShare(): IncomingShareState {
+  return {
+    clearSharedPayloads: () => undefined,
+    error: new Error('Sharing directly into Curio requires a development build. Paste the link instead.'),
+    isResolving: false,
+    resolvedSharedPayloads: [],
+    sharedPayloads: [],
+  };
+}
+
+const useCurioIncomingShare = (
+  Sharing as typeof Sharing & { useIncomingShare?: () => IncomingShareState }
+).useIncomingShare ?? useUnavailableIncomingShare;
 
 const progressCopy = ['Receiving your find', 'Checking the source', 'Finding the useful signal', 'Putting it in the right place'];
 
+function isInstagramReel(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return ['instagram.com', 'www.instagram.com', 'instagr.am'].includes(url.hostname.toLowerCase())
+      && /^\/(?:reel|reels)\/[A-Za-z0-9_-]+/u.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 export default function HandleShareScreen() {
-  const { clearSharedPayloads, error: shareError, isResolving, resolvedSharedPayloads, sharedPayloads } = useIncomingShare();
+  const { clearSharedPayloads, error: shareError, isResolving, resolvedSharedPayloads, sharedPayloads } = useCurioIncomingShare();
   const [stage, setStage] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
   const started = useRef(false);
+  const mediaUrls = useRef<string[]>([]);
   const incoming = useMemo(
     () => parseIncomingShare([...sharedPayloads, ...resolvedSharedPayloads]),
     [resolvedSharedPayloads, sharedPayloads],
@@ -30,13 +64,26 @@ export default function HandleShareScreen() {
     if (isResolving || started.current || (!incoming.url && !incoming.media)) return;
     started.current = true;
 
-    const operation = incoming.url
-      ? saveLink(incoming.url, { context: incoming.context })
-      : saveSharedMedia(incoming.media!);
+    const operation = async () => {
+      if (incoming.url && isInstagramReel(incoming.url) && mediaUrls.current.length === 0) {
+        for (let attempt = 0; attempt < 20 && mediaUrls.current.length === 0; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+      }
+      if (incoming.url && isInstagramReel(incoming.url) && mediaUrls.current.length) {
+        await new Promise((resolve) => setTimeout(resolve, 1_200));
+      }
+      return incoming.url
+        ? saveLink(incoming.url, { context: incoming.context, publicMediaUrls: mediaUrls.current })
+        : saveSharedMedia(incoming.media!);
+    };
 
-    void operation.then((result) => {
+    void operation().then((result) => {
       clearSharedPayloads();
-      router.replace({ pathname: '/item/[id]', params: { id: result.item.id } });
+      const resourceId = result.resource?.id ?? result.item.resourceIds?.[0];
+      router.replace(resourceId
+        ? { pathname: '/resource/[id]', params: { id: resourceId } }
+        : { pathname: '/item/[id]', params: { id: result.item.id } });
     }).catch((caught) => {
       setSaveError(caught instanceof CurioApiError ? caught.message : 'Curio could not finish this share.');
     });
@@ -47,6 +94,12 @@ export default function HandleShareScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <InstagramMediaDiscovery
+        onMediaUrls={(incomingUrls) => {
+          mediaUrls.current = [...new Set([...mediaUrls.current, ...incomingUrls])].slice(0, 30);
+        }}
+        sourceUrl={incoming.url ?? ''}
+      />
       <View style={styles.top}><CurioBrand compact /></View>
       <View style={styles.body}>
         {problem ? (
@@ -58,7 +111,7 @@ export default function HandleShareScreen() {
             <Pressable onPress={() => { clearSharedPayloads(); router.replace('/capture'); }} style={styles.primaryButton}>
               <Text style={styles.primaryText}>Paste the link</Text><Text style={styles.primaryText}>→</Text>
             </Pressable>
-            <Pressable onPress={() => { clearSharedPayloads(); router.replace('/'); }} style={styles.secondaryButton}><Text style={styles.secondaryText}>Back to saved</Text></Pressable>
+            <Pressable onPress={() => { clearSharedPayloads(); router.replace('/'); }} style={styles.secondaryButton}><Text style={styles.secondaryText}>Back to library</Text></Pressable>
           </>
         ) : (
           <>

@@ -1,6 +1,5 @@
 import {
   learningItemSchema,
-  personalProfile,
   type AccessLevel,
   type IngestionInput,
   type LearningItem,
@@ -17,16 +16,24 @@ import {
   type MediaTranscriber,
   type PublicSourceRetriever,
 } from "../ai/services";
-import { LEARNING_CARD_PROMPT_VERSION, LEARNING_CARD_RESEARCH_PROMPT_VERSION } from "../ai/prompt";
+import {
+  LEARNING_CARD_PROMPT_VERSION,
+  LEARNING_CARD_RESEARCH_PROMPT_VERSION,
+  prioritizeSourceMaterials,
+} from "../ai/prompt";
+import { PUBLIC_SOURCE_RETRIEVAL_VERSION } from "../retrieval/instagram-reel";
+import type { SourceVisualStore } from "../media/source-visual-store";
 
 export const DEMO_TRANSCRIPT = `Most people make their work visible by creating more status updates. Try documenting instead of reporting. When you make a decision, write down the decision, the outcome, and one lesson while the context is still fresh. That small work log can become evidence for a performance review, an example for someone you mentor, or the seed of a useful post. The goal is not to count activity. It is to preserve the outcomes that would otherwise disappear.`;
 
 export interface PipelineDependencies {
+  profileId: string;
   repository: LearningItemRepository;
   transcriber: MediaTranscriber | null;
   retriever?: PublicSourceRetriever | null;
   analyzer: LearningCardAnalyzer | null;
   researcher?: LearningCardResearcher | null;
+  sourceVisualStore?: SourceVisualStore | null;
   demoAnalyzer?: LearningCardAnalyzer;
   id?: () => string;
   now?: () => string;
@@ -106,7 +113,17 @@ function initialAccessLevel(input: IngestionInput): AccessLevel {
 
 function mergeMaterials(current: SourceMaterial[], incoming: SourceMaterial[]): SourceMaterial[] {
   const seen = new Set(current.map((material) => `${material.kind}:${material.text}`));
-  return [...current, ...incoming.filter((material) => !seen.has(`${material.kind}:${material.text}`))];
+  return prioritizeSourceMaterials([
+    ...current,
+    ...incoming.filter((material) => !seen.has(`${material.kind}:${material.text}`)),
+  ]);
+}
+
+function hasPrimaryReelEvidence(materials: SourceMaterial[]): boolean {
+  return materials.some((material) => (
+    material.origin === "instagram_browser_transcription"
+    || material.origin === "instagram_browser_visual_analysis"
+  ));
 }
 
 function sourcePlatform(input: IngestionInput): LearningItem["platform"] {
@@ -177,24 +194,29 @@ export async function processLearningItem(
   const now = dependencies.now ?? (() => new Date().toISOString());
   const id = dependencies.id ?? (() => crypto.randomUUID());
   const fingerprint = await sourceFingerprint(input);
-  const existing = await dependencies.repository.findByFingerprint(fingerprint);
+  const existing = await dependencies.repository.findByFingerprint(dependencies.profileId, fingerprint);
   const incomingMaterials = initialMaterials(input);
   const isUrlSource = input.sourceType === "instagram_url" || input.sourceType === "external_url";
+  const isInstagramSource = isUrlSource && sourcePlatform(input) === "instagram";
+  const hasClientMediaHints = Boolean(input.publicMediaUrls?.length);
   const addsEvidence = existing && isUrlSource && !existing.card && incomingMaterials.some((incoming) =>
     !existing.sourceMaterials.some((current) => current.kind === incoming.kind && current.text === incoming.text));
   const retriesPublicRetrieval = existing && isUrlSource && !existing.card && existing.sourceMaterials.length === 0
     && Boolean(dependencies.retriever);
+  const upgradesReelRetrieval = existing && isInstagramSource && Boolean(dependencies.retriever)
+    && (existing.sourceRetrievalVersion !== PUBLIC_SOURCE_RETRIEVAL_VERSION || hasClientMediaHints)
+    && !hasPrimaryReelEvidence(existing.sourceMaterials);
   const refreshesAnalysis = existing && isUrlSource && Boolean(existing.card) && existing.sourceMaterials.length > 0
     && (
       existing.analysisPromptVersion !== LEARNING_CARD_PROMPT_VERSION
       || (Boolean(dependencies.researcher) && existing.card?.researchBrief?.promptVersion !== LEARNING_CARD_RESEARCH_PROMPT_VERSION)
     );
-  if (existing && !addsEvidence && !retriesPublicRetrieval && !refreshesAnalysis) {
+  if (existing && !addsEvidence && !retriesPublicRetrieval && !upgradesReelRetrieval && !refreshesAnalysis) {
     return { item: existing, duplicate: true };
   }
 
   let item: LearningItem;
-  if (existing && (addsEvidence || retriesPublicRetrieval || refreshesAnalysis)) {
+  if (existing && (addsEvidence || retriesPublicRetrieval || upgradesReelRetrieval || refreshesAnalysis)) {
     item = replace(existing, {
       creator: input.creator ?? existing.creator,
       sourceCaption: input.sourceCaption ?? existing.sourceCaption,
@@ -219,7 +241,7 @@ export async function processLearningItem(
     const createdAt = now();
     item = learningItemSchema.parse({
       id: id(),
-      profileId: personalProfile.id,
+      profileId: dependencies.profileId,
       sourceType: input.sourceType,
       sourceUrl: input.sourceUrl,
       platform: sourcePlatform(input),
@@ -237,6 +259,7 @@ export async function processLearningItem(
       analysisMode: "not_run",
       analysisModel: null,
       analysisPromptVersion: null,
+      sourceRetrievalVersion: null,
       transcriptionModel: null,
       issues: [],
       createdAt,
@@ -248,28 +271,57 @@ export async function processLearningItem(
   item = replace(item, { processingStatus: "retrieving_source" }, now);
   await dependencies.repository.save(item);
 
-  if (isUrlSource && item.sourceMaterials.length === 0 && input.sourceUrl && dependencies.retriever) {
+  const needsRicherReelEvidence = isInstagramSource
+    && (item.sourceRetrievalVersion !== PUBLIC_SOURCE_RETRIEVAL_VERSION || hasClientMediaHints)
+    && !hasPrimaryReelEvidence(item.sourceMaterials);
+  if (isUrlSource && (item.sourceMaterials.length === 0 || needsRicherReelEvidence) && input.sourceUrl && dependencies.retriever) {
     try {
-      const retrieval = await dependencies.retriever.retrieve(input.sourceUrl);
-      if (retrieval.materials.length) {
-        const retrievedCaption = retrieval.materials.find((material) => material.kind === "caption");
-        const retrievedTranscript = retrieval.materials.find((material) => material.kind === "transcript");
-        const retrievedVisualText = retrieval.materials.find((material) => material.kind === "visible_text");
-        item = replace(item, {
-          creator: retrieval.creator ?? item.creator,
-          sourceCaption: retrievedCaption?.text ?? item.sourceCaption,
-          transcript: retrievedTranscript?.text ?? item.transcript,
-          extractedVisualText: retrievedVisualText?.text ?? item.extractedVisualText,
-          transcriptionModel: retrieval.materials.some((material) => material.origin === "instagram_public_embed_transcription")
-            ? retrieval.model
-            : item.transcriptionModel,
-          sourceMaterials: mergeMaterials(item.sourceMaterials, retrieval.materials),
-          accessLevel: "partial",
-        }, now);
-        await dependencies.repository.save(item);
+      const retrieval = input.publicMediaUrls?.length
+        ? await dependencies.retriever.retrieve(input.sourceUrl, { publicMediaUrls: input.publicMediaUrls })
+        : await dependencies.retriever.retrieve(input.sourceUrl);
+      const retrievedCaption = retrieval.materials.find((material) => material.kind === "caption");
+      const retrievedTranscript = retrieval.materials.find((material) => material.kind === "transcript");
+      const retrievedVisualText = retrieval.materials.find((material) => material.kind === "visible_text");
+      const hasRetrievedTranscription = retrieval.materials.some((material) => (
+        material.origin === "instagram_browser_transcription"
+        || material.origin === "instagram_public_embed_transcription"
+      ));
+      let sourceVisual = item.sourceVisual;
+      if (retrieval.sourceVisual && dependencies.sourceVisualStore) {
+        try {
+          sourceVisual = await dependencies.sourceVisualStore.put({
+            profileId: item.profileId,
+            itemId: item.id,
+            candidate: retrieval.sourceVisual,
+            capturedAt: now(),
+          });
+        } catch (error) {
+          console.warn(JSON.stringify({
+            event: "source_visual_storage_failed",
+            itemId: item.id,
+            errorType: error instanceof Error ? error.name : "unknown",
+          }));
+        }
       }
+      item = replace(item, {
+        creator: retrieval.creator ?? item.creator,
+        sourceCaption: retrievedCaption?.text ?? item.sourceCaption,
+        transcript: retrievedTranscript?.text ?? item.transcript,
+        extractedVisualText: retrievedVisualText?.text ?? item.extractedVisualText,
+        sourceVisual,
+        sourceRetrievalVersion: PUBLIC_SOURCE_RETRIEVAL_VERSION,
+        transcriptionModel: hasRetrievedTranscription
+          ? retrieval.transcriptionModel ?? retrieval.model
+          : item.transcriptionModel,
+        sourceMaterials: mergeMaterials(item.sourceMaterials, retrieval.materials),
+        accessLevel: retrieval.materials.length ? "partial" : item.accessLevel,
+      }, now);
+      await dependencies.repository.save(item);
     } catch (error) {
-      item = replace(item, { issues: [...item.issues, publicRetrievalIssue(error)] }, now);
+      item = replace(item, {
+        sourceRetrievalVersion: PUBLIC_SOURCE_RETRIEVAL_VERSION,
+        issues: [...item.issues, publicRetrievalIssue(error)],
+      }, now);
       await dependencies.repository.save(item);
     }
   }
@@ -388,6 +440,7 @@ export async function processLearningItem(
         card: {
           ...item.card,
           researchBrief: {
+            mode: research.mode,
             overview: research.overview,
             findings: research.findings,
             researchedAt: now(),

@@ -11,7 +11,7 @@ export function CurioBottomBar({ active = 'saved' }: { active?: 'saved' | 'prior
     <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
       <Pressable accessibilityRole="tab" accessibilityState={{ selected: active === 'saved' }} onPress={() => router.replace('/')} style={styles.tab}>
         <Text style={active === 'saved' ? styles.activeIcon : styles.icon}>⌂</Text>
-        <Text style={active === 'saved' ? styles.activeLabel : styles.label}>Saved</Text>
+        <Text style={active === 'saved' ? styles.activeLabel : styles.label}>Library</Text>
       </Pressable>
       <Pressable accessibilityLabel="Add to Curio" onPress={() => router.push('/capture')} style={({ pressed }) => [styles.add, pressed && styles.pressed]}>
         <Text style={styles.addIcon}>＋</Text>

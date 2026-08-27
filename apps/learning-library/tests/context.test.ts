@@ -80,12 +80,81 @@ describe("connected-context personalization", () => {
     expect(personalized.card?.personalization).toEqual(expect.objectContaining({
       domain: "finance",
       priority: "high",
-      engineVersion: "context-router-v1",
+      recommendationTier: "do_now",
+      evidenceStatus: "unresearched",
+      engineVersion: "context-router-v3-card-domain",
     }));
     expect(personalized.card?.personalization?.contextUsed.length).toBeGreaterThan(0);
     expect(personalized.card?.personalization?.contextUsed.every((entry) => entry.domain === "finance")).toBe(true);
     expect(personalized.card?.personalization?.contextUsed.some((entry) => entry.statement.includes("tax-advantaged"))).toBe(true);
     expect(personalized.card?.personalization?.whyNow).not.toContain("international trip");
     expect(personalized.card?.personalization?.whyNow).not.toContain("weeknight meal");
+  });
+
+  it("prefers the extracted card domain over keyword guesswork", () => {
+    const item = hsaItem();
+    const explicitlyTravel = learningItemSchema.parse({
+      ...item,
+      card: { ...item.card, domain: "travel" },
+    });
+    expect(detectContextDomain(explicitlyTravel)).toBe("travel");
+  });
+
+  it("does not manufacture a recommendation without a meaningful context match", async () => {
+    const snapshot = await mockSnapshot();
+    const item = hsaItem();
+    const unmatched = learningItemSchema.parse({
+      ...item,
+      id: "00000000-0000-4000-8000-000000000062",
+      sourceFingerprint: "context-test-ceramics",
+      card: {
+        ...item.card,
+        title: "Notice glazing patterns in studio ceramics",
+        primaryTopic: "ceramics",
+        secondaryTopics: ["craft"],
+        summary: "A visual reference for layered glazes and hand-built forms.",
+        keyTakeaways: ["Layered glazes create depth."],
+        notes: [],
+      },
+    });
+
+    expect(personalizeLearningItem(unmatched, snapshot, NOW).card?.personalization).toBeNull();
+  });
+
+  it("routes unresolved high-stakes claims to review instead of action", async () => {
+    const snapshot = await mockSnapshot();
+    const item = hsaItem();
+    const unresolved = learningItemSchema.parse({
+      ...item,
+      card: {
+        ...item.card,
+        claimsToVerify: [{
+          claim: "Everyone can open and fund an HSA.",
+          category: "high_stakes_factual_claim",
+          reasonToVerify: "Eligibility depends on qualifying health coverage.",
+        }],
+      },
+    });
+    const personalized = personalizeLearningItem(unresolved, snapshot, NOW);
+
+    expect(personalized.card?.personalization).toEqual(expect.objectContaining({
+      recommendationTier: "worth_remembering",
+      evidenceStatus: "mixed",
+    }));
+    expect(personalized.card?.personalization?.nextStep).toContain("evidence and corrections");
+  });
+
+  it("temporarily removes recommendations marked for later", async () => {
+    const snapshot = await mockSnapshot();
+    const item = learningItemSchema.parse({
+      ...hsaItem(),
+      recommendationFeedback: {
+        state: "later",
+        updatedAt: NOW,
+        revisitAt: "2026-08-24T12:00:00.000Z",
+      },
+    });
+
+    expect(personalizeLearningItem(item, snapshot, NOW).card?.personalization).toBeNull();
   });
 });

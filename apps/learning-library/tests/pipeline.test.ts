@@ -4,11 +4,17 @@ import { MemoryLearningItemRepository } from "@/lib/data/memory-repository";
 import type { IngestionInput, LearningCard } from "@/lib/domain";
 import { LEARNING_CARD_PROMPT_VERSION } from "@/lib/ai/prompt";
 import { processLearningItem, sourceFingerprint } from "@/lib/processing/pipeline";
+import { PUBLIC_SOURCE_RETRIEVAL_VERSION } from "@/lib/retrieval/instagram-reel";
+import type { SourceVisualStore } from "@/lib/media/source-visual-store";
+
+const profileId = "00000000-0000-4000-8000-000000000031";
 
 const card: LearningCard = {
   title: "A grounded card",
   primaryTopic: "career",
   secondaryTopics: ["communication"],
+  domain: "career",
+  presentationType: "explainer",
   contentType: "framework",
   summary: "A source-grounded summary.",
   keyTakeaways: ["Keep the evidence."],
@@ -43,6 +49,7 @@ describe("Learning Item pipeline", () => {
     const transcriber: MediaTranscriber = { transcribe: vi.fn().mockResolvedValue({ text: "Keep a small decision log.", model: "test-transcriber" }) };
     const analyzer: LearningCardAnalyzer = { analyze: vi.fn().mockResolvedValue({ card, mode: "live_openai", model: "test-analyzer", promptVersion: LEARNING_CARD_PROMPT_VERSION }) };
     const result = await processLearningItem(uploadInput(new File(["video"], "lesson.mp4", { type: "video/mp4" })), {
+      profileId,
       repository,
       transcriber,
       analyzer,
@@ -68,6 +75,7 @@ describe("Learning Item pipeline", () => {
       intent: "reference",
       mediaFile: null,
     }, {
+      profileId,
       repository: new MemoryLearningItemRepository(),
       transcriber: null,
       analyzer,
@@ -94,7 +102,19 @@ describe("Learning Item pipeline", () => {
         creator: "@public_teacher",
         model: "test-retriever",
         consultedUrls: ["https://www.instagram.com/reel/ABC123/"],
+        sourceVisual: { timestampSeconds: 1.5, mimeType: "image/jpeg", base64: "aW1hZ2U=" },
       }),
+    };
+    const sourceVisualStore: SourceVisualStore = {
+      put: vi.fn().mockResolvedValue({
+        kind: "reel_frame",
+        objectKey: "profiles/profile/items/item/cover.jpg",
+        mimeType: "image/jpeg",
+        timestampSeconds: 1.5,
+        normalizationVersion: "full-bleed-9x16-v1",
+        capturedAt: "2026-08-19T12:00:00.000Z",
+      }),
+      get: vi.fn(),
     };
     const result = await processLearningItem({
       sourceType: "external_url",
@@ -105,10 +125,12 @@ describe("Learning Item pipeline", () => {
       intent: "remember",
       mediaFile: null,
     }, {
+      profileId,
       repository: new MemoryLearningItemRepository(),
       transcriber: null,
       retriever,
       analyzer,
+      sourceVisualStore,
     });
 
     expect(result.item.accessLevel).toBe("partial");
@@ -118,6 +140,8 @@ describe("Learning Item pipeline", () => {
       expect.objectContaining({ kind: "caption", origin: "openai_web_search", completeness: "partial" }),
     ]);
     expect(result.item.card?.title).toBe("A grounded card");
+    expect(result.item.sourceVisual).toEqual(expect.objectContaining({ kind: "reel_frame", timestampSeconds: 1.5 }));
+    expect(sourceVisualStore.put).toHaveBeenCalledWith(expect.objectContaining({ itemId: result.item.id }));
     expect(retriever.retrieve).toHaveBeenCalledWith("https://www.instagram.com/reel/ABC123/");
     expect(analyzer.analyze).toHaveBeenCalledOnce();
   });
@@ -128,6 +152,7 @@ describe("Learning Item pipeline", () => {
     };
     const researcher: LearningCardResearcher = {
       research: vi.fn().mockResolvedValue({
+        mode: "source_validation",
         overview: "The central claim is supported, with an important eligibility condition.",
         model: "test-researcher",
         promptVersion: "test-research-v1",
@@ -149,6 +174,7 @@ describe("Learning Item pipeline", () => {
       intent: "verify",
       mediaFile: null,
     }, {
+      profileId,
       repository: new MemoryLearningItemRepository(),
       transcriber: null,
       analyzer,
@@ -157,6 +183,7 @@ describe("Learning Item pipeline", () => {
 
     expect(result.item.card?.notes).toHaveLength(4);
     expect(result.item.card?.researchBrief).toEqual(expect.objectContaining({
+      mode: "source_validation",
       model: "test-researcher",
       findings: [expect.objectContaining({ verdict: "supported_with_context" })],
     }));
@@ -193,8 +220,8 @@ describe("Learning Item pipeline", () => {
       mediaFile: null,
     };
 
-    const first = await processLearningItem(input, { repository, transcriber: null, retriever, analyzer });
-    const retried = await processLearningItem(input, { repository, transcriber: null, retriever, analyzer });
+    const first = await processLearningItem(input, { profileId, repository, transcriber: null, retriever, analyzer });
+    const retried = await processLearningItem(input, { profileId, repository, transcriber: null, retriever, analyzer });
 
     expect(first.item.accessLevel).toBe("link_only");
     expect(retried.duplicate).toBe(false);
@@ -204,11 +231,127 @@ describe("Learning Item pipeline", () => {
     expect(retriever.retrieve).toHaveBeenCalledTimes(2);
   });
 
+  it("upgrades an existing caption-only Reel once with primary audio and visual evidence", async () => {
+    const repository = new MemoryLearningItemRepository();
+    const analyze = vi.fn().mockResolvedValue({
+      card,
+      mode: "live_openai",
+      model: "test-analyzer",
+      promptVersion: LEARNING_CARD_PROMPT_VERSION,
+    });
+    const retriever: PublicSourceRetriever = {
+      retrieve: vi.fn().mockResolvedValue({
+        materials: [{
+          kind: "transcript",
+          label: "Full speech transcript from the public Instagram Reel",
+          text: "Tip one. Tip two. Tip three. Tip four. Tip five.",
+          origin: "instagram_browser_transcription",
+          completeness: "complete_for_channel",
+        }, {
+          kind: "visible_text",
+          label: "Timestamped visual evidence sampled across the full Reel",
+          text: "[00:03] On-screen text: Tip 1",
+          origin: "instagram_browser_visual_analysis",
+          completeness: "partial",
+        }],
+        creator: "@public_teacher",
+        model: "test-transcriber+test-vision",
+        transcriptionModel: "test-transcriber",
+        consultedUrls: ["https://www.instagram.com/reel/ABC123/"],
+      }),
+    };
+    const input: IngestionInput = {
+      sourceType: "instagram_url",
+      sourceUrl: "https://www.instagram.com/reel/ABC123/",
+      creator: null,
+      sourceCaption: "Five Japan trip tips.",
+      extractedVisualText: null,
+      intent: "remember",
+      mediaFile: null,
+    };
+
+    const captionOnly = await processLearningItem(input, {
+      profileId,
+      repository,
+      transcriber: null,
+      analyzer: { analyze },
+    });
+    const upgraded = await processLearningItem(input, {
+      profileId,
+      repository,
+      transcriber: null,
+      retriever,
+      analyzer: { analyze },
+    });
+    const duplicate = await processLearningItem(input, {
+      profileId,
+      repository,
+      transcriber: null,
+      retriever,
+      analyzer: { analyze },
+    });
+
+    expect(captionOnly.item.sourceRetrievalVersion).toBeNull();
+    expect(upgraded.duplicate).toBe(false);
+    expect(upgraded.item.sourceRetrievalVersion).toBe(PUBLIC_SOURCE_RETRIEVAL_VERSION);
+    expect(upgraded.item.transcriptionModel).toBe("test-transcriber");
+    expect(upgraded.item.sourceMaterials.slice(0, 2).map((material) => material.origin)).toEqual([
+      "instagram_browser_visual_analysis",
+      "instagram_browser_transcription",
+    ]);
+    expect(duplicate.duplicate).toBe(true);
+    expect(retriever.retrieve).toHaveBeenCalledOnce();
+    expect(analyze).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses new phone-discovered media to retry a Reel after a server-only fallback", async () => {
+    const repository = new MemoryLearningItemRepository();
+    const analyze = vi.fn().mockResolvedValue({ card, mode: "live_openai", model: "test-analyzer", promptVersion: LEARNING_CARD_PROMPT_VERSION });
+    const input: IngestionInput = {
+      sourceType: "external_url",
+      sourceUrl: "https://www.instagram.com/reel/CLIENT123/",
+      creator: null,
+      sourceCaption: "Three useful tips.",
+      extractedVisualText: null,
+      intent: "remember",
+      mediaFile: null,
+    };
+    const captionOnly = await processLearningItem(input, { profileId, repository, transcriber: null, analyzer: { analyze } });
+    await repository.save({ ...captionOnly.item, sourceRetrievalVersion: PUBLIC_SOURCE_RETRIEVAL_VERSION });
+
+    const retrieve = vi.fn().mockResolvedValue({
+      materials: [{
+        kind: "transcript",
+        label: "Full speech transcript from the public Instagram Reel",
+        text: "The complete spoken tips.",
+        origin: "instagram_browser_transcription",
+        completeness: "complete_for_channel",
+      }],
+      creator: null,
+      model: "test-transcriber",
+      transcriptionModel: "test-transcriber",
+      consultedUrls: [input.sourceUrl],
+    });
+    const mediaUrls = ["https://media.cdninstagram.com/reel.mp4?efg=encoded"];
+    const retried = await processLearningItem({ ...input, publicMediaUrls: mediaUrls }, {
+      profileId,
+      repository,
+      transcriber: null,
+      retriever: { retrieve },
+      analyzer: { analyze },
+    });
+
+    expect(retried.duplicate).toBe(false);
+    expect(retried.item.transcript).toBe("The complete spoken tips.");
+    expect(retrieve).toHaveBeenCalledWith(input.sourceUrl, { publicMediaUrls: mediaUrls });
+  });
+
   it("returns the existing item when identical media is submitted twice", async () => {
     const repository = new MemoryLearningItemRepository();
     const transcribe = vi.fn().mockResolvedValue({ text: "Same source.", model: "test-transcriber" });
     const analyze = vi.fn().mockResolvedValue({ card, mode: "live_openai", model: "test-analyzer", promptVersion: LEARNING_CARD_PROMPT_VERSION });
     const dependencies = {
+      profileId,
       repository,
       transcriber: { transcribe },
       analyzer: { analyze },
@@ -253,8 +396,9 @@ describe("Learning Item pipeline", () => {
       intent: "remember",
       mediaFile: null,
     };
-    const first = await processLearningItem(base, { repository, transcriber: null, analyzer });
+    const first = await processLearningItem(base, { profileId, repository, transcriber: null, analyzer });
     const enriched = await processLearningItem({ ...base, sourceCaption: "A useful lesson with enough evidence to process." }, {
+      profileId,
       repository,
       transcriber: null,
       analyzer,
@@ -283,8 +427,8 @@ describe("Learning Item pipeline", () => {
       mediaFile: null,
     };
 
-    const first = await processLearningItem(input, { repository, transcriber: null, analyzer: { analyze } });
-    const refreshed = await processLearningItem(input, { repository, transcriber: null, analyzer: { analyze } });
+    const first = await processLearningItem(input, { profileId, repository, transcriber: null, analyzer: { analyze } });
+    const refreshed = await processLearningItem(input, { profileId, repository, transcriber: null, analyzer: { analyze } });
 
     expect(refreshed.duplicate).toBe(false);
     expect(refreshed.item.id).toBe(first.item.id);

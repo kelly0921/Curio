@@ -2,10 +2,26 @@
 
 Curio turns useful social videos and links into organized knowledge: detailed source notes, source-validated research, and personalized priorities based on connected context.
 
+The long-term product direction is to treat saved posts as input sources and turn them into deduplicated living resources rather than accumulating one card per source. See [Curio product direction](docs/PRODUCT_DIRECTION.md).
+
+## Product preview
+
+| Library | Add to Curio |
+| --- | --- |
+| ![Curio mobile library](assets/curio-library-mobile.png) | ![Curio mobile capture flow](assets/curio-capture-mobile.png) |
+| Learning resource | For You |
+| ![Curio synthesized learning resource](assets/curio-resource-mobile.png) | ![Curio personalized recommendations](assets/curio-for-you-mobile.png) |
+
 ## Repository layout
 
 - `apps/mobile` — Expo mobile-first capture, library, source viewer, and For You experience.
-- `apps/learning-library` — Next.js processing API, OpenAI extraction and research, context routing, and optional Supabase persistence.
+- `apps/learning-library` — Next.js processing API, OpenAI extraction and research, context routing, and durable Cloudflare D1 persistence.
+
+## Live personal beta
+
+The protected processor is deployed at [https://curio-processor.kellychenmeiyi.workers.dev](https://curio-processor.kellychenmeiyi.workers.dev). Its health endpoint reports the OpenAI and D1 configuration without exposing secrets. Expo development, preview, and production environments point to this URL.
+
+The deployed private beta uses passwordless Supabase authentication. Public sign-ups are disabled, each invited user's library is isolated, and a narrow migration bridge keeps the original personal library intact. The former shared beta token is rejected whenever Supabase authentication is configured.
 
 ## Local development
 
@@ -41,7 +57,7 @@ npm run export:web
 npm --prefix apps/mobile run preview:web
 ```
 
-See the application READMEs for LAN configuration, Expo builds, Supabase migrations, Cloudflare deployment, and current prototype limitations.
+See the application READMEs for LAN configuration, Expo builds, D1 migrations, Cloudflare deployment, optional Supabase support, and current prototype limitations.
 
 ## Quality checks
 
