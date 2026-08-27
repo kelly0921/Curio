@@ -82,6 +82,7 @@ export function CurioAuthProvider({ children }: PropsWithChildren) {
       if (!active) return;
       setSession(nextSession);
       setCurioAccessToken(nextSession?.access_token ?? null, true);
+      if (nextSession) setError(null);
       setLoading(false);
     };
     const initialize = async () => {

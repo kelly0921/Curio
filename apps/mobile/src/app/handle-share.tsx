@@ -48,6 +48,7 @@ export default function HandleShareScreen() {
   const { clearSharedPayloads, error: shareError, isResolving, resolvedSharedPayloads, sharedPayloads } = useCurioIncomingShare();
   const [stage, setStage] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [retryVersion, setRetryVersion] = useState(0);
   const started = useRef(false);
   const mediaUrls = useRef<string[]>([]);
   const incoming = useMemo(
@@ -87,7 +88,14 @@ export default function HandleShareScreen() {
     }).catch((caught) => {
       setSaveError(caught instanceof CurioApiError ? caught.message : 'Curio could not finish this share.');
     });
-  }, [clearSharedPayloads, incoming, isResolving]);
+  }, [clearSharedPayloads, incoming, isResolving, retryVersion]);
+
+  const retryShare = () => {
+    started.current = false;
+    setStage(0);
+    setSaveError(null);
+    setRetryVersion((current) => current + 1);
+  };
 
   const noSupportedPayload = !isResolving && !incoming.url && !incoming.media;
   const problem = saveError || shareError?.message || (noSupportedPayload ? 'Curio did not receive a link or supported video from this share.' : null);
@@ -106,11 +114,20 @@ export default function HandleShareScreen() {
           <>
             <View style={[styles.signal, styles.problemSignal]}><Text style={styles.signalText}>!</Text></View>
             <Text style={styles.eyebrow}>SHARE INCOMPLETE</Text>
-            <Text style={styles.title}>Keep the curiosity.{`\n`}Try the link instead.</Text>
+            <Text style={styles.title}>Keep the curiosity.{`\n`}Nothing was lost.</Text>
             <Text style={styles.copy}>{problem}</Text>
-            <Pressable onPress={() => { clearSharedPayloads(); router.replace('/capture'); }} style={styles.primaryButton}>
-              <Text style={styles.primaryText}>Paste the link</Text><Text style={styles.primaryText}>→</Text>
-            </Pressable>
+            {saveError ? (
+              <>
+                <Pressable onPress={retryShare} style={styles.primaryButton}>
+                  <Text style={styles.primaryText}>Try this share again</Text><Text style={styles.primaryText}>↻</Text>
+                </Pressable>
+                <Pressable onPress={() => { clearSharedPayloads(); router.replace('/capture'); }} style={styles.secondaryButton}><Text style={styles.secondaryText}>Paste the link instead</Text></Pressable>
+              </>
+            ) : (
+              <Pressable onPress={() => { clearSharedPayloads(); router.replace('/capture'); }} style={styles.primaryButton}>
+                <Text style={styles.primaryText}>Paste the link</Text><Text style={styles.primaryText}>→</Text>
+              </Pressable>
+            )}
             <Pressable onPress={() => { clearSharedPayloads(); router.replace('/'); }} style={styles.secondaryButton}><Text style={styles.secondaryText}>Back to library</Text></Pressable>
           </>
         ) : (

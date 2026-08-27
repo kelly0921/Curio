@@ -22,17 +22,18 @@ function cleanUrl(value: string): string {
 
 export function parseIncomingShare(payloads: IncomingSharePayload[]): CurioIncomingShare {
   let url: string | null = null;
-  let context: string | null = null;
   let media: CurioIncomingShare['media'] = null;
+  const contextParts: string[] = [];
 
   for (const payload of payloads) {
     const value = payload.value?.trim() ?? '';
     const matchedUrl = value.match(urlPattern)?.[0];
     if (!url && matchedUrl) {
       url = cleanUrl(matchedUrl);
-      const remaining = value.replace(matchedUrl, '').replace(/\s+/gu, ' ').trim();
-      if (remaining.length >= 12) context = remaining;
     }
+
+    const remaining = matchedUrl ? value.replace(matchedUrl, '') : value;
+    const normalizedContext = remaining.replace(/\s+/gu, ' ').trim();
 
     if (!url && payload.contentType === 'website' && payload.contentUri?.startsWith('http')) {
       url = payload.contentUri;
@@ -47,7 +48,13 @@ export function parseIncomingShare(payloads: IncomingSharePayload[]): CurioIncom
         mimeType: payload.contentMimeType ?? payload.mimeType ?? null,
       };
     }
+
+    const looksLikeFileReference = /^(?:content|file):\/\//iu.test(normalizedContext);
+    if (!isMedia && !looksLikeFileReference && normalizedContext.length >= 12) {
+      contextParts.push(normalizedContext);
+    }
   }
 
+  const context = [...new Set(contextParts)].slice(0, 3).join('\n').slice(0, 4_000) || null;
   return { url, context, media };
 }
