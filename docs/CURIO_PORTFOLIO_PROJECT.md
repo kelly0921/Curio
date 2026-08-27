@@ -52,7 +52,7 @@ I:
 ### Minimal-input capture
 
 - Accepts a pasted public link through a single primary field.
-- Supports shared URLs and supported audio/video files in the Expo client.
+- Uses a one-field paste flow in the current Expo SDK 54 client; native incoming-share parsing and recovery are prepared but not yet enabled as a phone share target.
 - Infers likely save intent—such as understand, try, visit, buy, track, compare, or reference—without requiring the user to categorize the source.
 - Preserves a source-only save when evidence cannot be retrieved instead of inventing a summary.
 
@@ -131,13 +131,13 @@ I:
 - Node's test runner for mobile-domain behavior
 - ESLint and TypeScript type checking
 - Expo static web export
-- 124 automated tests currently passing: 101 processor tests and 23 mobile tests, verified August 27, 2026
+- 128 automated tests currently passing: 101 processor tests and 27 mobile tests, verified August 27, 2026
 
 ### Application architecture
 
 ```text
 Instagram, TikTok, or web source
-  -> share or paste into the Expo app
+  -> paste into the current Expo app, with native sharing planned for the beta client
   -> authenticated Next.js processing API on Cloudflare Workers
   -> validate and fingerprint the source
   -> retrieve available public evidence
@@ -202,7 +202,7 @@ Notion may become a useful source of personalized context or an export destinati
 
 The processing service is deployed at [curio-processor.kellychenmeiyi.workers.dev](https://curio-processor.kellychenmeiyi.workers.dev). It uses Cloudflare D1 persistence and Supabase passwordless authentication. Public sign-ups are disabled, unauthenticated requests and the retired shared beta token are rejected, and invited users are isolated by verified user ID.
 
-The current product includes link and media capture, best-effort public-Reel processing, structured learning cards, cited research, living resources, exact-source provenance, resource search, visual covers, progressive deep dives, intent-aware follow-through, and cross-save For You synthesis.
+The current product includes one-field link capture, small-media processing support in the backend, best-effort public-Reel processing, structured learning cards, cited research, living resources, exact-source provenance, resource search, visual covers, progressive deep dives, intent-aware follow-through, and cross-save For You synthesis.
 
 The processor URL is an API endpoint, not a public product demo. The portfolio should use the product screenshots until a stable web demo, TestFlight build, or store release is available.
 
@@ -210,7 +210,7 @@ Important constraints remain:
 
 - Curio does not synchronize private Instagram Saved folders because the supported platform API does not expose that capture surface.
 - Public-Reel acquisition is best effort and depends on public availability and fragile third-party page behavior; restricted content may remain source-only unless the user shares media or context.
-- EAS profiles exist, but native share-target behavior still needs release-by-release validation on physical iOS and Android devices.
+- EAS profiles exist, but the SDK 54 client does not currently register an incoming share target. That capability needs a native implementation and physical iOS/Android validation before it is described as available.
 - Long media processing is still synchronous; production scale needs signed uploads, queued jobs, retries, idempotency, and rate limits.
 - A public launch still needs privacy policy, export and deletion flows, crash reporting, final store metadata, and external-user validation.
 - Notion sync and other real context connectors are future work. Mock context must remain clearly labeled and should not appear in portfolio screenshots as a live integration.
@@ -244,7 +244,7 @@ Instagram and TikTok make saving effortless but learning from saved content diff
 
 ### Approach
 
-I designed Curio around one low-effort action: share or paste. The system inspects the available speech, captions, visible text, frames, and source metadata; preserves the exact named tips or ideas; researches material claims; and matches the result to a living guide, glossary, playbook, or watchlist.
+I designed Curio around low-effort capture: paste works today, and a native share target is the intended next capture surface. The system inspects the available speech, captions, visible text, frames, and source metadata; preserves the exact named tips or ideas; researches material claims; and matches the result to a living guide, glossary, playbook, or watchlist.
 
 The original source stays attached as provenance, but it does not dictate the organization. Repeated saves add support rather than duplicate cards. Search works from remembered meaning, and For You highlights evidence-backed patterns and changes across saves rather than creating another recommendation feed.
 
@@ -261,7 +261,7 @@ As founder, product designer, and founding engineer, I defined the problem, zero
 - Meaning-oriented retrieval across resources, entries, research, transcripts, entities, and visible source text
 - Evidence-gated For You synthesis using themes, repeated support, material changes, unresolved claims, and engagement signals
 - Cloudflare Workers, D1, R2, Browser Rendering, and observability with Supabase passwordless user identity
-- 124 passing automated tests across processor and mobile behavior
+- 128 passing automated tests across processor and mobile behavior
 
 ### Current Status
 
@@ -327,7 +327,7 @@ All current screenshots use synthetic demo content at a 390 × 844 mobile viewpo
 ### Asset gaps
 
 - Copy the selected images into the portfolio repository so the public site does not depend on Curio-local paths.
-- Create a short screen-recorded demo of paste/share, processing, resource creation, search, and For You.
+- Create a short screen-recorded demo of paste, processing, resource creation, search, and For You; add direct sharing only after the native target is verified.
 - Capture final native screenshots after device testing and before a public launch.
 - Create final App Store iconography and store-ready product art if Curio moves beyond private beta.
 

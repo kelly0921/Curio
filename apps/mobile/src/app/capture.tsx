@@ -166,7 +166,7 @@ export default function CaptureScreen() {
             {saving ? (
               <View style={styles.progress}>
                 <ActivityIndicator color={colors.surface} />
-                <View><Text style={styles.progressTitle}>{stages[stage]}</Text><Text style={styles.progressCopy}>This usually takes a few seconds.</Text></View>
+                <View style={styles.progressText}><Text style={styles.progressTitle}>{stages[stage]}</Text><Text style={styles.progressCopy}>Keep Curio open while it processes this source.</Text></View>
               </View>
             ) : (
               <Pressable onPress={() => void submit()} style={({ pressed }) => [styles.saveButton, pressed && styles.pressed]}>
@@ -174,12 +174,12 @@ export default function CaptureScreen() {
               </Pressable>
             )}
 
-            {error && <View style={styles.error}><Text style={styles.errorTitle}>Couldn’t save this yet</Text><Text style={styles.errorCopy}>{error}</Text></View>}
+            {error && <View style={styles.error}><Text style={styles.errorTitle}>Couldn’t save this yet</Text><Text style={styles.errorCopy}>{error} Your link is still here—tap Save to retry.</Text></View>}
           </View>
 
           <View style={styles.shareHint}>
             <Text style={styles.shareHintIcon}>⇧</Text>
-            <View style={styles.shareHintCopy}><Text style={styles.shareHintTitle}>Even faster from Instagram or TikTok</Text><Text style={styles.shareHintBody}>Tap Share on the post, then choose Curio. No copying once your development build is installed.</Text></View>
+            <View style={styles.shareHintCopy}><Text style={styles.shareHintTitle}>From Instagram or TikTok</Text><Text style={styles.shareHintBody}>Copy the post link, then paste it here. Direct Share to Curio requires a later native beta build.</Text></View>
           </View>
 
           <Pressable disabled={saving} onPress={() => void loadSample()} style={styles.sampleButton}>
@@ -220,6 +220,7 @@ const styles = StyleSheet.create({
   saveArrow: { color: colors.surface, fontSize: 20 },
   pressed: { opacity: 0.8, transform: [{ scale: 0.99 }] },
   progress: { alignItems: 'center', backgroundColor: colors.dark, borderRadius: 16, flexDirection: 'row', gap: 13, marginTop: 4, minHeight: 62, paddingHorizontal: 17 },
+  progressText: { flex: 1 },
   progressTitle: { color: colors.surface, fontFamily: fonts.body, fontSize: 13, fontWeight: '800' },
   progressCopy: { color: '#C9C7BE', fontFamily: fonts.body, fontSize: 10, marginTop: 2 },
   error: { backgroundColor: '#F3DFD4', borderRadius: 14, marginTop: 12, padding: 13 },

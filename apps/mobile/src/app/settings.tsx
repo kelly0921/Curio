@@ -61,7 +61,7 @@ export default function SettingsScreen() {
                 <Text style={styles.connectionLabel}>{connection.isDemo ? 'DEMO CONNECTION' : 'CONNECTED'}</Text>
                 <Text style={styles.connectionName}>{connection.displayName}</Text>
               </View>
-              <View style={styles.livePill}><Text style={styles.livePillText}>LIVE</Text></View>
+              <View style={styles.livePill}><Text style={styles.livePillText}>{connection.isDemo ? 'SAMPLE' : 'LIVE'}</Text></View>
             </View>
             <Text style={styles.connectionMeta}>{context.records.length} signals · Synced automatically</Text>
             <View style={styles.domainRow}>
@@ -77,12 +77,6 @@ export default function SettingsScreen() {
           <View style={styles.rule}><Text style={styles.ruleNumber}>1</Text><View style={styles.ruleCopy}><Text style={styles.ruleTitle}>Match the domain</Text><Text style={styles.ruleText}>Finance context stays with finance saves; travel context stays with travel.</Text></View></View>
           <View style={styles.rule}><Text style={styles.ruleNumber}>2</Text><View style={styles.ruleCopy}><Text style={styles.ruleTitle}>Check the evidence</Text><Text style={styles.ruleText}>Unresolved or high-stakes claims are sent to review instead of becoming an action.</Text></View></View>
           <View style={styles.rule}><Text style={styles.ruleNumber}>3</Text><View style={styles.ruleCopy}><Text style={styles.ruleTitle}>Show the receipt</Text><Text style={styles.ruleText}>Every recommendation can show exactly which signals influenced it.</Text></View></View>
-        </View>
-
-        <View style={[styles.nextConnector, shadows.card]}>
-          <View><Text style={styles.nextLabel}>NEXT CONNECTION</Text><Text style={styles.nextTitle}>Notion workspace</Text></View>
-          <View style={styles.plannedPill}><Text style={styles.plannedText}>PLANNED</Text></View>
-          <Text style={styles.nextCopy}>Once connected, Curio can sync goals, plans, constraints, and preferences automatically. No repeated profile setup.</Text>
         </View>
 
         <View style={styles.accountSection}>
@@ -143,12 +137,6 @@ const styles = StyleSheet.create({
   ruleCopy: { flex: 1 },
   ruleTitle: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '800' },
   ruleText: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 4 },
-  nextConnector: { backgroundColor: colors.surface, borderRadius: 23, marginTop: 24, padding: 19 },
-  nextLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
-  nextTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 23, fontWeight: '700', marginTop: 4 },
-  plannedPill: { alignSelf: 'flex-start', backgroundColor: colors.lilac, borderRadius: 11, marginTop: 11, paddingHorizontal: 9, paddingVertical: 6 },
-  plannedText: { color: colors.ink, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.7 },
-  nextCopy: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 13 },
   accountSection: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 34, paddingTop: 26 },
   accountEmail: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: '700', marginTop: 7 },
   accountCopy: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 7 },

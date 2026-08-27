@@ -198,23 +198,23 @@ When Supabase Auth is configured, every API route verifies the user session and 
 ## Important prototype limitations
 
 - No private Instagram Saved-folder synchronization; Meta's supported API does not currently expose that capture surface
-- No Instagram or third-party scraping; links are captured and only supplied captions/transcripts are analyzed
-- Share-to-Curio now has an Expo SDK 57 client in `apps/mobile`; incoming sharing is experimental and requires a native development build
-- No automated video-frame OCR yet
-- Uploaded media itself is not durably stored; the transcript and an ephemeral filename reference are retained
-- No retry endpoint yet; resubmit after correcting a recoverable failure
-- Supabase passwordless auth is implemented but still needs a project, redirect URL, invite list, and production environment configuration
+- Public Instagram retrieval is best effort and uses bounded public page, media, and Browser Rendering surfaces that can change; restricted content remains source-only unless usable evidence is supplied
+- The Expo SDK 54 client is paste-first. It does not currently register an incoming iOS or Android share target
+- Full-Reel evidence extraction samples audio and representative frames, but visual coverage is still bounded and should not be described as complete when the receipt does not support that claim
+- Uploaded source media itself is not durably retained; R2 currently stores source visuals/covers rather than a signed direct-upload media pipeline
+- Processing is synchronous and has no durable job status or manual retry endpoint yet; resubmit after correcting a recoverable failure
+- Supabase passwordless authentication is active for the invite-only deployed beta, but callbacks still need validation in each installable native build
 - The active context connector is labeled mock data; Notion OAuth and durable context synchronization are not connected yet
-- No semantic search, pgvector, weekly recap generation, R2, or Queues yet
+- Natural-language retrieval and weekly cross-save synthesis are implemented with high-confidence deterministic matching; embeddings, Vectorize/pgvector, scheduled generation, and Queues remain later work
 - Research provides cited context and corrections, but it is not personalized professional advice
 
 ## Next milestones
 
-1. Test 10 representative real links/uploads and record access level, usefulness, and failure mode.
-2. Validate the Expo Share-to-Curio target on physical iOS and Android devices, with pasted links retained as the universal fallback.
-3. Add R2 direct uploads and a Queue consumer while retaining `processLearningItem` as the domain orchestrator.
-4. Extract representative frames/OCR and allow `full` only when the required channels are actually covered.
-5. Replace the mock connector with user-authorized Notion sync while keeping the same normalized context contract.
-6. Add keyword and semantic search, related-idea clustering, and weekly cross-item synthesis.
+1. Run the 24-case matrix in `docs/BETA_CONTENT_SCORECARD.csv` and record access level, completeness, usefulness, merge behavior, and failure mode.
+2. Validate passwordless sign-in and the paste-first phone journey on physical devices; choose a native incoming-share implementation before advertising Share-to-Curio.
+3. Add signed R2 direct uploads and a Queue or Workflow consumer while retaining `processLearningItem` as the domain orchestrator.
+4. Improve multi-frame visual coverage and allow `full` only when the evidence receipt supports the required channels.
+5. Add privacy policy, data export/deletion, account deletion, rate limits, and privacy-safe crash monitoring.
+6. Invite three to five external beta users before expanding connectors or adding embedding infrastructure.
 
 Current implementation choices were checked against the official [Cloudflare Next.js/OpenNext guide](https://developers.cloudflare.com/workers/framework-guides/web-apps/nextjs/), [Cloudflare Workers best practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/), [Supabase API-key guidance](https://supabase.com/docs/guides/getting-started/api-keys), [Supabase RLS guide](https://supabase.com/docs/guides/database/postgres/row-level-security), [OpenAI transcription API reference](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create), and [OpenAI Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs).
