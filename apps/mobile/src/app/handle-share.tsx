@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CurioBrand } from '@/components/curio-brand';
 import { InstagramMediaDiscovery } from '@/components/instagram-media-discovery';
 import { colors, fonts } from '@/constants/curio-theme';
-import { CurioApiError, saveLink, saveSharedMedia } from '@/lib/curio-api';
+import { CurioApiError, saveLink, saveSharedMedia, type CaptureSubmission } from '@/lib/curio-api';
 import { type IncomingSharePayload, parseIncomingShare } from '@/lib/incoming-share';
 
 interface IncomingShareState {
@@ -42,6 +42,17 @@ function isInstagramReel(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function openSubmission(submission: CaptureSubmission) {
+  if (submission.kind === 'queued') {
+    router.replace(`/processing/${submission.job.id}` as Href);
+    return;
+  }
+  const resourceId = submission.result.resource?.id ?? submission.result.item.resourceIds?.[0];
+  router.replace(resourceId
+    ? { pathname: '/resource/[id]', params: { id: resourceId } }
+    : { pathname: '/item/[id]', params: { id: submission.result.item.id } });
 }
 
 export default function HandleShareScreen() {
@@ -81,10 +92,7 @@ export default function HandleShareScreen() {
 
     void operation().then((result) => {
       clearSharedPayloads();
-      const resourceId = result.resource?.id ?? result.item.resourceIds?.[0];
-      router.replace(resourceId
-        ? { pathname: '/resource/[id]', params: { id: resourceId } }
-        : { pathname: '/item/[id]', params: { id: result.item.id } });
+      openSubmission(result);
     }).catch((caught) => {
       setSaveError(caught instanceof CurioApiError ? caught.message : 'Curio could not finish this share.');
     });
@@ -142,7 +150,7 @@ export default function HandleShareScreen() {
             <Text style={styles.copy}>No folders to choose and no form to fill out. We’ll preserve the source and organize the evidence it actually provides.</Text>
             <View style={styles.progressCard}>
               <ActivityIndicator color={colors.surface} />
-              <View style={styles.progressCopy}><Text style={styles.progressTitle}>{progressCopy[stage]}</Text><Text style={styles.progressDetail}>Keep Curio open for this first prototype.</Text></View>
+              <View style={styles.progressCopy}><Text style={styles.progressTitle}>{progressCopy[stage]}</Text><Text style={styles.progressDetail}>You can leave once Curio confirms the save.</Text></View>
               <Text style={styles.progressCount}>{stage + 1}/4</Text>
             </View>
           </>

@@ -1,8 +1,8 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "curio-processor",
-  "main": ".open-next/worker.js",
-  "compatibility_date": "2026-08-17",
+  "main": "worker-entry.ts",
+  "compatibility_date": "2026-08-28",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {
     "directory": ".open-next/assets",
@@ -31,6 +31,25 @@
       "bucket_name": "curio-source-media"
     }
   ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "CURIO_PROCESSING_QUEUE",
+        "queue": "curio-processing"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "curio-processing",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 4,
+        "dead_letter_queue": "curio-processing-dlq",
+        "max_concurrency": 2,
+        "retry_delay": 30
+      }
+    ]
+  },
   "vars": {
     "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-mini-transcribe",
     "OPENAI_ANALYSIS_MODEL": "gpt-5.4-mini",

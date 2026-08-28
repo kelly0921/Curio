@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@cloudflare/puppeteer": "^1.1.0",
-    "@cloudflare/workers-types": "5.20260817.1",
+    "@cloudflare/workers-types": "^5.20260828.1",
     "@types/node": "^24.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
@@ -33,7 +33,7 @@
     "eslint-config-next": "16.3.0",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0",
-    "wrangler": "^4.123.0"
+    "wrangler": "^4.127.0"
   },
   "overrides": {
     "@smithy/md5-js": "4.4.16"

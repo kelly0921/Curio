@@ -16,6 +16,8 @@ The Expo app is Curio's primary capture and browsing experience. It keeps the ex
 - A per-card context receipt showing which domain-scoped signals influenced its priority and next step
 - LAN API discovery during development and an explicit production API URL override
 - EAS development, preview, and production profiles
+- Durable background processing with resumable job status and manual retry
+- Account data export and confirmed deletion controls
 
 The current app intentionally stays on Expo SDK 54 so it remains compatible with the available Expo Go client. In this SDK, `expo-sharing` supports sharing files out of Curio but does not register Curio as an incoming iOS or Android share target. The reliable phone flow today is **Copy link → open Curio → paste**. The `/handle-share` route and parsing code are preparation for a later native beta; do not describe direct Share-to-Curio as enabled in the current build.
 
@@ -98,7 +100,7 @@ Open the installed Curio development client and connect to Metro.
 2. Open Instagram or TikTok on the phone.
 3. Use the platform's **Copy link** action.
 4. Open Curio, tap **Add**, paste the link, and save it.
-5. Curio should show the processing state and then open the matching living resource or source card.
+5. Curio should confirm the save quickly. Close the app from the processing screen, reopen it, and confirm the Library resumes the job before opening the matching resource or source card.
 6. Return to the Library and confirm the resource can be found by a remembered idea, not only its title.
 7. Open the original source and confirm Curio retains the exact post or Reel permalink.
 
@@ -128,8 +130,8 @@ node node_modules/expo/bin/cli config --type public
 - Validate the configured Supabase passwordless callback in each installable preview build before inviting external testers.
 - Implement and physically validate the native incoming-share target; the current SDK 54 build is paste-first.
 - Replace the labeled mock context connection with user-authorized Notion sync.
-- Move uploaded media to signed R2 uploads and processing to a Queue.
-- Add job status, retries, idempotency, rate limits, crash reporting, privacy policy, export, and account deletion.
+- Replace the bounded Worker-staged upload with a signed direct-to-R2 upload before increasing the 20 MB limit.
+- Add automated alert delivery and beta-scale rate limits; structured Cloudflare logs, readiness checks, a dead-letter queue, privacy notice, export, and deletion are now present.
 - Replace the template app icon and finalize store metadata.
 
 Current implementation uses Expo SDK 54 and follows the official Expo guidance for [monorepos](https://docs.expo.dev/guides/monorepos/), [SDK 54 sharing](https://docs.expo.dev/versions/v54.0.0/sdk/sharing/), and [development builds](https://docs.expo.dev/build/setup/).

@@ -87,6 +87,10 @@ class R2SourceVisualStore implements SourceVisualStore {
   }
 }
 
+export function sourceVisualStoreFromBucket(bucket: R2Bucket): SourceVisualStore {
+  return new R2SourceVisualStore(bucket);
+}
+
 class MemorySourceVisualStore implements SourceVisualStore {
   private readonly objects = new Map<string, { bytes: Uint8Array; contentType: string }>();
 
@@ -137,7 +141,7 @@ async function cloudflareBucket(): Promise<R2Bucket | null> {
 
 export async function getSourceVisualStore(): Promise<SourceVisualStore> {
   const bucket = await cloudflareBucket();
-  if (bucket) return new R2SourceVisualStore(bucket);
+  if (bucket) return sourceVisualStoreFromBucket(bucket);
   if (process.env.NODE_ENV === "production") {
     throw new Error("Cloudflare R2 binding CURIO_SOURCE_MEDIA is unavailable.");
   }

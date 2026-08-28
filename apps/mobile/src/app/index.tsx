@@ -1,4 +1,4 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -21,11 +21,13 @@ import {
   CurioApiError,
   getCurioApiUrl,
   listKnowledgeResources,
+  listProcessingJobs,
   searchKnowledgeLibrary,
   updateResourceFollowThrough,
   type ContextDomain,
   type KnowledgeResource,
   type KnowledgeSearchResult,
+  type ProcessingJobReceipt,
 } from '@/lib/curio-api';
 import { resourceFollowThroughKind } from '@/lib/resource-presentation';
 
@@ -74,11 +76,17 @@ export default function HomeScreen() {
   const [followThroughResourceIds, setFollowThroughResourceIds] = useState<Set<string>>(() => new Set());
   const [followThroughUpdatingId, setFollowThroughUpdatingId] = useState<string | null>(null);
   const [followThroughError, setFollowThroughError] = useState<string | null>(null);
+  const [processingJobs, setProcessingJobs] = useState<ProcessingJobReceipt[]>([]);
 
   const load = useCallback(async (pullToRefresh = false) => {
     if (pullToRefresh) setRefreshing(true);
     try {
-      setResources(await listKnowledgeResources());
+      const [loadedResources, jobs] = await Promise.all([
+        listKnowledgeResources(),
+        listProcessingJobs().catch(() => []),
+      ]);
+      setResources(loadedResources);
+      setProcessingJobs(jobs.filter((job) => job.status === 'queued' || job.status === 'processing' || (job.status === 'failed' && job.error?.recoverable)));
       setError(null);
     } catch (caught) {
       setError(caught instanceof CurioApiError ? caught.message : 'Curio could not load your knowledge library.');
@@ -228,6 +236,21 @@ export default function HomeScreen() {
                 </View>
               )}
 
+              {processingJobs.length > 0 && (
+                <Pressable
+                  onPress={() => router.push(`/processing/${processingJobs[0].id}` as Href)}
+                  style={styles.processingBanner}>
+                  <View style={styles.processingSignal}><Text style={styles.processingSignalText}>{processingJobs.some((job) => job.status === 'failed') ? '!' : '↗'}</Text></View>
+                  <View style={styles.processingCopy}>
+                    <Text style={styles.processingTitle}>{processingJobs.some((job) => job.status === 'failed')
+                      ? `${processingJobs.length} save${processingJobs.length === 1 ? '' : 's'} need attention`
+                      : `${processingJobs.length} save${processingJobs.length === 1 ? '' : 's'} being organized`}</Text>
+                    <Text style={styles.processingDetail}>Open status</Text>
+                  </View>
+                  <Text style={styles.processingArrow}>→</Text>
+                </Pressable>
+              )}
+
               {answer && (
                 <View style={styles.answerCard}>
                   <Text style={styles.answerEyebrow}>{questionMode ? 'ANSWERED FROM YOUR LIBRARY' : 'BEST MATCHES FROM YOUR SAVES'}</Text>
@@ -370,6 +393,13 @@ const styles = StyleSheet.create({
   offlineTitle: { color: colors.ink, fontFamily: fonts.body, fontSize: 13, fontWeight: '800' },
   offlineCopy: { color: '#735C51', fontFamily: fonts.body, fontSize: 12, lineHeight: 17, marginTop: 4 },
   apiAddress: { color: '#735C51', fontFamily: 'monospace', fontSize: 10, marginTop: 8 },
+  processingBanner: { alignItems: 'center', backgroundColor: colors.butter, borderRadius: 18, flexDirection: 'row', gap: 12, marginBottom: 25, minHeight: 66, paddingHorizontal: 14 },
+  processingSignal: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 14, height: 38, justifyContent: 'center', width: 38 },
+  processingSignalText: { color: colors.ink, fontFamily: fonts.display, fontSize: 17, fontWeight: '700' },
+  processingCopy: { flex: 1 },
+  processingTitle: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '900' },
+  processingDetail: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, marginTop: 2 },
+  processingArrow: { color: colors.ink, fontFamily: fonts.body, fontSize: 17 },
   answerCard: { backgroundColor: colors.dark, borderRadius: 25, marginBottom: 6, padding: 20 },
   answerEyebrow: { color: colors.butter, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
   answerTitle: { color: colors.surface, fontFamily: fonts.display, fontSize: 28, fontWeight: '700', letterSpacing: -0.6, lineHeight: 32, marginTop: 7 },

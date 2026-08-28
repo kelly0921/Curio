@@ -267,7 +267,6 @@ export class PublicSourceRetrieverChain implements PublicSourceRetriever {
           event: "public_source_strategy_failed",
           strategy: retriever.constructor.name,
           errorType: error instanceof Error ? error.name : "unknown",
-          message: error instanceof Error ? error.message.slice(0, 240) : "Unknown retrieval failure",
         }));
         // Continue to the next bounded retrieval strategy.
       }

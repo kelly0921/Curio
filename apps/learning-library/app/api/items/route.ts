@@ -8,7 +8,7 @@ import { IngestionValidationError, MAX_REQUEST_BYTES, parseIngestionForm } from 
 import { getLearningItemRepository } from "@/lib/data/provider";
 import { getPersonalContextSnapshot } from "@/lib/context/provider";
 import { personalizeLearningItem, personalizeLearningItems } from "@/lib/context/personalization";
-import { processLearningItem } from "@/lib/processing/pipeline";
+import { processLearningItem, sourceFingerprint } from "@/lib/processing/pipeline";
 import { upsertKnowledgeResourceForItem } from "@/lib/knowledge/resources";
 import {
   experimentalInstagramEmbedEnabled,
@@ -20,6 +20,9 @@ import {
   InstagramFullReelRetriever,
 } from "@/lib/retrieval/instagram-reel";
 import { getSourceVisualStore } from "@/lib/media/source-visual-store";
+import { processingJobReceipt, serializableJobInput } from "@/lib/jobs/domain";
+import { getProcessingRuntime } from "@/lib/jobs/provider";
+import { logCurioEvent, requestId, withRequestId } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +69,7 @@ export function OPTIONS(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const traceId = requestId(request);
   const viewer = await authenticateApiRequest(request);
   if (!viewer) return errorResponse(request, "UNAUTHORIZED", "Sign in to Curio to continue.", 401);
   const contentLength = Number(request.headers.get("content-length") ?? "0");
@@ -75,6 +79,61 @@ export async function POST(request: Request) {
 
   try {
     const input = parseIngestionForm(await request.formData());
+    const processingRuntime = await getProcessingRuntime();
+    if (processingRuntime) {
+      const idempotencyKey = await sourceFingerprint(input);
+      const existing = await processingRuntime.jobs.findByIdempotencyKey(viewer.profileId, idempotencyKey);
+      if (existing) {
+        return NextResponse.json(
+          { ok: true, data: { job: processingJobReceipt(existing) } },
+          {
+            status: existing.status === "ready" ? 200 : 202,
+            headers: withRequestId(apiResponseHeaders(request), traceId),
+          },
+        );
+      }
+
+      const jobId = crypto.randomUUID();
+      const stagedMedia = input.mediaFile
+        ? await processingRuntime.media.stage(viewer.profileId, jobId, input.mediaFile)
+        : null;
+      let job;
+      try {
+        job = await processingRuntime.jobs.create({
+          id: jobId,
+          profileId: viewer.profileId,
+          idempotencyKey,
+          jobInput: serializableJobInput(input, stagedMedia),
+          now: new Date().toISOString(),
+        });
+      } catch (error) {
+        await processingRuntime.media.remove(stagedMedia);
+        const racedJob = await processingRuntime.jobs.findByIdempotencyKey(viewer.profileId, idempotencyKey);
+        if (!racedJob) throw error;
+        job = racedJob;
+      }
+      if (job.id === jobId) {
+        try {
+          await processingRuntime.queue.send({ jobId: job.id, profileId: viewer.profileId }, { contentType: "json" });
+          logCurioEvent({ event: "processing_job_enqueued", requestId: traceId, jobId: job.id, status: job.status });
+        } catch {
+          job = await processingRuntime.jobs.markFailed(job, {
+            code: "QUEUE_UNAVAILABLE",
+            message: "Curio saved this source but could not start processing. Retry when you’re ready.",
+            recoverable: true,
+          }, new Date().toISOString());
+          logCurioEvent({ event: "processing_job_enqueue_failed", requestId: traceId, jobId: job.id, errorCode: "QUEUE_UNAVAILABLE" }, "error");
+        }
+      }
+      return NextResponse.json(
+        { ok: true, data: { job: processingJobReceipt(job) } },
+        {
+          status: 202,
+          headers: withRequestId(apiResponseHeaders(request), traceId),
+        },
+      );
+    }
+
     const repository = await getLearningItemRepository();
     const services = openAIServices();
     const browserWorker = services ? await cloudflareBrowserWorker() : null;
@@ -123,10 +182,10 @@ export async function POST(request: Request) {
     }
     console.error(JSON.stringify({
       event: "learning_item_processing_failed",
+      requestId: traceId,
       errorType: error instanceof Error ? error.name : "unknown",
-      errorMessage: error instanceof Error ? error.message : "Unknown processing error",
       validationIssues: error instanceof ZodError
-        ? error.issues.map((entry) => ({ path: entry.path.join("."), code: entry.code, message: entry.message }))
+        ? error.issues.map((entry) => ({ path: entry.path.join("."), code: entry.code }))
         : undefined,
     }));
     return errorResponse(request, "PROCESSING_FAILED", "The item could not be processed. No unsupported claims were generated.", 500);

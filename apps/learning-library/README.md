@@ -47,8 +47,8 @@ Instagram's public embed HTML is an undocumented integration surface. Curio enab
 
 ```text
 Next.js client
-  └─ POST /api/items (multipart)
-       └─ processing/pipeline.ts
+  └─ POST /api/items (multipart) → D1 job + Cloudflare Queue
+       └─ Worker queue consumer → processing/pipeline.ts
             ├─ source validation + SHA-256 fingerprint
             ├─ PublicSourceRetriever (OpenAI web search, exact URL only)
             ├─ MediaTranscriber (OpenAI audio transcription)
@@ -74,9 +74,10 @@ Important boundaries:
 - `lib/processing/pipeline.ts` owns state transitions and can move behind a Queue without changing the UI or domain.
 - `lib/context/*` keeps connector sync, normalized context, domain routing, and derived personalization separate from source extraction.
 - `lib/data/*` keeps persistence replaceable; D1 and Supabase store the validated canonical record plus searchable projections.
-- `app/api/items/route.ts` only validates HTTP input, selects dependencies, and returns response envelopes.
+- `app/api/items/route.ts` validates HTTP input, stages bounded uploads in R2, and enqueues a durable job in production.
+- `lib/jobs/*` owns idempotent job state, atomic claims, retry policy, and staged-media cleanup.
 
-The browser request is synchronous in V0.1. The UI presents the processing journey while the request runs. Longer media should move to direct R2 upload plus Cloudflare Queues before this is shared broadly.
+Production processing is asynchronous and durable. The app can close after capture, poll the job after reopening, and manually retry recoverable failures. Local Next.js development retains a synchronous fallback. The current 20 MB upload is staged through the Worker; larger media should use a signed direct-to-R2 upload rather than raising this limit.
 
 ## Access and status behavior
 
@@ -201,8 +202,8 @@ When Supabase Auth is configured, every API route verifies the user session and 
 - Public Instagram retrieval is best effort and uses bounded public page, media, and Browser Rendering surfaces that can change; restricted content remains source-only unless usable evidence is supplied
 - The Expo SDK 54 client is paste-first. It does not currently register an incoming iOS or Android share target
 - Full-Reel evidence extraction samples audio and representative frames, but visual coverage is still bounded and should not be described as complete when the receipt does not support that claim
-- Uploaded source media itself is not durably retained; R2 currently stores source visuals/covers rather than a signed direct-upload media pipeline
-- Processing is synchronous and has no durable job status or manual retry endpoint yet; resubmit after correcting a recoverable failure
+- Uploaded media is staged privately in R2 for durable processing and then removed; it is not a signed direct-upload pipeline and remains limited to 20 MB
+- Queue processing, durable job status, idempotent submission, bounded retries, and manual retry are implemented; the dead-letter queue still requires operational monitoring
 - Supabase passwordless authentication is active for the invite-only deployed beta, but callbacks still need validation in each installable native build
 - The active context connector is labeled mock data; Notion OAuth and durable context synchronization are not connected yet
 - Natural-language retrieval and weekly cross-save synthesis are implemented with high-confidence deterministic matching; embeddings, Vectorize/pgvector, scheduled generation, and Queues remain later work
@@ -212,9 +213,9 @@ When Supabase Auth is configured, every API route verifies the user session and 
 
 1. Run the 24-case matrix in `docs/BETA_CONTENT_SCORECARD.csv` and record access level, completeness, usefulness, merge behavior, and failure mode.
 2. Validate passwordless sign-in and the paste-first phone journey on physical devices; choose a native incoming-share implementation before advertising Share-to-Curio.
-3. Add signed R2 direct uploads and a Queue or Workflow consumer while retaining `processLearningItem` as the domain orchestrator.
+3. Replace the bounded Worker-staged upload with signed direct-to-R2 uploads while retaining the Queue consumer and `processLearningItem` orchestrator.
 4. Improve multi-frame visual coverage and allow `full` only when the evidence receipt supports the required channels.
-5. Add privacy policy, data export/deletion, account deletion, rate limits, and privacy-safe crash monitoring.
+5. Publish the drafted privacy notice, connect automated alert delivery, and add beta-scale rate limits; export/deletion and privacy-safe structured logs are implemented.
 6. Invite three to five external beta users before expanding connectors or adding embedding infrastructure.
 
 Current implementation choices were checked against the official [Cloudflare Next.js/OpenNext guide](https://developers.cloudflare.com/workers/framework-guides/web-apps/nextjs/), [Cloudflare Workers best practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/), [Supabase API-key guidance](https://supabase.com/docs/guides/getting-started/api-keys), [Supabase RLS guide](https://supabase.com/docs/guides/database/postgres/row-level-security), [OpenAI transcription API reference](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create), and [OpenAI Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs).
