@@ -453,7 +453,6 @@ export async function processLearningItem(
       console.warn(JSON.stringify({
         event: "learning_card_research_failed",
         errorType: error instanceof Error ? error.name : "unknown",
-        message: error instanceof Error ? error.message.slice(0, 300) : "Unknown research failure",
       }));
       item = replace(item, { issues: [...item.issues, researchIssue(error)] }, now);
     }

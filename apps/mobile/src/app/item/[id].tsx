@@ -123,7 +123,11 @@ export default function ItemDetailScreen() {
     setRetryError(null);
     try {
       const result = await saveLink(item.sourceUrl, { intent: item.intent });
-      setItem(result.item);
+      if (result.kind === 'queued') {
+        router.replace(`/processing/${result.job.id}` as Href);
+      } else {
+        setItem(result.result.item);
+      }
     } catch (error) {
       setRetryError(error instanceof Error ? error.message : 'Curio could not retry this source.');
     } finally {

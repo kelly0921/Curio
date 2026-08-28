@@ -4,6 +4,8 @@ Curio turns useful social videos and links into organized knowledge: detailed so
 
 The long-term product direction is to treat saved posts as input sources and turn them into deduplicated living resources rather than accumulating one card per source. See [Curio product direction](docs/PRODUCT_DIRECTION.md).
 
+Private-beta privacy and operations are documented in [the privacy notice](docs/PRIVACY.md) and [beta runbook](docs/BETA_OPERATIONS.md).
+
 ## Product preview
 
 | Library | Add to Curio |

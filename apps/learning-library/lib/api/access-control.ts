@@ -5,6 +5,7 @@ import { developmentAppOrigin, isSameOriginRequest } from "./same-origin";
 
 export interface ApiViewer {
   profileId: string;
+  userId: string | null;
   email: string | null;
   authMode: "supabase" | "personal_beta" | "development";
 }
@@ -34,7 +35,7 @@ export function apiResponseHeaders(request: Request): HeadersInit | undefined {
   if (!origin) return undefined;
   return {
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     "Access-Control-Allow-Origin": origin,
     "Vary": "Origin",
   };
@@ -107,18 +108,23 @@ export async function authenticateApiRequest(
     if (!token) return null;
     const identity = await (options.verifySupabaseToken ?? verifySupabaseToken)(token);
     if (!identity || !invitedEmail(identity.email)) return null;
-    return { ...identity, profileId: profileIdForIdentity(identity), authMode: "supabase" };
+    return {
+      profileId: profileIdForIdentity(identity),
+      userId: identity.profileId,
+      email: identity.email,
+      authMode: "supabase",
+    };
   }
 
   const expected = process.env.CURIO_API_TOKEN?.trim();
   if (expected) {
     if (!token || !await tokensMatch(token, expected)) return null;
-    return { profileId: personalProfile.id, email: null, authMode: "personal_beta" };
+    return { profileId: personalProfile.id, userId: null, email: null, authMode: "personal_beta" };
   }
 
   if (environment === "development"
     && (isSameOriginRequest(request) || Boolean(developmentAppOrigin(request, environment)))) {
-    return { profileId: personalProfile.id, email: null, authMode: "development" };
+    return { profileId: personalProfile.id, userId: null, email: null, authMode: "development" };
   }
   return null;
 }

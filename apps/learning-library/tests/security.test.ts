@@ -104,6 +104,7 @@ describe("server boundaries", () => {
       });
       expect(viewer).toEqual({
         profileId: "10000000-0000-4000-8000-000000000001",
+        userId: "10000000-0000-4000-8000-000000000001",
         email: "invited@example.com",
         authMode: "supabase",
       });
@@ -127,6 +128,7 @@ describe("server boundaries", () => {
       });
       expect(legacyOwner).toEqual({
         profileId: "00000000-0000-4000-8000-000000000031",
+        userId: "10000000-0000-4000-8000-000000000001",
         email: "INVITED@example.com",
         authMode: "supabase",
       });

@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CurioBrand } from '@/components/curio-brand';
 import { InstagramMediaDiscovery } from '@/components/instagram-media-discovery';
 import { colors, fonts } from '@/constants/curio-theme';
-import { CurioApiError, saveDemo, saveLink } from '@/lib/curio-api';
+import { CurioApiError, saveDemo, saveLink, type CaptureSubmission } from '@/lib/curio-api';
 
 const stages = ['Saving the source', 'Reading what is available', 'Finding the useful signal', 'Organizing your Curio'];
 
@@ -36,6 +36,17 @@ function isInstagramReel(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function openSubmission(submission: CaptureSubmission) {
+  if (submission.kind === 'queued') {
+    router.replace(`/processing/${submission.job.id}` as Href);
+    return;
+  }
+  const resourceId = submission.result.resource?.id ?? submission.result.item.resourceIds?.[0];
+  router.replace(resourceId
+    ? { pathname: '/resource/[id]', params: { id: resourceId } }
+    : { pathname: '/item/[id]', params: { id: submission.result.item.id } });
 }
 
 export default function CaptureScreen() {
@@ -70,11 +81,7 @@ export default function CaptureScreen() {
       if (isInstagramReel(url) && mediaUrls.current.length) {
         await new Promise((resolve) => setTimeout(resolve, 1_200));
       }
-      const result = await saveLink(url, { context, publicMediaUrls: mediaUrls.current });
-      const resourceId = result.resource?.id ?? result.item.resourceIds?.[0];
-      router.replace(resourceId
-        ? { pathname: '/resource/[id]', params: { id: resourceId } }
-        : { pathname: '/item/[id]', params: { id: result.item.id } });
+      openSubmission(await saveLink(url, { context, publicMediaUrls: mediaUrls.current }));
     } catch (caught) {
       setError(caught instanceof CurioApiError ? caught.message : 'Curio could not save this link.');
       setSaving(false);
@@ -86,11 +93,7 @@ export default function CaptureScreen() {
     setStage(1);
     setError(null);
     try {
-      const result = await saveDemo();
-      const resourceId = result.resource?.id ?? result.item.resourceIds?.[0];
-      router.replace(resourceId
-        ? { pathname: '/resource/[id]', params: { id: resourceId } }
-        : { pathname: '/item/[id]', params: { id: result.item.id } });
+      openSubmission(await saveDemo());
     } catch (caught) {
       setError(caught instanceof CurioApiError ? caught.message : 'Curio could not load the sample.');
       setSaving(false);
@@ -166,7 +169,7 @@ export default function CaptureScreen() {
             {saving ? (
               <View style={styles.progress}>
                 <ActivityIndicator color={colors.surface} />
-                <View style={styles.progressText}><Text style={styles.progressTitle}>{stages[stage]}</Text><Text style={styles.progressCopy}>Keep Curio open while it processes this source.</Text></View>
+                <View style={styles.progressText}><Text style={styles.progressTitle}>{stages[stage]}</Text><Text style={styles.progressCopy}>You can leave once Curio confirms the save.</Text></View>
               </View>
             ) : (
               <Pressable onPress={() => void submit()} style={({ pressed }) => [styles.saveButton, pressed && styles.pressed]}>

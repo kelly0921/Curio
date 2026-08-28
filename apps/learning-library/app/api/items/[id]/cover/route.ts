@@ -102,7 +102,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       event: "source_cover_capture_failed",
       itemId: id,
       errorType: error instanceof Error ? error.name : "unknown",
-      message: error instanceof Error ? error.message.slice(0, 240) : "Unknown cover capture failure",
     }));
     return errorResponse(request, "SOURCE_COVER_CAPTURE_FAILED", "Curio could not capture this Reel cover yet.", 500);
   }

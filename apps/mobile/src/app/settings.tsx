@@ -1,12 +1,12 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CurioBrand } from '@/components/curio-brand';
 import { colors, fonts, shadows } from '@/constants/curio-theme';
 import { useCurioAuth } from '@/lib/curio-auth';
-import { getPersonalContext, type ContextSnapshot } from '@/lib/curio-api';
+import { CurioApiError, deleteCurioData, exportCurioData, getPersonalContext, type ContextSnapshot } from '@/lib/curio-api';
 
 function label(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/gu, (letter) => letter.toUpperCase());
@@ -19,6 +19,9 @@ export default function SettingsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -84,6 +87,56 @@ export default function SettingsScreen() {
           <Text style={styles.accountEmail}>{auth.session?.user.email ?? 'Personal beta mode'}</Text>
           <Text style={styles.accountCopy}>{auth.configured ? 'Your Curio library is isolated to this signed-in account.' : 'Passwordless accounts are ready in the app and will appear when Supabase Auth is configured.'}</Text>
           {accountError && <Text style={styles.accountError}>{accountError}</Text>}
+          <View style={styles.dataActions}>
+            <Pressable
+              disabled={exporting || deleting}
+              onPress={() => {
+                setExporting(true);
+                setAccountError(null);
+                void exportCurioData()
+                  .then((data) => Share.share({ title: 'My Curio data', message: data }))
+                  .catch((exportError: unknown) => {
+                    setAccountError(exportError instanceof CurioApiError ? exportError.message : 'Curio could not export your data.');
+                  })
+                  .finally(() => setExporting(false));
+              }}
+              style={styles.dataButton}>
+              {exporting ? <ActivityIndicator color={colors.ink} size="small" /> : <Text style={styles.dataButtonText}>Export my data</Text>}
+            </Pressable>
+            {!confirmDelete ? (
+              <Pressable disabled={deleting || exporting} onPress={() => setConfirmDelete(true)} style={styles.deleteLink}>
+                <Text style={styles.deleteLinkText}>Delete my Curio data</Text>
+              </Pressable>
+            ) : (
+              <View style={styles.deleteConfirm}>
+                <Text style={styles.deleteWarning}>This permanently removes your saved sources, generated resources, activity, and stored media. It cannot be undone.</Text>
+                <View style={styles.deleteActions}>
+                  <Pressable disabled={deleting} onPress={() => setConfirmDelete(false)} style={styles.cancelDelete}><Text style={styles.cancelDeleteText}>Cancel</Text></Pressable>
+                  <Pressable
+                    disabled={deleting}
+                    onPress={() => {
+                      setDeleting(true);
+                      setAccountError(null);
+                      void deleteCurioData()
+                        .then(async () => {
+                          try {
+                            await auth.signOut();
+                          } catch {
+                            setAccountError('Your Curio data was deleted, but this device could not clear its sign-in session. Close and reopen Curio.');
+                          }
+                        })
+                        .catch((deleteError: unknown) => {
+                          setAccountError(deleteError instanceof CurioApiError ? deleteError.message : 'Curio could not delete your data.');
+                        })
+                        .finally(() => setDeleting(false));
+                    }}
+                    style={styles.confirmDeleteButton}>
+                    {deleting ? <ActivityIndicator color={colors.surface} size="small" /> : <Text style={styles.confirmDeleteText}>Delete permanently</Text>}
+                  </Pressable>
+                </View>
+              </View>
+            )}
+          </View>
           {auth.configured && (
             <Pressable
               disabled={signingOut}
@@ -141,6 +194,18 @@ const styles = StyleSheet.create({
   accountEmail: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: '700', marginTop: 7 },
   accountCopy: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 7 },
   accountError: { color: colors.danger, fontFamily: fonts.body, fontSize: 11, marginTop: 10 },
+  dataActions: { borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth, marginTop: 16, paddingBottom: 17 },
+  dataButton: { alignItems: 'center', alignSelf: 'flex-start', borderColor: colors.line, borderRadius: 14, borderWidth: 1, justifyContent: 'center', minHeight: 42, minWidth: 132, paddingHorizontal: 15 },
+  dataButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '700' },
+  deleteLink: { alignSelf: 'flex-start', paddingTop: 17 },
+  deleteLinkText: { color: colors.danger, fontFamily: fonts.body, fontSize: 11, fontWeight: '800' },
+  deleteConfirm: { backgroundColor: '#F3DFD4', borderRadius: 16, marginTop: 14, padding: 14 },
+  deleteWarning: { color: '#735C51', fontFamily: fonts.body, fontSize: 10, lineHeight: 16 },
+  deleteActions: { flexDirection: 'row', gap: 9, marginTop: 12 },
+  cancelDelete: { alignItems: 'center', borderColor: '#CBB4A7', borderRadius: 12, borderWidth: 1, justifyContent: 'center', minHeight: 39, paddingHorizontal: 13 },
+  cancelDeleteText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
+  confirmDeleteButton: { alignItems: 'center', backgroundColor: colors.danger, borderRadius: 12, flex: 1, justifyContent: 'center', minHeight: 39, paddingHorizontal: 13 },
+  confirmDeleteText: { color: colors.surface, fontFamily: fonts.body, fontSize: 10, fontWeight: '900' },
   signOutButton: { alignItems: 'center', alignSelf: 'flex-start', borderColor: colors.line, borderRadius: 14, borderWidth: 1, justifyContent: 'center', marginTop: 16, minHeight: 42, minWidth: 92, paddingHorizontal: 15 },
   signOutText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '700' },
 });

@@ -156,6 +156,19 @@ export interface LearningItem {
   updatedAt: string;
 }
 
+export interface ProcessingJobReceipt {
+  id: string;
+  status: 'queued' | 'processing' | 'ready' | 'failed';
+  itemId: string | null;
+  resourceId: string | null;
+  attempts: number;
+  error: { code: string; message: string; recoverable: boolean } | null;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
 export interface KnowledgeResourceEntry {
   id: string;
   kind: 'insight' | 'step' | 'term' | 'recommendation';
@@ -437,6 +450,16 @@ interface ItemEnvelope {
     resource?: KnowledgeResource | null;
     resourceUpdate?: ResourceContribution | null;
   };
+}
+
+interface JobEnvelope {
+  ok: true;
+  data: { job: ProcessingJobReceipt; item?: LearningItem | null; resource?: KnowledgeResource | null };
+}
+
+interface JobsEnvelope {
+  ok: true;
+  data: { jobs: ProcessingJobReceipt[] };
 }
 
 interface ContextEnvelope {
@@ -750,23 +773,33 @@ export interface CaptureResult {
   resourceUpdate: ResourceContribution | null;
 }
 
-async function submitForm(form: FormData): Promise<CaptureResult> {
-  const body = await readEnvelope<ItemEnvelope>(await apiFetch('/api/items', { method: 'POST', body: form }));
+interface AccountDeletionEnvelope {
+  ok: true;
+  data: { deletedRecords: number; deletedObjects: number; authAccountDeleted: boolean };
+}
+
+export type CaptureSubmission =
+  | { kind: 'ready'; result: CaptureResult }
+  | { kind: 'queued'; job: ProcessingJobReceipt };
+
+async function submitForm(form: FormData): Promise<CaptureSubmission> {
+  const body = await readEnvelope<ItemEnvelope | JobEnvelope>(await apiFetch('/api/items', { method: 'POST', body: form }));
+  if ('job' in body.data) return { kind: 'queued', job: body.data.job };
   if (body.data.resource) {
     resourceSnapshot = [body.data.resource, ...resourceSnapshot.filter((resource) => resource.id !== body.data.resource?.id)];
   }
-  return {
+  return { kind: 'ready', result: {
     item: remember(body.data.item),
     duplicate: body.data.duplicate,
     resource: body.data.resource ?? null,
     resourceUpdate: body.data.resourceUpdate ?? null,
-  };
+  } };
 }
 
 export async function saveLink(
   sourceUrl: string,
   options: { context?: string | null; intent?: Intent; publicMediaUrls?: string[] } = {},
-): Promise<CaptureResult> {
+): Promise<CaptureSubmission> {
   const form = new FormData();
   form.append('sourceType', 'external_url');
   form.append('sourceUrl', sourceUrl.trim());
@@ -782,7 +815,7 @@ export async function saveSharedMedia(media: {
   uri: string;
   name?: string | null;
   mimeType?: string | null;
-}): Promise<CaptureResult> {
+}): Promise<CaptureSubmission> {
   const name = media.name || media.uri.split('/').pop() || 'shared-video.mp4';
   const file = { uri: media.uri, name, type: media.mimeType || 'video/mp4' };
   const form = new FormData();
@@ -792,11 +825,55 @@ export async function saveSharedMedia(media: {
   return submitForm(form);
 }
 
-export async function saveDemo(): Promise<CaptureResult> {
+export async function saveDemo(): Promise<CaptureSubmission> {
   const form = new FormData();
   form.append('sourceType', 'demo_fixture');
   form.append('intent', 'remember');
   return submitForm(form);
+}
+
+export async function listProcessingJobs(): Promise<ProcessingJobReceipt[]> {
+  const body = await readEnvelope<JobsEnvelope>(await apiFetch('/api/jobs', { headers: { Accept: 'application/json' } }));
+  return body.data.jobs;
+}
+
+export async function getProcessingJob(id: string): Promise<{
+  job: ProcessingJobReceipt;
+  item: LearningItem | null;
+  resource: KnowledgeResource | null;
+}> {
+  const body = await readEnvelope<JobEnvelope>(await apiFetch(`/api/jobs/${encodeURIComponent(id)}`, { headers: { Accept: 'application/json' } }));
+  if (body.data.item) remember(body.data.item);
+  if (body.data.resource) {
+    resourceSnapshot = [body.data.resource, ...resourceSnapshot.filter((resource) => resource.id !== body.data.resource?.id)];
+  }
+  return {
+    job: body.data.job,
+    item: body.data.item ?? null,
+    resource: body.data.resource ?? null,
+  };
+}
+
+export async function retryProcessingJob(id: string): Promise<ProcessingJobReceipt> {
+  const body = await readEnvelope<JobEnvelope>(await apiFetch(`/api/jobs/${encodeURIComponent(id)}/retry`, { method: 'POST' }));
+  return body.data.job;
+}
+
+export async function exportCurioData(): Promise<string> {
+  const response = await apiFetch('/api/account/export', { headers: { Accept: 'application/json' } });
+  if (!response.ok) await readEnvelope<never>(response);
+  return response.text();
+}
+
+export async function deleteCurioData(): Promise<AccountDeletionEnvelope['data']> {
+  const body = await readEnvelope<AccountDeletionEnvelope>(await apiFetch('/api/account/data', {
+    method: 'DELETE',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmation: 'DELETE' }),
+  }));
+  itemSnapshot = [];
+  resourceSnapshot = [];
+  return body.data;
 }
 
 export async function getLearningItem(id: string): Promise<LearningItem | null> {

@@ -621,7 +621,6 @@ export class InstagramFullReelRetriever implements PublicSourceRetriever {
         console.warn(JSON.stringify({
           event: "instagram_reel_audio_processing_failed",
           errorType: error instanceof Error ? error.name : "unknown",
-          message: error instanceof Error ? error.message.slice(0, 240) : "Unknown Reel audio failure",
         }));
       }
     }
@@ -643,7 +642,6 @@ export class InstagramFullReelRetriever implements PublicSourceRetriever {
         console.warn(JSON.stringify({
           event: "instagram_reel_visual_analysis_failed",
           errorType: error instanceof Error ? error.name : "unknown",
-          message: error instanceof Error ? error.message.slice(0, 240) : "Unknown Reel visual failure",
         }));
       }
     }
