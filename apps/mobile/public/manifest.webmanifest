@@ -1,0 +1,45 @@
+{
+  "id": "/",
+  "name": "Curio — Keep what sparks you",
+  "short_name": "Curio",
+  "description": "Turn useful saves into clear, researched knowledge you can find again.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F6F2E8",
+  "theme_color": "#F6F2E8",
+  "categories": ["education", "productivity", "lifestyle"],
+  "icons": [
+    {
+      "src": "/pwa/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Save a link",
+      "short_name": "Save",
+      "description": "Add something useful to Curio",
+      "url": "/capture"
+    },
+    {
+      "name": "Open library",
+      "short_name": "Library",
+      "url": "/"
+    }
+  ]
+}

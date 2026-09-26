@@ -1,5 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
-
 interface JsonRow {
   record_json: string;
 }
@@ -60,19 +58,4 @@ export async function deleteProfileObjects(bucket: R2Bucket, profileId: string):
     cursor = listed.truncated ? listed.cursor : undefined;
   } while (cursor);
   return deleted;
-}
-
-export async function deleteSupabaseUser(userId: string | null): Promise<boolean> {
-  if (!userId) return false;
-  const url = process.env.SUPABASE_AUTH_URL?.trim() || process.env.SUPABASE_URL?.trim() || "";
-  const secretKey = process.env.SUPABASE_SECRET_KEY?.trim()
-    || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
-    || "";
-  if (!url || !secretKey) return false;
-  const client = createClient(url, secretKey, {
-    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
-  });
-  const { error } = await client.auth.admin.deleteUser(userId);
-  if (error) throw new Error("AUTH_ACCOUNT_DELETION_FAILED");
-  return true;
 }

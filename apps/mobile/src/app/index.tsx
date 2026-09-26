@@ -102,16 +102,16 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const normalized = query.trim();
-    if (normalized.length < 2) {
-      setSearchResult(null);
-      setSearchError(null);
-      setSearching(false);
-      return undefined;
-    }
     let cancelled = false;
-    setSearching(true);
-    setSearchError(null);
     const timer = setTimeout(() => {
+      if (normalized.length < 2) {
+        setSearchResult(null);
+        setSearchError(null);
+        setSearching(false);
+        return;
+      }
+      setSearching(true);
+      setSearchError(null);
       void searchKnowledgeLibrary(normalized, domain === 'all' ? null : (domain as ContextDomain))
         .then((result) => {
           if (!cancelled) {
@@ -128,7 +128,7 @@ export default function HomeScreen() {
         .finally(() => {
           if (!cancelled) setSearching(false);
         });
-    }, 350);
+    }, normalized.length < 2 ? 0 : 350);
     return () => {
       cancelled = true;
       clearTimeout(timer);

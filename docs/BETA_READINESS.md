@@ -12,17 +12,17 @@ This milestone is about reliability and evidence. It does not add quizzes, more 
 
 - The complete Curio history is merged into `main`.
 - `main` requires pull requests, resolved conversations, and blocks force-pushes and deletion.
-- The deployed processor health endpoint reports Supabase authentication, OpenAI configuration, and durable Cloudflare D1 persistence.
+- The deployed processor health endpoint reports the active auth mode, OpenAI configuration, and durable Cloudflare D1 persistence.
 - An unauthenticated library request returns `401`.
-- 101 processor tests and 27 mobile tests pass after the beta-recovery changes.
-- The current Expo SDK 54 client supports the reliable **Copy link → open Curio → paste** flow.
-- Direct incoming Share-to-Curio is not enabled in the current SDK 54 build. The route, payload parser, and retry experience are preparation, not a shipped capability.
+- 110 processor tests and 27 mobile tests pass after the auth and PWA changes.
+- The Expo SDK 57 client configures **Share to Curio** for links, text, images, and videos on iOS and Android, while preserving **Copy link → open Curio → paste** as the fallback.
+- The route, payload parser, retry experience, iOS Share Extension, and Android intent filters are implemented. A signed build and physical-device matrix remain required before calling the feature beta-ready.
 
 ## One journey to validate
 
 ```text
 Receive invite
-  -> open passwordless email link on the same phone
+  -> continue with the invited Google account
   -> copy a public Instagram, TikTok, or web link
   -> paste once into Curio
   -> keep Curio open while processing finishes
@@ -38,8 +38,8 @@ Any failure in this sequence is more important than a new feature.
 ### Authentication
 
 - [ ] Fresh install shows the private-beta sign-in screen.
-- [ ] An invited email receives a link without revealing whether an uninvited account exists.
-- [ ] The link returns to Curio and creates a durable session.
+- [ ] An invited Google account completes OAuth without a password or setup form inside Curio.
+- [ ] Google returns to Curio and creates a durable session.
 - [ ] Reopening the app preserves the session.
 - [ ] Signing out removes access to the previous library.
 - [ ] A second invited account cannot see the first account's sources, resources, search results, context, engagement, or For You state.
@@ -135,6 +135,6 @@ Once representative testing confirms the synchronous pipeline is worth scaling:
 4. Add per-user rate limits and abuse controls.
 5. Add crash/error monitoring without logging private transcripts or access tokens.
 6. Add data export, library deletion, account deletion, privacy policy, and support contact.
-7. Choose and implement the native incoming-share target, then validate it on physical iOS and Android builds.
+7. Build and validate the configured native incoming-share target on physical iOS and Android devices.
 
 Notion and other context connectors remain later work. They should follow observed user demand, not block the private beta.

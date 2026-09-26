@@ -79,25 +79,30 @@ describe("server boundaries", () => {
     }
   });
 
-  it("uses a verified Supabase identity and enforces the private-beta invite list", async () => {
+  it("uses a verified Better Auth session and enforces the private-beta invite list", async () => {
+    const runtimeEnvironment = process.env as Record<string, string | undefined>;
     const previous = {
-      authUrl: process.env.SUPABASE_AUTH_URL,
-      publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY,
+      authSecret: process.env.BETTER_AUTH_SECRET,
+      authUrl: process.env.BETTER_AUTH_URL,
+      googleClientId: process.env.GOOGLE_CLIENT_ID,
+      googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
       invitedEmails: process.env.CURIO_INVITED_EMAILS,
       legacyOwnerEmail: process.env.CURIO_LEGACY_OWNER_EMAIL,
       personalToken: process.env.CURIO_API_TOKEN,
     };
-    process.env.SUPABASE_AUTH_URL = "https://curio-auth.example";
-    process.env.SUPABASE_PUBLISHABLE_KEY = "sb_publishable_example";
+    runtimeEnvironment.BETTER_AUTH_SECRET = "a-test-secret-that-is-at-least-32-characters";
+    runtimeEnvironment.BETTER_AUTH_URL = "https://curio.example";
+    runtimeEnvironment.GOOGLE_CLIENT_ID = "google-client-id";
+    runtimeEnvironment.GOOGLE_CLIENT_SECRET = "google-client-secret";
     process.env.CURIO_INVITED_EMAILS = "invited@example.com";
     process.env.CURIO_API_TOKEN = "legacy-token-must-not-bypass-auth";
     const request = new Request("https://curio.example/api/items", {
-      headers: { Authorization: "Bearer verified-user-token" },
+      headers: { Cookie: "curio.session_token=verified-user-session" },
     });
     try {
       const viewer = await authenticateApiRequest(request, {
         environment: "production",
-        verifySupabaseToken: async (token) => token === "verified-user-token" ? {
+        verifyBetterAuthSession: async (sessionRequest) => sessionRequest.headers.has("cookie") ? {
           profileId: "10000000-0000-4000-8000-000000000001",
           email: "invited@example.com",
         } : null,
@@ -106,12 +111,12 @@ describe("server boundaries", () => {
         profileId: "10000000-0000-4000-8000-000000000001",
         userId: "10000000-0000-4000-8000-000000000001",
         email: "invited@example.com",
-        authMode: "supabase",
+        authMode: "better_auth",
       });
 
       const notInvited = await authenticateApiRequest(request, {
         environment: "production",
-        verifySupabaseToken: async () => ({
+        verifyBetterAuthSession: async () => ({
           profileId: "20000000-0000-4000-8000-000000000002",
           email: "stranger@example.com",
         }),
@@ -121,7 +126,7 @@ describe("server boundaries", () => {
       process.env.CURIO_LEGACY_OWNER_EMAIL = "invited@example.com";
       const legacyOwner = await authenticateApiRequest(request, {
         environment: "production",
-        verifySupabaseToken: async () => ({
+        verifyBetterAuthSession: async () => ({
           profileId: "10000000-0000-4000-8000-000000000001",
           email: "INVITED@example.com",
         }),
@@ -130,12 +135,22 @@ describe("server boundaries", () => {
         profileId: "00000000-0000-4000-8000-000000000031",
         userId: "10000000-0000-4000-8000-000000000001",
         email: "INVITED@example.com",
-        authMode: "supabase",
+        authMode: "better_auth",
       });
+
+      const bearerOnly = await authenticateApiRequest(new Request("https://curio.example/api/items", {
+        headers: { Authorization: "Bearer legacy-token-must-not-bypass-auth" },
+      }), {
+        environment: "production",
+        verifyBetterAuthSession: async () => null,
+      });
+      expect(bearerOnly).toBeNull();
     } finally {
       for (const [name, value] of Object.entries({
-        SUPABASE_AUTH_URL: previous.authUrl,
-        SUPABASE_PUBLISHABLE_KEY: previous.publishableKey,
+        BETTER_AUTH_SECRET: previous.authSecret,
+        BETTER_AUTH_URL: previous.authUrl,
+        GOOGLE_CLIENT_ID: previous.googleClientId,
+        GOOGLE_CLIENT_SECRET: previous.googleClientSecret,
         CURIO_INVITED_EMAILS: previous.invitedEmails,
         CURIO_LEGACY_OWNER_EMAIL: previous.legacyOwnerEmail,
         CURIO_API_TOKEN: previous.personalToken,

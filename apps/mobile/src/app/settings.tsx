@@ -85,7 +85,7 @@ export default function SettingsScreen() {
         <View style={styles.accountSection}>
           <Text style={styles.eyebrow}>ACCOUNT</Text>
           <Text style={styles.accountEmail}>{auth.session?.user.email ?? 'Personal beta mode'}</Text>
-          <Text style={styles.accountCopy}>{auth.configured ? 'Your Curio library is isolated to this signed-in account.' : 'Passwordless accounts are ready in the app and will appear when Supabase Auth is configured.'}</Text>
+          <Text style={styles.accountCopy}>{auth.configured ? 'Your Curio library is isolated to this Google-signed-in account.' : 'Google sign-in is ready in the app and will appear when Curio auth is enabled.'}</Text>
           {accountError && <Text style={styles.accountError}>{accountError}</Text>}
           <View style={styles.dataActions}>
             <Pressable

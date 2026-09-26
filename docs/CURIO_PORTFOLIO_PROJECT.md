@@ -42,7 +42,7 @@ I:
 - defined the product thesis around zero-input capture, synthesis over accumulation, progressive depth, and provenance;
 - designed the mobile information hierarchy, resource-first Library, capture flow, learning-resource view, and cross-save For You experience;
 - shaped adaptive content structures for lists, travel tips, explainers, investment watchlists, recommendations, and how-to content;
-- directed the architecture across Expo, the processing API, OpenAI extraction and research, Cloudflare persistence, and Supabase authentication;
+- directed the architecture across Expo, the processing API, OpenAI extraction and research, Cloudflare persistence, and Better Auth;
 - iterated on public-Reel retrieval, source viewing, deduplication, visual covers, search, personalization, and private-beta access;
 - used Codex as a product and engineering collaborator to implement, test, debug, and document the system across bounded iterations;
 - retained responsibility for the product direction, UX decisions, architecture, privacy boundaries, and final claims.
@@ -52,7 +52,7 @@ I:
 ### Minimal-input capture
 
 - Accepts a pasted public link through a single primary field.
-- Uses a one-field paste flow in the current Expo SDK 54 client; native incoming-share parsing and recovery are prepared but not yet enabled as a phone share target.
+- Uses a one-action native share flow in the Expo SDK 57 client, with paste retained as a universal fallback; incoming-share parsing, recovery, and platform registration are implemented pending signed-device validation.
 - Infers likely save intent—such as understand, try, visit, buy, track, compare, or reference—without requiring the user to categorize the source.
 - Preserves a source-only save when evidence cannot be retrieved instead of inventing a summary.
 
@@ -88,7 +88,7 @@ I:
 
 ### Private-beta foundations
 
-- Uses passwordless Supabase authentication with public sign-ups disabled.
+- Uses Google sign-in through Better Auth with a private-beta email allowlist.
 - Isolates each invited user's library, resources, context, engagement, and For You state by verified user ID.
 - Stores the deployed beta's canonical data durably in Cloudflare D1.
 - Keeps OpenAI and infrastructure credentials on the server; no secret key is bundled into the Expo client.
@@ -100,12 +100,12 @@ I:
 **Mobile application**
 
 - TypeScript
-- Expo SDK 54 and Expo Router
+- Expo SDK 57 and Expo Router
 - React Native 0.81 and React 19
 - React Native Web for static browser previews
 - Expo Secure Store for mobile sessions
 - Expo Linking, Sharing, Web Browser, Image, and EAS build profiles
-- Supabase JavaScript client for passwordless authentication
+- Better Auth Expo client with native secure cookie storage
 
 **Processing and API**
 
@@ -122,7 +122,7 @@ I:
 - Cloudflare R2 for source media and cover assets
 - Cloudflare Browser Rendering for bounded public-source inspection
 - Wrangler for bindings, migrations, local preview, and deployment
-- Supabase Auth for passwordless private-beta identity
+- Better Auth with Google OAuth and D1-backed private-beta sessions
 - Cloudflare observability for Worker logs and traces
 
 **Quality**
@@ -131,7 +131,7 @@ I:
 - Node's test runner for mobile-domain behavior
 - ESLint and TypeScript type checking
 - Expo static web export
-- 128 automated tests currently passing: 101 processor tests and 27 mobile tests, verified August 27, 2026
+- 137 automated tests currently passing: 110 processor tests and 27 mobile tests, verified September 18, 2026
 
 ### Application architecture
 
@@ -200,7 +200,7 @@ Notion may become a useful source of personalized context or an export destinati
 
 **Working invite-only private beta; deployed processor and production-shaped mobile client; not yet a public consumer release.**
 
-The processing service is deployed at [curio-processor.kellychenmeiyi.workers.dev](https://curio-processor.kellychenmeiyi.workers.dev). It uses Cloudflare D1 persistence and Supabase passwordless authentication. Public sign-ups are disabled, unauthenticated requests and the retired shared beta token are rejected, and invited users are isolated by verified user ID.
+The processing service is deployed at [curio-processor.kellychenmeiyi.workers.dev](https://curio-processor.kellychenmeiyi.workers.dev). It uses Cloudflare D1 persistence. Google sign-in through Better Auth is implemented and awaits production OAuth credentials and physical-device validation before the client gate is enabled; the existing private-beta token remains the temporary fallback until then.
 
 The current product includes one-field link capture, small-media processing support in the backend, best-effort public-Reel processing, structured learning cards, cited research, living resources, exact-source provenance, resource search, visual covers, progressive deep dives, intent-aware follow-through, and cross-save For You synthesis.
 
@@ -210,7 +210,7 @@ Important constraints remain:
 
 - Curio does not synchronize private Instagram Saved folders because the supported platform API does not expose that capture surface.
 - Public-Reel acquisition is best effort and depends on public availability and fragile third-party page behavior; restricted content may remain source-only unless the user shares media or context.
-- EAS profiles exist, but the SDK 54 client does not currently register an incoming share target. That capability needs a native implementation and physical iOS/Android validation before it is described as available.
+- EAS profiles and native iOS/Android share-target configuration exist. Signed physical-device validation is still required before Share to Curio is described as generally available.
 - Long media processing is still synchronous; production scale needs signed uploads, queued jobs, retries, idempotency, and rate limits.
 - A public launch still needs privacy policy, export and deletion flows, crash reporting, final store metadata, and external-user validation.
 - Notion sync and other real context connectors are future work. Mock context must remain clearly labeled and should not appear in portfolio screenshots as a live integration.
@@ -260,8 +260,8 @@ As founder, product designer, and founding engineer, I defined the problem, zero
 - Living-resource merge engine with source-level provenance, repeated-evidence handling, freshness policies, and concise change receipts
 - Meaning-oriented retrieval across resources, entries, research, transcripts, entities, and visible source text
 - Evidence-gated For You synthesis using themes, repeated support, material changes, unresolved claims, and engagement signals
-- Cloudflare Workers, D1, R2, Browser Rendering, and observability with Supabase passwordless user identity
-- 128 passing automated tests across processor and mobile behavior
+- Cloudflare Workers, D1, R2, Browser Rendering, and observability with Better Auth and Google identity
+- 137 passing automated tests across processor and mobile behavior
 
 ### Current Status
 
