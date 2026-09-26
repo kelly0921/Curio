@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { deleteProfileData, deleteProfileObjects, deleteSupabaseUser } from "@/lib/account/data";
+import { deleteProfileData, deleteProfileObjects } from "@/lib/account/data";
 import { accountStorage } from "@/lib/account/provider";
 import { apiResponseHeaders, authenticateApiRequest } from "@/lib/api/access-control";
 import { readBoundedJson } from "@/lib/api/request-body";
+import { deleteCurioAuthUser } from "@/lib/auth/server";
 import { logCurioEvent, requestId } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,9 @@ export async function DELETE(request: Request) {
     ]);
     let authAccountDeleted = false;
     try {
-      authAccountDeleted = await deleteSupabaseUser(viewer.userId);
+      authAccountDeleted = viewer.authMode === "better_auth" && viewer.userId
+        ? await deleteCurioAuthUser(request)
+        : false;
     } catch {
       logCurioEvent({ event: "auth_account_deletion_failed", requestId: traceId, errorCode: "AUTH_ACCOUNT_DELETION_FAILED" }, "error");
     }

@@ -9,7 +9,7 @@ The Expo app is Curio's primary capture and browsing experience. It keeps the ex
 - A secondary source archive for opening each original Reel or card
 - One-field link capture with optional source context
 - One-field paste capture that works in Expo Go and static phone previews
-- Share-payload parsing, retry UI, and routing prepared for a future native incoming-share target
+- Native iOS and Android **Share to Curio** registration for links, text, images, and videos, with automatic routing into the existing retry-safe capture flow
 - Existing provenance-first Learning Cards, source-only states, and source receipts
 - Reliable exact-Reel viewing inside Curio through Instagram's public embed, avoiding cold-start redirects into the generic Reels feed
 - A For You surface that ranks learning cards against automatically synchronized context
@@ -18,8 +18,9 @@ The Expo app is Curio's primary capture and browsing experience. It keeps the ex
 - EAS development, preview, and production profiles
 - Durable background processing with resumable job status and manual retry
 - Account data export and confirmed deletion controls
+- Installable web app metadata, safe app-shell caching, offline fallback, and in-app update prompts
 
-The current app intentionally stays on Expo SDK 54 so it remains compatible with the available Expo Go client. In this SDK, `expo-sharing` supports sharing files out of Curio but does not register Curio as an incoming iOS or Android share target. The reliable phone flow today is **Copy link → open Curio → paste**. The `/handle-share` route and parsing code are preparation for a later native beta; do not describe direct Share-to-Curio as enabled in the current build.
+The native app uses stable Expo SDK 57 and configures `expo-sharing` as an incoming iOS Share Extension and Android share intent target. A signed development or preview build can appear as **Curio** in the system share sheet and accept a source link, accompanying text, image, or video without asking the user to choose folders or tags. Expo Go cannot contain Curio's custom native extension, so use it only for ordinary UI previewing; validate incoming sharing in an installable build before inviting testers.
 
 ## Prerequisites
 
@@ -36,7 +37,7 @@ The processor is deployed at:
 https://curio-processor.kellychenmeiyi.workers.dev
 ```
 
-The Git-ignored `apps/mobile/.env.local` contains this URL and the public Supabase client configuration. The deployed beta uses each person's passwordless session and keeps it in native secure storage. The retired personal-beta token is ignored by the processor whenever Supabase authentication is configured.
+The Git-ignored `apps/mobile/.env.local` contains this URL. When `EXPO_PUBLIC_CURIO_AUTH_ENABLED=true`, Curio uses Google sign-in through the processor's Better Auth routes and keeps the native session cookie in secure storage. No Google or database secret belongs in the mobile app. The retired personal-beta token is ignored whenever Better Auth is configured on the processor.
 
 To use the local processor instead, update `EXPO_PUBLIC_CURIO_API_URL`, then run:
 
@@ -57,21 +58,30 @@ EXPO_PUBLIC_CURIO_API_URL=http://YOUR_COMPUTER_LAN_IP:3031
 EXPO_PUBLIC_CURIO_API_TOKEN=YOUR_PERSONAL_BETA_TOKEN
 ```
 
-Both devices must be on the same Wi-Fi network and Windows Firewall must allow the Node development servers. `EXPO_PUBLIC_` values are bundled into the app and should never contain OpenAI, database, or Supabase secret/service-role credentials.
+Both devices must be on the same Wi-Fi network and Windows Firewall must allow the Node development servers. `EXPO_PUBLIC_` values are bundled into the app and should never contain OpenAI, database, Better Auth, or Google OAuth secrets.
 
-## Visual preview
+For Google sign-in in Expo Go, add the exact Metro callback origin (for example `exp://192.168.0.231:8081`) to the processor's `CURIO_NATIVE_AUTH_ORIGINS` before deployment. Curio deliberately rejects wildcard Expo origins. An installable development build uses the stable `curio://` scheme and does not need that temporary LAN origin.
 
-The web preview verifies layout and navigation, but it does not install Curio in the Instagram/TikTok share sheet:
+## Install and test the PWA
+
+Build and preview the production web export:
 
 ```powershell
 Set-Location apps/mobile
 npm install
-npm run web
+npm run export:web
+npm run preview:web
 ```
+
+Open `http://localhost:8082` on the same computer. Localhost is treated as a secure PWA origin, so browser developer tools can verify the manifest, service worker, offline fallback, and install prompt. A phone needs a deployed HTTPS URL; a LAN `http://192.168...` preview cannot install a service worker.
+
+The initial HTTPS beta is deployed at [curio-app.pages.dev](https://curio-app.pages.dev). Build locally and publish the static output with `npx wrangler pages deploy dist --project-name curio-app --branch main`. Deploy from `apps/mobile` so the `functions/api/[[path]].js` same-origin proxy is included. After server auth is ready, export with `EXPO_PUBLIC_CURIO_AUTH_ENABLED=true`; never include server secrets or a personal beta token. Google must allow the exact callback `https://curio-app.pages.dev/api/auth/callback/google`.
+
+On iPhone, open the deployed URL in Safari, tap **Share**, then **Add to Home Screen**. On supporting desktop and Android browsers, use Curio's **Install** prompt. The PWA does not register as an iOS share-sheet destination; **Share to Curio** is supplied by the separately installed native development, preview, or production build.
 
 ## Build the native mobile client
 
-Use a development build for native behavior that Expo Go cannot provide. Building the current SDK 54 project does not by itself enable an incoming share target; that requires a deliberate SDK/native-extension implementation first.
+Use a development build for native behavior that Expo Go cannot provide. The SDK 57 configuration generates Curio's iOS Share Extension, App Group entitlement, and Android `ACTION_SEND`/`ACTION_SEND_MULTIPLE` intent filters during the native build.
 
 ```powershell
 Set-Location apps/mobile
@@ -98,9 +108,9 @@ Open the installed Curio development client and connect to Metro.
 
 1. Start Metro in `apps/mobile`. Start the local processor only if you changed the API URL back to the LAN address.
 2. Open Instagram or TikTok on the phone.
-3. Use the platform's **Copy link** action.
-4. Open Curio, tap **Add**, paste the link, and save it.
-5. Curio should confirm the save quickly. Close the app from the processing screen, reopen it, and confirm the Library resumes the job before opening the matching resource or source card.
+3. Tap **Share**, choose **Curio**, and confirm Curio opens directly to its receipt screen without a folder, tag, or note prompt.
+4. Curio should confirm the save quickly. Close the app from the processing screen, reopen it, and confirm the Library resumes the job before opening the matching resource or source card.
+5. Repeat with a copied link pasted into **Add** to verify the fallback still works.
 6. Return to the Library and confirm the resource can be found by a remembered idea, not only its title.
 7. Open the original source and confirm Curio retains the exact post or Reel permalink.
 
@@ -110,16 +120,17 @@ A bare restricted Instagram/TikTok URL may result in a source-only card. That is
 
 Before telling testers to choose Curio from the Instagram or TikTok share sheet:
 
-1. Select a supported Expo incoming-sharing release or implement explicit iOS Share Extension and Android intent configuration.
-2. Build an installable development client; Expo Go cannot validate a custom share target.
-3. Test URL-only, URL-plus-caption, video, cold-start, signed-out, retry, and duplicate-share behavior on physical iOS and Android devices.
-4. Only then replace the paste instructions in the product UI.
+1. Build an installable development client; Expo Go cannot validate a custom share target.
+2. Test URL-only, URL-plus-caption, video, image, cold-start, signed-out, retry, and duplicate-share behavior on physical iOS and Android devices.
+3. Verify Instagram, TikTok, LinkedIn, Safari/Chrome, and the Photos app each provide the payload Curio expects.
+4. Only then advertise **Share to Curio** to external testers; keep paste as the universal fallback.
 
 ## Quality commands
 
 ```powershell
 npm run typecheck
 npm run lint
+npm test
 npm run export:web
 node node_modules/expo/bin/cli config --type public
 ```
@@ -127,11 +138,11 @@ node node_modules/expo/bin/cli config --type public
 ## Production gates still open
 
 - Replace the personal prototype identifiers (`com.kelly.curio`) before store submission if needed.
-- Validate the configured Supabase passwordless callback in each installable preview build before inviting external testers.
-- Implement and physically validate the native incoming-share target; the current SDK 54 build is paste-first.
+- Configure and validate the Google callback in the PWA and each installable preview build before inviting external testers.
+- Physically validate the configured native incoming-share target on signed iOS and Android builds before advertising it to testers.
 - Replace the labeled mock context connection with user-authorized Notion sync.
 - Replace the bounded Worker-staged upload with a signed direct-to-R2 upload before increasing the 20 MB limit.
 - Add automated alert delivery and beta-scale rate limits; structured Cloudflare logs, readiness checks, a dead-letter queue, privacy notice, export, and deletion are now present.
 - Replace the template app icon and finalize store metadata.
 
-Current implementation uses Expo SDK 54 and follows the official Expo guidance for [monorepos](https://docs.expo.dev/guides/monorepos/), [SDK 54 sharing](https://docs.expo.dev/versions/v54.0.0/sdk/sharing/), and [development builds](https://docs.expo.dev/build/setup/).
+Current implementation uses stable Expo SDK 57 and follows the official Expo guidance for [monorepos](https://docs.expo.dev/guides/monorepos/), [SDK 57 incoming sharing](https://docs.expo.dev/versions/v57.0.0/sdk/sharing/), and [development builds](https://docs.expo.dev/build/setup/). Expo currently marks incoming sharing experimental, so physical-device testing remains a release gate—especially on iOS, where the extension opens the main app to finish capture.

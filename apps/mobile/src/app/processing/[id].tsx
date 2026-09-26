@@ -56,9 +56,12 @@ export default function ProcessingScreen() {
   }, [id]);
 
   useEffect(() => {
-    void check();
+    const initialCheck = setTimeout(() => void check(), 0);
     const timer = setInterval(() => void check(), 2_500);
-    return () => clearInterval(timer);
+    return () => {
+      clearTimeout(initialCheck);
+      clearInterval(timer);
+    };
   }, [check]);
 
   async function retry() {

@@ -1,6 +1,9 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
+const authenticatedBuild = process.env.EXPO_PUBLIC_CURIO_AUTH_ENABLED === 'true';
+const productionWebOrigin = 'https://curio-app.pages.dev';
+
 export type ProcessingStatus =
   | 'received'
   | 'retrieving_source'
@@ -551,28 +554,39 @@ function inferredDevelopmentUrl(): string {
 }
 
 export function getCurioApiUrl(): string {
+  if (Platform.OS === 'web' && authenticatedBuild) {
+    const runtimeOrigin = typeof globalThis.location?.origin === 'string'
+      ? globalThis.location.origin
+      : null;
+    return (runtimeOrigin || productionWebOrigin).replace(/\/$/, '');
+  }
   return (process.env.EXPO_PUBLIC_CURIO_API_URL?.trim() || inferredDevelopmentUrl()).replace(/\/$/, '');
 }
 
-let authenticatedAccessToken: string | null = null;
+let authenticatedSessionCookie: string | null = null;
 let authenticatedSessionEnabled = false;
 
-export function setCurioAccessToken(token: string | null, sessionEnabled = true): void {
-  authenticatedAccessToken = token;
+export function setCurioSessionCookie(cookie: string | null, sessionEnabled = true): void {
+  authenticatedSessionCookie = cookie;
   authenticatedSessionEnabled = sessionEnabled;
 }
 
-function curioAccessToken(): string | null {
-  if (authenticatedSessionEnabled) return authenticatedAccessToken;
+function personalAccessToken(): string | null {
+  if (authenticatedBuild || authenticatedSessionEnabled) return null;
   return process.env.EXPO_PUBLIC_CURIO_API_TOKEN?.trim() || null;
 }
 
 export function getSourceCoverImageSource(itemId: string, capturedAt?: string | null): { uri: string; headers?: Record<string, string> } {
-  const personalAccessToken = curioAccessToken();
+  const token = personalAccessToken();
   const version = capturedAt ? `?v=${encodeURIComponent(capturedAt)}` : '';
+  const headers: Record<string, string> | undefined = Platform.OS !== 'web' && authenticatedSessionEnabled && authenticatedSessionCookie
+    ? { Cookie: authenticatedSessionCookie }
+    : token
+      ? { Authorization: `Bearer ${token}` }
+      : undefined;
   return {
     uri: `${getCurioApiUrl()}/api/items/${encodeURIComponent(itemId)}/cover${version}`,
-    ...(personalAccessToken ? { headers: { Authorization: `Bearer ${personalAccessToken}` } } : {}),
+    ...(headers ? { headers } : {}),
   };
 }
 
@@ -612,10 +626,19 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 150_000);
   const headers = new Headers(init?.headers);
-  const personalAccessToken = curioAccessToken();
-  if (personalAccessToken) headers.set('Authorization', `Bearer ${personalAccessToken}`);
+  const token = personalAccessToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (Platform.OS !== 'web' && authenticatedSessionEnabled && authenticatedSessionCookie) {
+    headers.set('Cookie', authenticatedSessionCookie);
+  }
   try {
-    return await fetch(`${getCurioApiUrl()}${path}`, { ...init, headers, signal: controller.signal, cache: 'no-store' });
+    return await fetch(`${getCurioApiUrl()}${path}`, {
+      ...init,
+      headers,
+      signal: controller.signal,
+      cache: 'no-store',
+      credentials: Platform.OS === 'web' && authenticatedSessionEnabled ? 'include' : 'omit',
+    });
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw new CurioApiError('REQUEST_TIMEOUT', 'Curio is still waiting on the processor. Try again in a moment.');

@@ -21,9 +21,9 @@ Private-beta privacy and operations are documented in [the privacy notice](docs/
 
 ## Live personal beta
 
-The protected processor is deployed at [https://curio-processor.kellychenmeiyi.workers.dev](https://curio-processor.kellychenmeiyi.workers.dev). Its health endpoint reports the OpenAI and D1 configuration without exposing secrets. Expo development, preview, and production environments point to this URL.
+The installable web beta is deployed at [https://curio-app.pages.dev](https://curio-app.pages.dev). The protected processor is deployed separately at [https://curio-processor.kellychenmeiyi.workers.dev](https://curio-processor.kellychenmeiyi.workers.dev). Its health endpoint reports the OpenAI and D1 configuration without exposing secrets. Expo development, preview, and production environments point to this API.
 
-The deployed private beta uses passwordless Supabase authentication. Public sign-ups are disabled, each invited user's library is isolated, and a narrow migration bridge keeps the original personal library intact. The former shared beta token is rejected whenever Supabase authentication is configured.
+The private beta is migrating to Google sign-in through Better Auth on the existing Cloudflare Worker and D1 database. No separate auth vendor is required. Once the server credentials and client gate are enabled, each invited user's library is isolated and the former shared beta token is rejected. A narrow migration bridge keeps the original personal library intact.
 
 ## Local development
 
