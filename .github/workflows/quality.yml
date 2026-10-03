@@ -1,0 +1,35 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/learning-library/package-lock.json
+            apps/mobile/package-lock.json
+      - name: Install processor dependencies
+        run: npm ci --prefix apps/learning-library
+      - name: Install mobile dependencies
+        run: npm ci --prefix apps/mobile
+      - name: Test
+        run: npm test
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Export authenticated PWA
+        run: npm run export:web:beta

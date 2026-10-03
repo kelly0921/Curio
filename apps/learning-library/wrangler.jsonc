@@ -56,7 +56,7 @@
     "OPENAI_ANALYSIS_MODEL": "gpt-5.4-mini",
     "OPENAI_RETRIEVAL_MODEL": "gpt-5.4-mini",
     "ENABLE_EXPERIMENTAL_INSTAGRAM_EMBED": "true",
-    "CURIO_ALLOWED_ORIGINS": "https://curio-app.pages.dev,http://localhost:8081,http://localhost:8082,http://localhost:19006,http://127.0.0.1:8081,http://127.0.0.1:8082,http://127.0.0.1:19006,http://192.168.0.231:8081,http://192.168.0.231:8082,http://192.168.0.231:19006"
+    "CURIO_ALLOWED_ORIGINS": "https://curio-app.pages.dev"
   },
   "observability": {
     "enabled": true,

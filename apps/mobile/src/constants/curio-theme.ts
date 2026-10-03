@@ -4,7 +4,7 @@ export const colors = {
   canvas: '#F6F2E8',
   surface: '#FFFCF6',
   ink: '#171713',
-  muted: '#777267',
+  muted: '#6B675E',
   line: '#DDD7CA',
   peach: '#EAAE87',
   sage: '#AFC7A6',

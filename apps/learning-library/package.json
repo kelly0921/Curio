@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3031",
-    "lint": "eslint app components lib tests *.ts --max-warnings=0",
+    "lint": "eslint app components lib tests next.config.ts open-next.config.ts vitest.config.ts worker-entry.ts --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --configLoader runner",
     "build": "next build",

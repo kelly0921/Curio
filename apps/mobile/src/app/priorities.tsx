@@ -66,6 +66,7 @@ function RecommendationCard({
       <Pressable
         accessibilityHint="Open the living resource behind this suggestion"
         accessibilityLabel={`${LANE_TITLES[recommendation.lane]}: ${recommendation.title}`}
+        accessibilityRole="button"
         onPress={() => openResource(recommendation.resourceId)}
         style={({ pressed }) => [styles.recommendationBody, pressed && styles.pressed]}>
         <View style={styles.recommendationTopline}>
@@ -88,13 +89,13 @@ function RecommendationCard({
         <Text style={styles.feedbackPrompt}>Help Curio choose better</Text>
         {updating ? <ActivityIndicator color={colors.ink} size="small" /> : (
           <View style={styles.feedbackActions}>
-            <Pressable accessibilityLabel={`Mark ${recommendation.title} done`} onPress={() => onFeedback('done')} style={styles.feedbackButton}>
+            <Pressable accessibilityLabel={`Mark ${recommendation.title} done`} accessibilityRole="button" onPress={() => onFeedback('done')} style={styles.feedbackButton}>
               <Text style={styles.feedbackText}>Done</Text>
             </Pressable>
-            <Pressable accessibilityLabel={`Remind me about ${recommendation.title} later`} onPress={() => onFeedback('later')} style={styles.feedbackButton}>
+            <Pressable accessibilityLabel={`Remind me about ${recommendation.title} later`} accessibilityRole="button" onPress={() => onFeedback('later')} style={styles.feedbackButton}>
               <Text style={styles.feedbackText}>Remind me</Text>
             </Pressable>
-            <Pressable accessibilityLabel={`Mark ${recommendation.title} not useful`} onPress={() => onFeedback('not_relevant')} style={styles.feedbackButton}>
+            <Pressable accessibilityLabel={`Mark ${recommendation.title} not useful`} accessibilityRole="button" onPress={() => onFeedback('not_relevant')} style={styles.feedbackButton}>
               <Text style={styles.feedbackText}>Not useful</Text>
             </Pressable>
           </View>
@@ -135,6 +136,8 @@ function ActivePlanCard({
           return (
             <Pressable
               accessibilityLabel={`${entry.completed ? 'Mark not done' : 'Mark done'}: ${entry.title}`}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: entry.completed, disabled: Boolean(updatingKey) }}
               disabled={Boolean(updatingKey)}
               key={entry.id}
               onPress={() => onUpdate({ action: 'toggle_entry', entryId: entry.id, completed: !entry.completed })}
@@ -153,12 +156,13 @@ function ActivePlanCard({
         <Text style={styles.planMore}>+{plan.entries.length - visibleEntries.length} more inside the resource</Text>
       )}
       <View style={styles.planActions}>
-        <Pressable onPress={() => openResource(plan.resourceId)} style={styles.planOpenButton}>
+        <Pressable accessibilityRole="button" onPress={() => openResource(plan.resourceId)} style={styles.planOpenButton}>
           <Text style={styles.planOpenText}>Open resource</Text>
           <Text style={styles.planOpenArrow}>→</Text>
         </Pressable>
         <Pressable
           accessibilityLabel={`${copy.completeLabel}: ${plan.resourceTitle}`}
+          accessibilityRole="button"
           disabled={Boolean(updatingKey)}
           onPress={() => onUpdate({ action: 'complete' })}
           style={styles.planDoneButton}>
@@ -257,18 +261,18 @@ export default function PrioritiesScreen() {
           showsVerticalScrollIndicator={false}>
           <View style={styles.topbar}>
             <CurioBrand compact />
-            <Pressable accessibilityLabel="Personalization settings" onPress={() => router.push('/settings')} style={styles.settingsButton}>
+            <Pressable accessibilityLabel="Personalization settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.settingsButton}>
               <Text style={styles.settingsButtonText}>Context</Text>
               <Text style={styles.settingsArrow}>→</Text>
             </Pressable>
           </View>
 
           <Text style={styles.eyebrow}>CHOSEN FROM YOUR LIBRARY</Text>
-          <Text style={styles.heading}>For you</Text>
+          <Text accessibilityRole="header" style={styles.heading}>For you</Text>
           <Text style={styles.intro}>A few useful things, shaped quietly by what you save and explore.</Text>
 
           {realConnection ? (
-            <Pressable onPress={() => router.push('/settings')} style={styles.contextStrip}>
+            <Pressable accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.contextStrip}>
               <Text style={styles.contextMark}>✦</Text>
               <Text style={styles.contextText}>Also shaped by {realConnection.displayName}</Text>
               <Text style={styles.contextArrow}>→</Text>
@@ -363,12 +367,12 @@ const styles = StyleSheet.create({
   screen: { backgroundColor: colors.canvas, flex: 1 },
   safeArea: { flex: 1 },
   content: { paddingBottom: 42, paddingHorizontal: 18 },
-  topbar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 27, paddingTop: 12 },
+  topbar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 20, paddingTop: 12 },
   settingsButton: { alignItems: 'center', borderColor: colors.line, borderRadius: 16, borderWidth: 1, flexDirection: 'row', gap: 6, paddingHorizontal: 11, paddingVertical: 8 },
   settingsButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
   settingsArrow: { color: colors.ink, fontSize: 12 },
   eyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
-  heading: { color: colors.ink, fontFamily: fonts.display, fontSize: 51, fontWeight: '700', letterSpacing: -2.2, lineHeight: 57, marginTop: 2 },
+  heading: { color: colors.ink, fontFamily: fonts.display, fontSize: 46, fontWeight: '700', letterSpacing: -2, lineHeight: 51, marginTop: 2 },
   intro: { color: colors.muted, fontFamily: fonts.body, fontSize: 15, lineHeight: 21, marginTop: 5, maxWidth: 350 },
   contextStrip: { alignItems: 'center', alignSelf: 'flex-start', borderColor: colors.line, borderRadius: 15, borderWidth: 1, flexDirection: 'row', gap: 7, marginTop: 16, paddingHorizontal: 10, paddingVertical: 8 },
   contextMark: { color: colors.ink, fontSize: 11 },
@@ -378,15 +382,15 @@ const styles = StyleSheet.create({
   errorText: { color: colors.danger, fontFamily: fonts.body, fontSize: 10, lineHeight: 15 },
   loading: { alignItems: 'center', gap: 10, paddingVertical: 60 },
   loadingText: { color: colors.muted, fontFamily: fonts.body, fontSize: 11 },
-  hero: { backgroundColor: colors.dark, borderRadius: 28, marginTop: 24, padding: 22 },
+  hero: { backgroundColor: colors.dark, borderRadius: 28, marginTop: 20, padding: 20 },
   heroTopline: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  heroLabel: { color: colors.butter, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  heroLabel: { color: colors.butter, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
   heroMark: { color: colors.butter, fontSize: 16 },
-  heroTitle: { color: colors.surface, fontFamily: fonts.display, fontSize: 31, fontWeight: '700', letterSpacing: -0.8, lineHeight: 35, marginTop: 27 },
+  heroTitle: { color: colors.surface, fontFamily: fonts.display, fontSize: 30, fontWeight: '700', letterSpacing: -0.8, lineHeight: 35, marginTop: 20 },
   heroDetail: { color: '#C9C5B9', fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 11 },
   libraryPulse: { borderTopColor: 'rgba(255,255,255,0.16)', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 19, paddingTop: 15 },
-  libraryPulseLabel: { color: colors.butter, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
-  libraryPulseText: { color: '#C9C5B9', fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 6 },
+  libraryPulseLabel: { color: colors.butter, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  libraryPulseText: { color: '#D2CEC3', fontFamily: fonts.body, fontSize: 11, lineHeight: 16, marginTop: 6 },
   recommendationsSection: { marginTop: 34 },
   plansSection: { marginTop: 34 },
   sectionHeader: { marginBottom: 15 },
@@ -394,15 +398,15 @@ const styles = StyleSheet.create({
   sectionSubtitle: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, lineHeight: 16, marginTop: 4 },
   planCard: { backgroundColor: colors.surface, borderRadius: 26, marginBottom: 16, padding: 19 },
   planTopline: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  planEyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
-  planProgress: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '800' },
+  planEyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
+  planProgress: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
   planTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.6, lineHeight: 31, marginTop: 12 },
   planTiming: { alignItems: 'center', borderRadius: 13, flexDirection: 'row', gap: 9, marginTop: 12, paddingHorizontal: 10, paddingVertical: 8 },
   planTimingNow: { backgroundColor: '#F3DFD4' },
   planTimingSoon: { backgroundColor: '#F1E7BE' },
   planTimingOnTrack: { backgroundColor: '#ECE8DE' },
-  planTimingLabel: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
-  planTimingText: { color: colors.muted, flex: 1, fontFamily: fonts.body, fontSize: 9, fontWeight: '700', lineHeight: 13 },
+  planTimingLabel: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
+  planTimingText: { color: colors.muted, flex: 1, fontFamily: fonts.body, fontSize: 10, fontWeight: '700', lineHeight: 15 },
   planEntries: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, gap: 4, marginTop: 15, paddingTop: 10 },
   planEntry: { alignItems: 'center', flexDirection: 'row', gap: 10, minHeight: 43, paddingVertical: 5 },
   planCheck: { alignItems: 'center', borderColor: colors.muted, borderRadius: 10, borderWidth: 1, height: 24, justifyContent: 'center', width: 24 },
@@ -410,7 +414,7 @@ const styles = StyleSheet.create({
   planCheckmark: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '900' },
   planEntryText: { color: colors.ink, flex: 1, fontFamily: fonts.body, fontSize: 11, fontWeight: '700', lineHeight: 16 },
   planEntryTextDone: { color: colors.muted, textDecorationLine: 'line-through' },
-  planMore: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, marginTop: 7 },
+  planMore: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, marginTop: 7 },
   planActions: { alignItems: 'center', borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: 9, marginTop: 15, paddingTop: 14 },
   planOpenButton: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: 7, minHeight: 42 },
   planOpenText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900' },
@@ -423,22 +427,22 @@ const styles = StyleSheet.create({
   cardPeach: { backgroundColor: '#F0C2A4' },
   recommendationBody: { padding: 19 },
   recommendationTopline: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  recommendationLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
-  laneNumber: { color: 'rgba(23,23,19,0.38)', fontFamily: fonts.body, fontSize: 9, fontWeight: '900' },
+  recommendationLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
+  laneNumber: { color: 'rgba(23,23,19,0.52)', fontFamily: fonts.body, fontSize: 10, fontWeight: '900' },
   recommendationTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.6, lineHeight: 31, marginTop: 14 },
   recommendationPoint: { color: colors.ink, fontFamily: fonts.body, fontSize: 13, lineHeight: 19, marginTop: 9 },
   whyNowBox: { borderLeftColor: colors.ink, borderLeftWidth: 2, marginTop: 15, paddingLeft: 10 },
-  whyNowLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
-  whyNowText: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700', lineHeight: 15, marginTop: 4 },
+  whyNowLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 0.9 },
+  whyNowText: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, fontWeight: '700', lineHeight: 16, marginTop: 4 },
   openRow: { alignItems: 'center', borderTopColor: 'rgba(23,23,19,0.15)', borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: 7, marginTop: 17, paddingTop: 13 },
-  resourceTitle: { color: colors.muted, flex: 1, fontFamily: fonts.body, fontSize: 9, fontWeight: '800' },
-  openLabel: { color: colors.ink, fontFamily: fonts.body, fontSize: 9, fontWeight: '900' },
+  resourceTitle: { color: colors.muted, flex: 1, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
+  openLabel: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900' },
   openArrow: { color: colors.ink, fontSize: 13 },
   feedbackRow: { alignItems: 'center', borderTopColor: 'rgba(23,23,19,0.14)', borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', justifyContent: 'space-between', minHeight: 48, paddingHorizontal: 14, paddingVertical: 8 },
-  feedbackPrompt: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '700' },
+  feedbackPrompt: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700' },
   feedbackActions: { alignItems: 'center', flexDirection: 'row', gap: 1 },
   feedbackButton: { borderRadius: 10, paddingHorizontal: 7, paddingVertical: 7 },
-  feedbackText: { color: colors.ink, fontFamily: fonts.body, fontSize: 9, fontWeight: '900' },
+  feedbackText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900' },
   empty: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 25, marginTop: 28, padding: 30 },
   emptyMark: { color: colors.success, fontFamily: fonts.body, fontSize: 22, fontWeight: '900' },
   emptyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 25, fontWeight: '700', marginTop: 10, textAlign: 'center' },

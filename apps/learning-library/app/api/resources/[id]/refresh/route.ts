@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { OpenAILearningServices } from "@/lib/ai/services";
 import { apiResponseHeaders, authenticateApiRequest } from "@/lib/api/access-control";
+import { enforceCurioRateLimit, rateLimitHeaders } from "@/lib/api/rate-limit";
 import { getLearningItemRepository } from "@/lib/data/provider";
 import { refreshKnowledgeResourceResearch } from "@/lib/knowledge/refresh";
 
@@ -20,6 +21,21 @@ export async function POST(
   const { id } = await context.params;
   if (!z.string().uuid().safeParse(id).success) {
     return errorResponse(request, "INVALID_RESOURCE_ID", "This living resource ID is invalid.", 400);
+  }
+  const rateLimit = await enforceCurioRateLimit(viewer.profileId, "resources:refresh", 12);
+  if (rateLimit.status !== "allowed") {
+    return NextResponse.json(
+      { ok: false, error: {
+        code: rateLimit.status === "limited" ? "RATE_LIMITED" : "RATE_LIMIT_UNAVAILABLE",
+        message: rateLimit.status === "limited"
+          ? "This library has had several research refreshes. Try again after the current hour resets."
+          : "Curio cannot safely start research right now. Try again shortly.",
+      } },
+      {
+        status: rateLimit.status === "limited" ? 429 : 503,
+        headers: { ...apiResponseHeaders(request), ...rateLimitHeaders(rateLimit) },
+      },
+    );
   }
   if (!process.env.OPENAI_API_KEY?.trim()) {
     return errorResponse(request, "RESEARCH_NOT_CONFIGURED", "Curio research is not configured on this processor.", 503);

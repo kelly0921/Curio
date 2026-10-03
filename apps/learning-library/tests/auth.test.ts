@@ -34,10 +34,12 @@ describe("Curio auth configuration", () => {
       "exp://**",
     ]);
     expect(configuration?.invitedEmails).toEqual(new Set(["kelly@example.com", "friend@example.com"]));
+    expect(configuration?.allowAnyGoogleUser).toBe(true);
   });
 
-  it("allows all users only when no invite list is configured", () => {
-    expect(isInvitedCurioEmail("anyone@example.com", new Set())).toBe(true);
+  it("fails closed on an empty invite list unless open access is explicit", () => {
+    expect(isInvitedCurioEmail("anyone@example.com", new Set())).toBe(false);
+    expect(isInvitedCurioEmail("anyone@example.com", new Set(), true)).toBe(true);
     expect(isInvitedCurioEmail("KELLY@example.com", new Set(["kelly@example.com"]))).toBe(true);
     expect(isInvitedCurioEmail("stranger@example.com", new Set(["kelly@example.com"]))).toBe(false);
   });

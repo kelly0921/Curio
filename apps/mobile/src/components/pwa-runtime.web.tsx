@@ -33,10 +33,13 @@ export function PwaRuntime() {
   const { session } = useCurioAuth();
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showIosInstall, setShowIosInstall] = useState(false);
-  const [offline, setOffline] = useState(() => !navigator.onLine);
+  // Keep the first client render identical to the statically rendered shell.
+  // The real network state is synchronized after hydration.
+  const [offline, setOffline] = useState(false);
   const [updateRegistration, setUpdateRegistration] = useState<ServiceWorkerRegistration | null>(null);
 
   useEffect(() => {
+    const initialNetworkTimer = setTimeout(() => setOffline(!navigator.onLine), 0);
     const onOnline = () => setOffline(false);
     const onOffline = () => setOffline(true);
     const onBeforeInstall = (event: Event) => {
@@ -61,6 +64,7 @@ export function PwaRuntime() {
     }
 
     return () => {
+      clearTimeout(initialNetworkTimer);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
       window.removeEventListener('beforeinstallprompt', onBeforeInstall);
@@ -180,7 +184,7 @@ export function PwaRuntime() {
           </Pressable>
         )}
         {(notice === 'install' || notice === 'ios-install') && (
-          <Pressable accessibilityLabel="Dismiss install suggestion" onPress={dismissInstall} style={styles.closeButton}>
+          <Pressable accessibilityLabel="Dismiss install suggestion" accessibilityRole="button" onPress={dismissInstall} style={styles.closeButton}>
             <Text style={styles.closeButtonText}>×</Text>
           </Pressable>
         )}

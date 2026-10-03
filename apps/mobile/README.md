@@ -69,13 +69,13 @@ Build and preview the production web export:
 ```powershell
 Set-Location apps/mobile
 npm install
-npm run export:web
+npm run export:web:beta
 npm run preview:web
 ```
 
 Open `http://localhost:8082` on the same computer. Localhost is treated as a secure PWA origin, so browser developer tools can verify the manifest, service worker, offline fallback, and install prompt. A phone needs a deployed HTTPS URL; a LAN `http://192.168...` preview cannot install a service worker.
 
-The initial HTTPS beta is deployed at [curio-app.pages.dev](https://curio-app.pages.dev). Build locally and publish the static output with `npx wrangler pages deploy dist --project-name curio-app --branch main`. Deploy from `apps/mobile` so the `functions/api/[[path]].js` same-origin proxy is included. After server auth is ready, export with `EXPO_PUBLIC_CURIO_AUTH_ENABLED=true`; never include server secrets or a personal beta token. Google must allow the exact callback `https://curio-app.pages.dev/api/auth/callback/google`.
+The initial HTTPS beta is deployed at [curio-app.pages.dev](https://curio-app.pages.dev). Run `npm run export:web:beta`, then publish the static output with `npx wrangler pages deploy dist --project-name curio-app --branch main`. Deploy from `apps/mobile` so the `functions/api/[[path]].js` same-origin proxy is included. The beta export always enables auth, clears Metro's cache, and removes legacy public token/database variables from the build environment. Google must allow the exact callback `https://curio-app.pages.dev/api/auth/callback/google`.
 
 On iPhone, open the deployed URL in Safari, tap **Share**, then **Add to Home Screen**. On supporting desktop and Android browsers, use Curio's **Install** prompt. The PWA does not register as an iOS share-sheet destination; **Share to Curio** is supplied by the separately installed native development, preview, or production build.
 
@@ -131,7 +131,7 @@ Before telling testers to choose Curio from the Instagram or TikTok share sheet:
 npm run typecheck
 npm run lint
 npm test
-npm run export:web
+npm run export:web:beta
 node node_modules/expo/bin/cli config --type public
 ```
 
@@ -142,7 +142,7 @@ node node_modules/expo/bin/cli config --type public
 - Physically validate the configured native incoming-share target on signed iOS and Android builds before advertising it to testers.
 - Replace the labeled mock context connection with user-authorized Notion sync.
 - Replace the bounded Worker-staged upload with a signed direct-to-R2 upload before increasing the 20 MB limit.
-- Add automated alert delivery and beta-scale rate limits; structured Cloudflare logs, readiness checks, a dead-letter queue, privacy notice, export, and deletion are now present.
+- Add automated alert delivery; structured Cloudflare logs, readiness checks, a dead-letter queue, per-user beta rate limits, privacy notice, export, and deletion are now present.
 - Replace the template app icon and finalize store metadata.
 
 Current implementation uses stable Expo SDK 57 and follows the official Expo guidance for [monorepos](https://docs.expo.dev/guides/monorepos/), [SDK 57 incoming sharing](https://docs.expo.dev/versions/v57.0.0/sdk/sharing/), and [development builds](https://docs.expo.dev/build/setup/). Expo currently marks incoming sharing experimental, so physical-device testing remains a release gate—especially on iOS, where the extension opens the main app to finish capture.

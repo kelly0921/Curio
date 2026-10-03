@@ -8,6 +8,7 @@
 4. Resubmit the same URL and confirm Curio returns the same job/item instead of charging for duplicate processing.
 5. Export account data, inspect the JSON, then run deletion only on a disposable test account and confirm its D1 rows and R2 prefix are gone.
 6. Run the content scorecard in `docs/BETA_CONTENT_SCORECARD.csv`.
+7. Confirm migration `0007_rate_limits.sql` is applied and that the 31st save, 13th refresh, and 31st deep dive in one hourly window return `429` with `Retry-After`.
 
 ## Known dependency gate
 
@@ -27,6 +28,7 @@ Watch these events:
 - `processing_message_rejected`
 - `account_export_failed`
 - `account_data_deletion_failed`
+- `api_rate_limit_unavailable`
 
 Check the `curio-processing` queue for growing backlog and the `curio-processing-dlq` queue for terminal delivery failures. During the beta, configure an external uptime probe against `/api/health` every five minutes and alert after two consecutive failures. Alert on any dead-letter message, a sustained processing failure rate above 10%, or p95 completion time above five minutes.
 

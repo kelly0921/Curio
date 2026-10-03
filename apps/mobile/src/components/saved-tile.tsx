@@ -35,6 +35,7 @@ export function SavedTile({ item, index, onPress }: { item: LearningItem; index:
     <Pressable
       accessibilityHint="Open the saved Learning Card"
       accessibilityLabel={itemTitle(item)}
+      accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.tile, shadows.card, pressed && styles.pressed]}>
       <View style={[styles.visual, { backgroundColor: tileColors[index % tileColors.length] }]}>

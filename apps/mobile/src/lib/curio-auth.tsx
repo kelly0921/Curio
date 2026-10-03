@@ -123,7 +123,13 @@ export function CurioAuthGate({ children }: PropsWithChildren) {
 
   if (!auth.configured) return children;
   if (auth.loading) {
-    return <SafeAreaView style={styles.loading}><ActivityIndicator color={colors.ink} /></SafeAreaView>;
+    return (
+      <SafeAreaView style={styles.loading}>
+        <View style={styles.loadingMark}><Text style={styles.loadingMarkText}>C</Text></View>
+        <ActivityIndicator color={colors.ink} />
+        <Text style={styles.loadingText}>Opening Curio…</Text>
+      </SafeAreaView>
+    );
   }
   if (auth.session) return children;
 
@@ -148,7 +154,7 @@ export function CurioAuthGate({ children }: PropsWithChildren) {
           <Text style={styles.title}>Your saves, kept yours.</Text>
           <Text style={styles.copy}>Sign in once with your invited Google account. No password or setup questionnaire.</Text>
           {(localError || auth.error) && <Text style={styles.error}>{localError || auth.error}</Text>}
-          <Pressable disabled={signingIn} onPress={() => void submit()} style={[styles.button, signingIn && styles.buttonDisabled]}>
+          <Pressable accessibilityRole="button" disabled={signingIn} onPress={() => void submit()} style={[styles.button, signingIn && styles.buttonDisabled]}>
             {signingIn ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.buttonText}>Continue with Google</Text>}
           </Pressable>
           <Text style={styles.privacy}>Curio only receives your name and email address for sign-in. It cannot read your inbox or Drive content.</Text>
@@ -160,9 +166,12 @@ export function CurioAuthGate({ children }: PropsWithChildren) {
 
 const styles = StyleSheet.create({
   screen: { backgroundColor: colors.canvas, flex: 1 },
-  centered: { flex: 1, justifyContent: 'center', padding: 22 },
-  loading: { alignItems: 'center', backgroundColor: colors.canvas, flex: 1, justifyContent: 'center' },
-  card: { backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 30, borderWidth: 1, padding: 24 },
+  centered: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: 22 },
+  loading: { alignItems: 'center', backgroundColor: colors.canvas, flex: 1, gap: 13, justifyContent: 'center' },
+  loadingMark: { alignItems: 'center', backgroundColor: colors.dark, borderRadius: 22, height: 44, justifyContent: 'center', marginBottom: 4, width: 44 },
+  loadingMarkText: { color: colors.surface, fontFamily: fonts.display, fontSize: 22 },
+  loadingText: { color: colors.muted, fontFamily: fonts.body, fontSize: 13 },
+  card: { backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 30, borderWidth: 1, maxWidth: 480, padding: 24, width: '100%' },
   mark: { alignItems: 'center', backgroundColor: colors.dark, borderRadius: 20, height: 40, justifyContent: 'center', marginBottom: 24, width: 40 },
   markText: { color: colors.surface, fontFamily: fonts.display, fontSize: 20 },
   eyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700', letterSpacing: 1.6, marginBottom: 10 },

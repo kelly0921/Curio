@@ -17,6 +17,7 @@ for (const name of [
   "SUPABASE_SECRET_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
   "CURIO_INVITED_EMAILS",
+  "CURIO_ALLOW_ANY_GOOGLE_USER",
   "CURIO_LEGACY_OWNER_EMAIL",
 ]) {
   buildEnvironment[name] = "";
