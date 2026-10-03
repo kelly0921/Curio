@@ -131,7 +131,7 @@ I:
 - Node's test runner for mobile-domain behavior
 - ESLint and TypeScript type checking
 - Expo static web export
-- 137 automated tests currently passing: 110 processor tests and 27 mobile tests, verified September 18, 2026
+- 146 automated tests currently passing: 112 processor tests and 34 mobile tests, verified September 28, 2026
 
 ### Application architecture
 
@@ -200,7 +200,7 @@ Notion may become a useful source of personalized context or an export destinati
 
 **Working invite-only private beta; deployed processor and production-shaped mobile client; not yet a public consumer release.**
 
-The processing service is deployed at [curio-processor.kellychenmeiyi.workers.dev](https://curio-processor.kellychenmeiyi.workers.dev). It uses Cloudflare D1 persistence. Google sign-in through Better Auth is implemented and awaits production OAuth credentials and physical-device validation before the client gate is enabled; the existing private-beta token remains the temporary fallback until then.
+The processing service is deployed at [curio-processor.kellychenmeiyi.workers.dev](https://curio-processor.kellychenmeiyi.workers.dev). It uses Cloudflare D1 persistence. Google sign-in through Better Auth is implemented, the authenticated PWA build enables the client gate reproducibly, and the production invite list fails closed when empty. Native OAuth callbacks still require physical-device validation.
 
 The current product includes one-field link capture, small-media processing support in the backend, best-effort public-Reel processing, structured learning cards, cited research, living resources, exact-source provenance, resource search, visual covers, progressive deep dives, intent-aware follow-through, and cross-save For You synthesis.
 
@@ -211,8 +211,8 @@ Important constraints remain:
 - Curio does not synchronize private Instagram Saved folders because the supported platform API does not expose that capture surface.
 - Public-Reel acquisition is best effort and depends on public availability and fragile third-party page behavior; restricted content may remain source-only unless the user shares media or context.
 - EAS profiles and native iOS/Android share-target configuration exist. Signed physical-device validation is still required before Share to Curio is described as generally available.
-- Long media processing is still synchronous; production scale needs signed uploads, queued jobs, retries, idempotency, and rate limits.
-- A public launch still needs privacy policy, export and deletion flows, crash reporting, final store metadata, and external-user validation.
+- Processing uses Cloudflare Queues with durable job states, retries, idempotency, and per-user beta rate limits; production scale still needs signed direct-to-R2 uploads and traffic-based limit tuning.
+- A public launch still needs a published privacy/support surface, crash alert delivery, final store metadata, and external-user validation; export and deletion flows are implemented.
 - Notion sync and other real context connectors are future work. Mock context must remain clearly labeled and should not appear in portfolio screenshots as a live integration.
 
 ## 10. What I Learned
@@ -340,7 +340,7 @@ The following items are still missing or intentionally unverified:
 - External-user usability findings, retention data, testimonials, or quantified time saved
 - A supported private Instagram Saved-folder integration; none should be implied
 - A platform-compliant, production-reliable full-video acquisition strategy across Instagram and TikTok
-- Queued background media processing, signed upload flow, production retry policy, idempotency, and rate limiting
+- Signed direct-to-R2 upload flow and production traffic-based rate-limit tuning
 - Privacy policy, terms, account export, account deletion, crash reporting, and public-launch support workflows
 - A real Notion or other context connector; the current connector-shaped demo context is not a live integration
 - Final confirmation that the latest private-beta branch has been merged into the repository's public default branch before using GitHub as a portfolio CTA

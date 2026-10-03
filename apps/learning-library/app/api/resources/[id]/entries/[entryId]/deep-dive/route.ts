@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { OpenAILearningServices } from "@/lib/ai/services";
 import { apiResponseHeaders, authenticateApiRequest } from "@/lib/api/access-control";
+import { enforceCurioRateLimit, rateLimitHeaders } from "@/lib/api/rate-limit";
 import { getLearningItemRepository } from "@/lib/data/provider";
 import { resourceDeepDiveKindSchema } from "@/lib/domain";
 import { deepenKnowledgeResourceEntry } from "@/lib/knowledge/deep-dive";
@@ -27,6 +28,21 @@ export async function POST(
   const parsedBody = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsedBody.success) {
     return errorResponse(request, "INVALID_DEEP_DIVE", "Choose one of Curio’s available follow-up questions.", 400);
+  }
+  const rateLimit = await enforceCurioRateLimit(viewer.profileId, "resources:deep-dive", 30);
+  if (rateLimit.status !== "allowed") {
+    return NextResponse.json(
+      { ok: false, error: {
+        code: rateLimit.status === "limited" ? "RATE_LIMITED" : "RATE_LIMIT_UNAVAILABLE",
+        message: rateLimit.status === "limited"
+          ? "You have researched several questions this hour. Try again after the current hour resets."
+          : "Curio cannot safely start research right now. Try again shortly.",
+      } },
+      {
+        status: rateLimit.status === "limited" ? 429 : 503,
+        headers: { ...apiResponseHeaders(request), ...rateLimitHeaders(rateLimit) },
+      },
+    );
   }
   if (!process.env.OPENAI_API_KEY?.trim()) {
     return errorResponse(request, "RESEARCH_NOT_CONFIGURED", "Curio research is not configured on this processor.", 503);

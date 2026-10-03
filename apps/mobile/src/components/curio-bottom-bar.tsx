@@ -13,7 +13,7 @@ export function CurioBottomBar({ active = 'saved' }: { active?: 'saved' | 'prior
         <Text style={active === 'saved' ? styles.activeIcon : styles.icon}>⌂</Text>
         <Text style={active === 'saved' ? styles.activeLabel : styles.label}>Library</Text>
       </Pressable>
-      <Pressable accessibilityLabel="Add to Curio" onPress={() => router.push('/capture')} style={({ pressed }) => [styles.add, pressed && styles.pressed]}>
+      <Pressable accessibilityLabel="Add to Curio" accessibilityRole="button" onPress={() => router.push('/capture')} style={({ pressed }) => [styles.add, pressed && styles.pressed]}>
         <Text style={styles.addIcon}>＋</Text>
       </Pressable>
       <Pressable
@@ -33,8 +33,8 @@ const styles = StyleSheet.create({
   tab: { alignItems: 'center', flex: 1, gap: 2, justifyContent: 'center' },
   icon: { color: colors.muted, fontSize: 22 },
   activeIcon: { color: colors.ink, fontSize: 22 },
-  label: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '600' },
-  activeLabel: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '700' },
+  label: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, fontWeight: '600' },
+  activeLabel: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '700' },
   add: { alignItems: 'center', backgroundColor: colors.dark, borderRadius: 27, height: 54, justifyContent: 'center', marginTop: -26, width: 54 },
   addIcon: { color: colors.surface, fontFamily: fonts.body, fontSize: 26, lineHeight: 29 },
   pressed: { opacity: 0.78, transform: [{ scale: 0.96 }] },

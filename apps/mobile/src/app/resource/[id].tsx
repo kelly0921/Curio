@@ -216,7 +216,7 @@ export default function ResourceDetailScreen() {
       <View style={styles.center}>
         <Text style={styles.errorTitle}>Resource unavailable</Text>
         <Text style={styles.errorCopy}>{error}</Text>
-        <Pressable onPress={() => router.back()} style={styles.darkButton}><Text style={styles.darkButtonText}>Go back</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.darkButton}><Text style={styles.darkButtonText}>Go back</Text></Pressable>
       </View>
     );
   }
@@ -226,7 +226,7 @@ export default function ResourceDetailScreen() {
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.topbar}>
-            <Pressable accessibilityLabel="Back to library" onPress={() => router.back()} style={styles.backButton}><Text style={styles.backText}>←</Text></Pressable>
+            <Pressable accessibilityLabel="Back to library" accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}><Text style={styles.backText}>←</Text></Pressable>
             <CurioBrand compact />
             <View style={styles.topbarSpacer} />
           </View>
@@ -236,7 +236,7 @@ export default function ResourceDetailScreen() {
             <Text style={styles.domain}>{label(resource.domain)}</Text>
             {resource.intent && <><Text style={styles.tagDivider}>·</Text><Text style={styles.intent}>{intentLabel(resource.intent)}</Text></>}
           </View>
-          <Text style={styles.title}>{resource.title}</Text>
+          <Text accessibilityRole="header" style={styles.title}>{resource.title}</Text>
           <Text style={styles.summary}>{resource.summary}</Text>
           <View style={styles.resourceMeta}>
             <Text style={styles.resourceMetaText}>{resource.sourceItemIds.length} source{resource.sourceItemIds.length === 1 ? '' : 's'}</Text>
@@ -260,6 +260,7 @@ export default function ResourceDetailScreen() {
               </View>
               <Pressable
                 accessibilityLabel="Refresh this resource's research"
+                accessibilityRole="button"
                 disabled={refreshingResearch}
                 onPress={() => void handleResearchRefresh()}
                 style={[styles.refreshButton, refreshingResearch && styles.refreshButtonDisabled]}>
@@ -271,7 +272,7 @@ export default function ResourceDetailScreen() {
           )}
           {refreshError && <Text style={styles.refreshError}>{refreshError}</Text>}
 
-          {(latestContribution || refreshReceipt) && (
+          {(refreshReceipt || (latestContribution && latestContribution.disposition !== 'created')) && (
             <View style={[styles.changeReceipt, !refreshReceipt && latestContribution?.disposition === 'conflict' && styles.changeReceiptConflict]}>
               <View style={[styles.changeMark, !refreshReceipt && latestContribution?.disposition === 'conflict' && styles.changeMarkConflict]}><Text style={styles.changeMarkText}>{!refreshReceipt && latestContribution?.disposition === 'conflict' ? '!' : '✦'}</Text></View>
               <View style={styles.changeCopy}>
@@ -299,6 +300,7 @@ export default function ResourceDetailScreen() {
               {followThroughCopy && (
                 <Pressable
                   accessibilityLabel={followThrough?.state === 'active' ? `Open ${followThroughCopy.activeLabel}` : followThroughCopy.startLabel}
+                  accessibilityRole="button"
                   disabled={followThroughUpdating}
                   onPress={() => void handleFollowThrough()}
                   style={[styles.followThroughButton, followThrough?.state === 'active' && styles.followThroughButtonActive]}>
@@ -356,6 +358,7 @@ export default function ResourceDetailScreen() {
                   <View style={styles.depthSection}>
                     <Pressable
                       accessibilityLabel={`${depthExpanded ? 'Hide' : 'Learn more about'} ${entry.heading || `point ${index + 1}`}`}
+                      accessibilityRole="button"
                       accessibilityState={{ expanded: depthExpanded }}
                       onPress={() => toggleEntryDepth(entry.id)}
                       style={styles.depthToggle}>
@@ -379,7 +382,7 @@ export default function ResourceDetailScreen() {
                           <View style={styles.researchSources}>
                             <Text style={styles.researchSourcesLabel}>READ THE SOURCES</Text>
                             {researchSources.map((source) => (
-                              <Pressable key={source.url} onPress={() => openResearchSource(source.url)} style={styles.researchSourceRow}>
+                              <Pressable accessibilityRole="link" key={source.url} onPress={() => openResearchSource(source.url)} style={styles.researchSourceRow}>
                                 <View style={styles.researchSourceCopy}>
                                   <Text numberOfLines={2} style={styles.researchSourceTitle}>{source.displayTitle}</Text>
                                   <Text style={styles.researchSourcePublisher}>{source.publisher}</Text>
@@ -401,6 +404,8 @@ export default function ResourceDetailScreen() {
                                 <Pressable
                                   key={option.kind}
                                   accessibilityLabel={`${option.label}${saved ? ', saved' : ''}`}
+                                  accessibilityRole="button"
+                                  accessibilityState={{ selected: active, disabled: entryDeepDiveLoading }}
                                   disabled={entryDeepDiveLoading}
                                   onPress={() => void handleDeepDive(entry, option.kind)}
                                   style={[styles.deepDiveOption, active && styles.deepDiveOptionActive, saved && styles.deepDiveOptionSaved]}>
@@ -421,7 +426,7 @@ export default function ResourceDetailScreen() {
                                 <View style={styles.deepDiveSources}>
                                   <Text style={styles.researchSourcesLabel}>SOURCES</Text>
                                   {activeDeepDiveSources.map((source) => (
-                                    <Pressable key={source.url} onPress={() => openResearchSource(source.url)} style={styles.researchSourceRow}>
+                                    <Pressable accessibilityRole="link" key={source.url} onPress={() => openResearchSource(source.url)} style={styles.researchSourceRow}>
                                       <View style={styles.researchSourceCopy}>
                                         <Text numberOfLines={2} style={styles.researchSourceTitle}>{source.displayTitle}</Text>
                                         <Text style={styles.researchSourcePublisher}>{source.publisher}</Text>
@@ -445,7 +450,7 @@ export default function ResourceDetailScreen() {
           })}
 
           <View style={styles.sourcesSection}>
-            <Pressable onPress={() => setShowSources((current) => !current)} style={styles.sourcesToggle}>
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: showSources }} onPress={() => setShowSources((current) => !current)} style={styles.sourcesToggle}>
               <View>
                 <Text style={styles.sectionEyebrow}>PROVENANCE</Text>
                 <Text style={styles.sourcesTitle}>{resource.sourceItemIds.length} original source{resource.sourceItemIds.length === 1 ? '' : 's'}</Text>
@@ -454,6 +459,7 @@ export default function ResourceDetailScreen() {
             </Pressable>
             {showSources && sources.map((source) => (
               <Pressable
+                accessibilityRole="button"
                 key={source.id}
                 onPress={() => {
                   if (id) void recordResourceEngagement(id, 'source_opened').catch(() => undefined);
@@ -485,7 +491,7 @@ const styles = StyleSheet.create({
   topbarSpacer: { width: 36 },
   tagRow: { alignItems: 'center', flexDirection: 'row', gap: 9 },
   typePill: { backgroundColor: colors.lilac, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 7 },
-  typePillText: { color: colors.ink, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
+  typePillText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   domain: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
   tagDivider: { color: colors.muted, fontSize: 10 },
   intent: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700' },
@@ -499,7 +505,7 @@ const styles = StyleSheet.create({
   freshnessCurrentText: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700' },
   freshnessCallout: { alignItems: 'center', backgroundColor: colors.dark, borderRadius: 22, flexDirection: 'row', gap: 14, marginTop: 22, padding: 16 },
   freshnessCalloutCopy: { flex: 1 },
-  freshnessEyebrow: { color: colors.butter, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  freshnessEyebrow: { color: colors.butter, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   freshnessTitle: { color: colors.surface, fontFamily: fonts.display, fontSize: 19, fontWeight: '700', lineHeight: 22, marginTop: 4 },
   freshnessReason: { color: '#C9C6BC', fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 5 },
   refreshButton: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 15, justifyContent: 'center', minHeight: 42, minWidth: 76, paddingHorizontal: 13 },
@@ -512,17 +518,17 @@ const styles = StyleSheet.create({
   changeMarkConflict: { backgroundColor: colors.peach },
   changeMarkText: { color: colors.ink, fontSize: 16 },
   changeCopy: { flex: 1, marginLeft: 11 },
-  changeLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  changeLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   changeText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 4 },
   usePanel: { backgroundColor: colors.sage, borderRadius: 26, marginTop: 28, padding: 20 },
-  useEyebrow: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1.2 },
+  useEyebrow: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
   useTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.7, lineHeight: 31, marginTop: 7 },
   useDescription: { color: '#384437', fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 9 },
   nextMove: { backgroundColor: 'rgba(255,252,246,0.72)', borderRadius: 17, marginTop: 18, padding: 14 },
-  nextMoveLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  nextMoveLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   nextMoveText: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '800', lineHeight: 17, marginTop: 5 },
   useFocus: { borderTopColor: 'rgba(23,23,19,0.16)', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 17, paddingTop: 14 },
-  useFocusLabel: { color: '#4D594B', fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  useFocusLabel: { color: '#4D594B', fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   useFocusText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '800', lineHeight: 16, marginTop: 5 },
   followThroughButton: { alignItems: 'center', backgroundColor: colors.dark, borderColor: colors.dark, borderRadius: 16, borderWidth: 1, flexDirection: 'row', justifyContent: 'space-between', marginTop: 17, minHeight: 48, paddingHorizontal: 15 },
   followThroughButtonActive: { backgroundColor: 'rgba(255,252,246,0.7)', borderColor: 'rgba(23,23,19,0.22)' },
@@ -531,7 +537,7 @@ const styles = StyleSheet.create({
   followThroughArrow: { color: colors.surface, fontFamily: fonts.body, fontSize: 13 },
   followThroughError: { color: colors.danger, fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 8 },
   sectionHeader: { paddingBottom: 15, paddingTop: 38 },
-  sectionEyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
+  sectionEyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
   sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 28, fontWeight: '700', letterSpacing: -0.7, marginTop: 4 },
   entryCard: { backgroundColor: colors.surface, borderRadius: 23, marginBottom: 13, padding: 18 },
   entryHeader: { alignItems: 'flex-start', flexDirection: 'row', gap: 12 },
@@ -541,50 +547,50 @@ const styles = StyleSheet.create({
   entryStatus: { alignSelf: 'flex-start', borderRadius: 8, marginBottom: 7, paddingHorizontal: 7, paddingVertical: 4 },
   entryStatusConflict: { backgroundColor: colors.peach },
   entryStatusEarlier: { backgroundColor: colors.line },
-  entryStatusText: { color: colors.ink, fontFamily: fonts.body, fontSize: 7, fontWeight: '900', letterSpacing: 0.8 },
+  entryStatusText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
   entryHeading: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, fontWeight: '700', lineHeight: 25 },
   entryDetail: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, lineHeight: 19, marginTop: 5 },
   entryDetailStrong: { color: colors.ink, fontWeight: '700', marginTop: 4 },
   researchNote: { backgroundColor: colors.canvas, borderRadius: 14, marginTop: 14, padding: 12 },
   researchCorrection: { backgroundColor: colors.peach },
-  researchLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
+  researchLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 0.9 },
   researchText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, lineHeight: 16, marginTop: 5 },
   depthSection: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 15, paddingTop: 4 },
   depthToggle: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 54, paddingVertical: 8 },
   depthToggleCopy: { flex: 1, paddingRight: 10 },
-  depthLabel: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
-  depthMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, marginTop: 3 },
-  depthToggleText: { color: colors.ink, fontFamily: fonts.body, fontSize: 9, fontWeight: '900' },
+  depthLabel: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 0.9 },
+  depthMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, marginTop: 3 },
+  depthToggleText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900' },
   depthContent: { backgroundColor: colors.canvas, borderRadius: 17, marginBottom: 5, padding: 15 },
-  depthContentLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  depthContentLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   depthExplanation: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, lineHeight: 19, marginTop: 7 },
   depthBottomLine: { borderLeftColor: colors.peach, borderLeftWidth: 3, marginTop: 15, paddingLeft: 11 },
-  depthBottomLineLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
+  depthBottomLineLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 0.9 },
   depthBottomLineText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '700', lineHeight: 17, marginTop: 4 },
   researchSources: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 17, paddingTop: 14 },
-  researchSourcesLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  researchSourcesLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   researchSourceRow: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 13, flexDirection: 'row', marginTop: 8, padding: 11 },
   researchSourceCopy: { flex: 1, paddingRight: 9 },
   researchSourceTitle: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '800', lineHeight: 14 },
-  researchSourcePublisher: { color: colors.muted, fontFamily: fonts.body, fontSize: 8, marginTop: 3 },
+  researchSourcePublisher: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, marginTop: 3 },
   researchSourceArrow: { color: colors.ink, fontSize: 13 },
   deepDiveSection: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 18, paddingTop: 16 },
-  deepDiveEyebrow: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  deepDiveEyebrow: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   deepDiveIntro: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 5 },
   deepDiveOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 12 },
   deepDiveOption: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 13, borderWidth: 1, flexGrow: 1, justifyContent: 'center', minHeight: 42, paddingHorizontal: 11, paddingVertical: 8 },
   deepDiveOptionActive: { backgroundColor: colors.dark, borderColor: colors.dark },
   deepDiveOptionSaved: { borderColor: colors.success },
-  deepDiveOptionText: { color: colors.ink, fontFamily: fonts.body, fontSize: 9, fontWeight: '800', textAlign: 'center' },
+  deepDiveOptionText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '800', textAlign: 'center' },
   deepDiveOptionTextActive: { color: colors.surface },
-  deepDiveLoading: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontStyle: 'italic', marginTop: 10 },
+  deepDiveLoading: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontStyle: 'italic', marginTop: 10 },
   deepDiveError: { color: colors.danger, fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 10 },
   deepDiveAnswer: { backgroundColor: colors.sky, borderRadius: 17, marginTop: 13, padding: 15 },
   deepDiveQuestion: { color: colors.ink, fontFamily: fonts.display, fontSize: 19, fontWeight: '700', lineHeight: 23 },
   deepDiveAnswerText: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, lineHeight: 18, marginTop: 9 },
   deepDiveSources: { borderTopColor: 'rgba(23,23,19,0.14)', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 16, paddingTop: 13 },
-  deepDiveDate: { color: '#526474', fontFamily: fonts.body, fontSize: 8, fontWeight: '700', marginTop: 11 },
-  entrySources: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '700', marginTop: 13 },
+  deepDiveDate: { color: '#526474', fontFamily: fonts.body, fontSize: 10, fontWeight: '700', marginTop: 11 },
+  entrySources: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '700', marginTop: 13 },
   sourcesSection: { borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 40, paddingTop: 24 },
   sourcesToggle: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 13 },
   sourcesTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 24, fontWeight: '700', marginTop: 4 },
@@ -594,7 +600,7 @@ const styles = StyleSheet.create({
   sourceMarkText: { color: colors.ink, fontSize: 17 },
   sourceCopy: { flex: 1, marginLeft: 11 },
   sourceTitle: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '800', lineHeight: 15 },
-  sourceMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, marginTop: 3 },
+  sourceMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, marginTop: 3 },
   sourceArrow: { color: colors.ink, fontSize: 13 },
   center: { alignItems: 'center', backgroundColor: colors.canvas, flex: 1, justifyContent: 'center', padding: 24 },
   loadingText: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, marginTop: 10 },

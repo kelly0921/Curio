@@ -13,10 +13,6 @@ export default function Root({ children }: PropsWithChildren) {
           name="viewport"
           content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
         />
-        <meta
-          name="description"
-          content="Turn the useful things you save into clear, researched knowledge you can find again."
-        />
         <meta name="theme-color" content={colors.canvas} />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -25,8 +21,8 @@ export default function Root({ children }: PropsWithChildren) {
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png" />
         <link rel="icon" type="image/png" sizes="192x192" href="/pwa/icon-192.png" />
-        <title>Curio · Keep what sparks you</title>
         <ScrollViewStyleReset />
+        <style>{`\n+          [role="button"]:focus-visible,\n+          [role="tab"]:focus-visible,\n+          input:focus-visible {\n+            outline: 3px solid ${colors.success};\n+            outline-offset: 3px;\n+          }\n+        `}</style>
       </head>
       <body>{children}</body>
     </html>

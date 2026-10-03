@@ -53,6 +53,28 @@ test('authenticated web builds keep auth and API traffic on the Pages origin', a
   assert.match(apiClient, /authenticatedBuild \|\| authenticatedSessionEnabled/);
 });
 
+test('beta web export always enables auth and strips legacy public credentials', async () => {
+  const buildScript = await read('../scripts/export-web-beta.mjs');
+  assert.match(buildScript, /EXPO_NO_DOTENV: '1'/);
+  assert.match(buildScript, /EXPO_PUBLIC_CURIO_AUTH_ENABLED: 'true'/);
+  assert.match(buildScript, /delete buildEnvironment\[name\]/);
+  assert.match(buildScript, /EXPO_PUBLIC_CURIO_API_TOKEN/);
+  assert.match(buildScript, /--clear/);
+});
+
+test('web capture does not wait for native Instagram media discovery', async () => {
+  const capture = await read('../src/app/capture.tsx');
+  assert.match(capture, /Platform\.OS !== 'web' && isInstagramReel\(url\)/);
+  assert.doesNotMatch(capture, /requires a later native beta build/);
+});
+
+test('PWA network state hydrates consistently before syncing in the browser', async () => {
+  const runtime = await read('../src/components/pwa-runtime.web.tsx');
+  assert.match(runtime, /useState\(false\)/);
+  assert.match(runtime, /setOffline\(!navigator\.onLine\)/);
+  assert.doesNotMatch(runtime, /useState\(\(\) => !navigator\.onLine\)/);
+});
+
 test('static HTML exposes install metadata and an offline fallback', async () => {
   const [html, offline, headers] = await Promise.all([
     read('../src/app/+html.tsx'),
@@ -65,4 +87,6 @@ test('static HTML exposes install metadata and an offline fallback', async () =>
   assert.match(offline, /You’re offline for a moment\./);
   assert.match(headers, /Service-Worker-Allowed: \//);
   assert.match(headers, /\/sw\.js[\s\S]*no-cache, no-store/);
+  assert.match(headers, /Permissions-Policy:/);
+  assert.match(headers, /Strict-Transport-Security:/);
 });

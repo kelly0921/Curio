@@ -4,6 +4,7 @@ import type { BrowserWorker } from "@cloudflare/puppeteer";
 import { ZodError } from "zod";
 import { OpenAILearningServices } from "@/lib/ai/services";
 import { apiResponseHeaders, authenticateApiRequest } from "@/lib/api/access-control";
+import { enforceCurioRateLimit, rateLimitHeaders } from "@/lib/api/rate-limit";
 import { IngestionValidationError, MAX_REQUEST_BYTES, parseIngestionForm } from "@/lib/api/ingestion";
 import { getLearningItemRepository } from "@/lib/data/provider";
 import { getPersonalContextSnapshot } from "@/lib/context/provider";
@@ -72,6 +73,21 @@ export async function POST(request: Request) {
   const traceId = requestId(request);
   const viewer = await authenticateApiRequest(request);
   if (!viewer) return errorResponse(request, "UNAUTHORIZED", "Sign in to Curio to continue.", 401);
+  const rateLimit = await enforceCurioRateLimit(viewer.profileId, "items:create", 30);
+  if (rateLimit.status !== "allowed") {
+    return NextResponse.json(
+      { ok: false, error: {
+        code: rateLimit.status === "limited" ? "RATE_LIMITED" : "RATE_LIMIT_UNAVAILABLE",
+        message: rateLimit.status === "limited"
+          ? "You have saved a lot at once. Try again after the current hour resets."
+          : "Curio cannot safely accept new saves right now. Try again shortly.",
+      } },
+      {
+        status: rateLimit.status === "limited" ? 429 : 503,
+        headers: { ...apiResponseHeaders(request), ...rateLimitHeaders(rateLimit) },
+      },
+    );
+  }
   const contentLength = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
     return errorResponse(request, "REQUEST_TOO_LARGE", "V0.1 accepts requests up to about 20 MB.", 413);

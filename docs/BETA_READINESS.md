@@ -1,6 +1,6 @@
 # Curio Private Beta Readiness
 
-Updated: August 27, 2026
+Updated: September 28, 2026
 
 ## Beta objective
 
@@ -14,7 +14,10 @@ This milestone is about reliability and evidence. It does not add quizzes, more 
 - `main` requires pull requests, resolved conversations, and blocks force-pushes and deletion.
 - The deployed processor health endpoint reports the active auth mode, OpenAI configuration, and durable Cloudflare D1 persistence.
 - An unauthenticated library request returns `401`.
-- 110 processor tests and 27 mobile tests pass after the auth and PWA changes.
+- 112 processor tests and 34 mobile tests pass after the auth, PWA, rate-limit, and accessibility changes.
+- Production invite enforcement fails closed when the allowlist is empty unless `CURIO_ALLOW_ANY_GOOGLE_USER=true` is set explicitly.
+- Create, research-refresh, and deep-dive endpoints have atomic, per-user D1 rate limits.
+- Pull requests and `main` pushes run tests, lint, typechecking, and an authenticated clean-cache PWA export in GitHub Actions.
 - The Expo SDK 57 client configures **Share to Curio** for links, text, images, and videos on iOS and Android, while preserving **Copy link → open Curio → paste** as the fallback.
 - The route, payload parser, retry experience, iOS Share Extension, and Android intent filters are implemented. A signed build and physical-device matrix remain required before calling the feature beta-ready.
 
@@ -125,16 +128,15 @@ Track:
 
 Do not claim retention, time saved, or user impact until this loop produces real evidence.
 
-## Infrastructure after the evidence pass
+## Infrastructure status and remaining scale work
 
 Once representative testing confirms the synchronous pipeline is worth scaling:
 
 1. Use signed R2 uploads for media.
-2. Move processing into a Cloudflare Queue or Workflow with durable job states.
-3. Add idempotent job submission, bounded retries, and a manual retry endpoint.
-4. Add per-user rate limits and abuse controls.
+2. Queue processing, durable job states, idempotent submission, bounded retries, and manual retry are implemented.
+3. Per-user D1 limits now protect expensive beta endpoints; tune budgets from observed beta traffic.
 5. Add crash/error monitoring without logging private transcripts or access tokens.
-6. Add data export, library deletion, account deletion, privacy policy, and support contact.
+6. Data export, library deletion, account deletion, and a privacy draft are implemented; publish the policy and support contact.
 7. Build and validate the configured native incoming-share target on physical iOS and Android devices.
 
 Notion and other context connectors remain later work. They should follow observed user demand, not block the private beta.

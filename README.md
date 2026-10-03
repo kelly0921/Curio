@@ -23,7 +23,7 @@ Private-beta privacy and operations are documented in [the privacy notice](docs/
 
 The installable web beta is deployed at [https://curio-app.pages.dev](https://curio-app.pages.dev). The protected processor is deployed separately at [https://curio-processor.kellychenmeiyi.workers.dev](https://curio-processor.kellychenmeiyi.workers.dev). Its health endpoint reports the OpenAI and D1 configuration without exposing secrets. Expo development, preview, and production environments point to this API.
 
-The private beta is migrating to Google sign-in through Better Auth on the existing Cloudflare Worker and D1 database. No separate auth vendor is required. Once the server credentials and client gate are enabled, each invited user's library is isolated and the former shared beta token is rejected. A narrow migration bridge keeps the original personal library intact.
+The private beta uses Google sign-in through Better Auth on the existing Cloudflare Worker and D1 database. No separate auth vendor is required. Each invited user's library is isolated, an empty invite list fails closed, and the authenticated PWA build never bundles the former shared token. A narrow migration bridge keeps the original personal library intact.
 
 ## Local development
 
@@ -52,10 +52,10 @@ Run Expo in another terminal:
 npm run dev:mobile
 ```
 
-For a static phone-browser preview:
+For an authenticated static phone-browser preview:
 
 ```powershell
-npm run export:web
+npm run export:web:beta
 npm --prefix apps/mobile run preview:web
 ```
 

@@ -193,14 +193,14 @@ export default function HomeScreen() {
             <View>
               <View style={styles.topbar}>
                 <CurioBrand compact />
-                <Pressable accessibilityLabel="Add a link" onPress={() => router.push('/capture')} style={({ pressed }) => [styles.topAdd, pressed && styles.pressed]}>
+                <Pressable accessibilityLabel="Add a link" accessibilityRole="button" onPress={() => router.push('/capture')} style={({ pressed }) => [styles.topAdd, pressed && styles.pressed]}>
                   <Text style={styles.topAddIcon}>＋</Text>
                 </Pressable>
               </View>
 
               <View style={styles.hero}>
                 <Text style={styles.eyebrow}>MY CURIO</Text>
-                <Text style={styles.heading}>Library</Text>
+                <Text accessibilityRole="header" style={styles.heading}>Library</Text>
                 <Text style={styles.intro}>Your saves, merged into knowledge you can find and keep building.</Text>
                 <View style={styles.searchBox}>
                   <Text style={styles.searchIcon}>⌕</Text>
@@ -216,13 +216,13 @@ export default function HomeScreen() {
                   />
                   {searching && <ActivityIndicator color={colors.muted} size="small" />}
                   {hasQuery && !searching && (
-                    <Pressable accessibilityLabel="Clear search" onPress={() => setQuery('')} style={styles.clearSearch}>
+                    <Pressable accessibilityLabel="Clear search" accessibilityRole="button" onPress={() => setQuery('')} style={styles.clearSearch}>
                       <Text style={styles.clearSearchText}>×</Text>
                     </Pressable>
                   )}
                 </View>
                 {searchError && <Text style={styles.searchFallback}>{searchError}</Text>}
-                <Pressable onPress={() => router.push('/sources')} style={styles.sourceArchiveLink}>
+                <Pressable accessibilityRole="button" onPress={() => router.push('/sources')} style={styles.sourceArchiveLink}>
                   <Text style={styles.sourceArchiveText}>View original saves</Text>
                   <Text style={styles.sourceArchiveArrow}>→</Text>
                 </Pressable>
@@ -238,6 +238,7 @@ export default function HomeScreen() {
 
               {processingJobs.length > 0 && (
                 <Pressable
+                  accessibilityRole="button"
                   onPress={() => router.push(`/processing/${processingJobs[0].id}` as Href)}
                   style={styles.processingBanner}>
                   <View style={styles.processingSignal}><Text style={styles.processingSignalText}>{processingJobs.some((job) => job.status === 'failed') ? '!' : '↗'}</Text></View>
@@ -266,6 +267,7 @@ export default function HomeScreen() {
                         <View key={`${point.resourceId}:${point.entryId}`} style={styles.answerPoint}>
                           <Pressable
                             accessibilityLabel={`Open ${point.resourceTitle}`}
+                            accessibilityRole="button"
                             onPress={() => router.push({ pathname: '/resource/[id]', params: { id: point.resourceId } })}
                             style={({ pressed }) => [styles.answerPointBody, pressed && styles.answerPointPressed]}>
                             <View style={styles.answerPointTopline}>
@@ -279,6 +281,7 @@ export default function HomeScreen() {
                             <Text style={styles.answerEvidence}>{point.evidence}</Text>
                             {actionable && <Pressable
                               accessibilityLabel={active ? `Open ${point.resourceTitle} in For You` : `Add ${point.resourceTitle} to For You`}
+                              accessibilityRole="button"
                               disabled={Boolean(followThroughUpdatingId)}
                               onPress={() => void handleFollowThrough(point.resourceId)}
                               style={[styles.answerUseButton, active && styles.answerUseButtonActive]}>
@@ -312,12 +315,12 @@ export default function HomeScreen() {
                     <Text style={styles.sectionMeta}>{collections.length} area{collections.length === 1 ? '' : 's'}</Text>
                   </View>
                   <ScrollView contentContainerStyle={styles.collectionRow} horizontal showsHorizontalScrollIndicator={false}>
-                    <Pressable onPress={() => setDomain('all')} style={[styles.collection, domain === 'all' && styles.collectionActive]}>
+                    <Pressable accessibilityRole="button" accessibilityState={{ selected: domain === 'all' }} onPress={() => setDomain('all')} style={[styles.collection, domain === 'all' && styles.collectionActive]}>
                       <View style={[styles.collectionDot, { backgroundColor: colors.dark }]}><Text style={styles.collectionDotLight}>✦</Text></View>
                       <View><Text style={styles.collectionName}>Everything</Text><Text style={styles.collectionCount}>{resourceCountLabel(resources.length)}</Text></View>
                     </Pressable>
                     {collections.map(([key, count], index) => (
-                      <Pressable key={key} onPress={() => setDomain(key)} style={[styles.collection, domain === key && styles.collectionActive]}>
+                      <Pressable accessibilityRole="button" accessibilityState={{ selected: domain === key }} key={key} onPress={() => setDomain(key)} style={[styles.collection, domain === key && styles.collectionActive]}>
                         <View style={[styles.collectionDot, { backgroundColor: [colors.peach, colors.sage, colors.sky, colors.lilac][index % 4] }]}>
                           <Text style={styles.collectionLetter}>{label(key).slice(0, 1)}</Text>
                         </View>
@@ -348,7 +351,7 @@ export default function HomeScreen() {
               <View style={styles.emptyMark}><Text style={styles.emptyMarkText}>✦</Text></View>
               <Text style={styles.emptyTitle}>{query ? 'Nothing found yet' : 'Start one living resource'}</Text>
               <Text style={styles.emptyCopy}>{query ? 'Try a broader idea or clear the search.' : 'Share a useful Reel or link. Curio will turn it into knowledge and merge future saves into it.'}</Text>
-              {!query && <Pressable onPress={() => router.push('/capture')} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Add your first source</Text></Pressable>}
+              {!query && <Pressable accessibilityRole="button" onPress={() => router.push('/capture')} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Add your first source</Text></Pressable>}
             </View>
           )}
           numColumns={2}
@@ -372,13 +375,13 @@ const styles = StyleSheet.create({
   content: { paddingBottom: 30, paddingHorizontal: 18 },
   columns: { gap: 12 },
   tileCell: { flex: 0.5, marginBottom: 14 },
-  topbar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 25, paddingTop: 12 },
+  topbar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 18, paddingTop: 12 },
   topAdd: { alignItems: 'center', backgroundColor: colors.dark, borderRadius: 18, height: 36, justifyContent: 'center', width: 36 },
   topAddIcon: { color: colors.surface, fontSize: 20, lineHeight: 23 },
   pressed: { opacity: 0.72 },
-  hero: { paddingBottom: 31 },
+  hero: { paddingBottom: 24 },
   eyebrow: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
-  heading: { color: colors.ink, fontFamily: fonts.display, fontSize: 52, fontWeight: '700', letterSpacing: -2.5, lineHeight: 58, marginTop: 2 },
+  heading: { color: colors.ink, fontFamily: fonts.display, fontSize: 46, fontWeight: '700', letterSpacing: -2.1, lineHeight: 51, marginTop: 2 },
   intro: { color: colors.muted, fontFamily: fonts.body, fontSize: 15, lineHeight: 21, marginTop: 6, maxWidth: 330 },
   searchBox: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 17, borderWidth: 1, flexDirection: 'row', gap: 10, marginTop: 22, paddingHorizontal: 14 },
   searchIcon: { color: colors.muted, fontSize: 24, marginTop: -2 },
@@ -401,7 +404,7 @@ const styles = StyleSheet.create({
   processingDetail: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, marginTop: 2 },
   processingArrow: { color: colors.ink, fontFamily: fonts.body, fontSize: 17 },
   answerCard: { backgroundColor: colors.dark, borderRadius: 25, marginBottom: 6, padding: 20 },
-  answerEyebrow: { color: colors.butter, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
+  answerEyebrow: { color: colors.butter, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
   answerTitle: { color: colors.surface, fontFamily: fonts.display, fontSize: 28, fontWeight: '700', letterSpacing: -0.6, lineHeight: 32, marginTop: 7 },
   answerSummary: { color: '#D7D4CA', fontFamily: fonts.body, fontSize: 12, lineHeight: 18, marginTop: 8 },
   answerPoints: { borderTopColor: '#4A4B43', borderTopWidth: StyleSheet.hairlineWidth, gap: 9, marginTop: 15, paddingTop: 14 },
@@ -409,25 +412,25 @@ const styles = StyleSheet.create({
   answerPointBody: { paddingHorizontal: 13, paddingTop: 13 },
   answerPointPressed: { opacity: 0.72 },
   answerPointTopline: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
-  answerPointResource: { color: colors.butter, flex: 1, fontFamily: fonts.body, fontSize: 9, fontWeight: '900' },
+  answerPointResource: { color: colors.butter, flex: 1, fontFamily: fonts.body, fontSize: 10, fontWeight: '900' },
   answerPointArrow: { color: colors.butter, fontFamily: fonts.body, fontSize: 11 },
   answerPointHeading: { color: colors.surface, fontFamily: fonts.body, fontSize: 11, fontWeight: '900', lineHeight: 16, marginTop: 8 },
   answerPointText: { color: '#E4E0D7', fontFamily: fonts.body, fontSize: 11, lineHeight: 17, marginTop: 4 },
   answerPointActions: { alignItems: 'center', borderTopColor: '#41423C', borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, minHeight: 47, paddingHorizontal: 13, paddingVertical: 8 },
-  answerEvidence: { color: '#A9A69E', flex: 1, fontFamily: fonts.body, fontSize: 8, fontWeight: '800', paddingRight: 8, textTransform: 'uppercase' },
+  answerEvidence: { color: '#BEBAB1', flex: 1, fontFamily: fonts.body, fontSize: 10, fontWeight: '800', paddingRight: 8, textTransform: 'uppercase' },
   answerUseButton: { alignItems: 'center', backgroundColor: colors.butter, borderRadius: 11, justifyContent: 'center', minHeight: 30, minWidth: 74, paddingHorizontal: 10 },
   answerUseButtonActive: { backgroundColor: '#45463F' },
-  answerUseButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 8, fontWeight: '900' },
+  answerUseButtonText: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '900' },
   answerUseButtonTextActive: { color: colors.surface },
-  answerActionError: { color: colors.peach, fontFamily: fonts.body, fontSize: 9, lineHeight: 14, marginTop: 10 },
+  answerActionError: { color: colors.peach, fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 10 },
   answerCaveat: { borderLeftColor: colors.peach, borderLeftWidth: 2, marginTop: 14, paddingLeft: 10 },
-  answerCaveatLabel: { color: colors.peach, fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+  answerCaveatLabel: { color: colors.peach, fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
   answerCaveatText: { color: '#D7D4CA', fontFamily: fonts.body, fontSize: 10, lineHeight: 15, marginTop: 4 },
   answerFooter: { alignItems: 'center', borderTopColor: '#4A4B43', borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingTop: 13 },
-  answerSourceCount: { color: '#B8B5AB', fontFamily: fonts.body, fontSize: 9, fontWeight: '700' },
-  answerPrivate: { color: '#8F8C84', fontFamily: fonts.body, fontSize: 8, fontWeight: '800' },
+  answerSourceCount: { color: '#C7C3B9', fontFamily: fonts.body, fontSize: 10, fontWeight: '700' },
+  answerPrivate: { color: '#B8B5AB', fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
   sectionHeading: { alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
-  libraryHeading: { marginTop: 34 },
+  libraryHeading: { marginTop: 26 },
   sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 27, fontWeight: '700', letterSpacing: -0.8, marginTop: 2 },
   sectionMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, paddingBottom: 3 },
   collectionRow: { gap: 10, paddingRight: 18 },
@@ -437,7 +440,7 @@ const styles = StyleSheet.create({
   collectionDotLight: { color: colors.surface, fontSize: 18 },
   collectionLetter: { color: colors.ink, fontFamily: fonts.display, fontSize: 19, fontWeight: '700' },
   collectionName: { color: colors.ink, fontFamily: fonts.body, fontSize: 12, fontWeight: '800', maxWidth: 82 },
-  collectionCount: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, marginTop: 2 },
+  collectionCount: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, marginTop: 2 },
   loading: { alignItems: 'center', gap: 11, paddingVertical: 50 },
   loadingText: { color: colors.muted, fontFamily: fonts.body, fontSize: 12 },
   empty: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 24, paddingHorizontal: 28, paddingVertical: 38 },

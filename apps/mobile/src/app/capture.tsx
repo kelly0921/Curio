@@ -73,7 +73,10 @@ export default function CaptureScreen() {
     setStage(0);
     setError(null);
     try {
-      if (isInstagramReel(url) && mediaUrls.current.length === 0) {
+      // Native discovery can provide a Reel media URL shortly after submission.
+      // The web discovery component is intentionally a no-op, so waiting there
+      // only made every Instagram save appear stuck for ten seconds.
+      if (Platform.OS !== 'web' && isInstagramReel(url) && mediaUrls.current.length === 0) {
         for (let attempt = 0; attempt < 20 && mediaUrls.current.length === 0; attempt += 1) {
           await new Promise((resolve) => setTimeout(resolve, 500));
         }
@@ -112,7 +115,7 @@ export default function CaptureScreen() {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.topbar}>
             <CurioBrand compact />
-            <Pressable accessibilityLabel="Close" disabled={saving} onPress={() => router.back()} style={styles.close}><Text style={styles.closeText}>×</Text></Pressable>
+            <Pressable accessibilityLabel="Close" accessibilityRole="button" disabled={saving} onPress={() => router.back()} style={styles.close}><Text style={styles.closeText}>×</Text></Pressable>
           </View>
 
           <View style={styles.heroMark}>
@@ -146,7 +149,7 @@ export default function CaptureScreen() {
             />
 
             {!showContext ? (
-              <Pressable disabled={saving} onPress={() => setShowContext(true)} style={styles.contextToggle}>
+              <Pressable accessibilityRole="button" disabled={saving} onPress={() => setShowContext(true)} style={styles.contextToggle}>
                 <Text style={styles.contextToggleText}>Private link or extra context?</Text><Text style={styles.contextToggleAction}>Add details ＋</Text>
               </Pressable>
             ) : (
@@ -172,7 +175,7 @@ export default function CaptureScreen() {
                 <View style={styles.progressText}><Text style={styles.progressTitle}>{stages[stage]}</Text><Text style={styles.progressCopy}>You can leave once Curio confirms the save.</Text></View>
               </View>
             ) : (
-              <Pressable onPress={() => void submit()} style={({ pressed }) => [styles.saveButton, pressed && styles.pressed]}>
+              <Pressable accessibilityRole="button" onPress={() => void submit()} style={({ pressed }) => [styles.saveButton, pressed && styles.pressed]}>
                 <Text style={styles.saveButtonText}>Save to Curio</Text><Text style={styles.saveArrow}>→</Text>
               </Pressable>
             )}
@@ -182,10 +185,10 @@ export default function CaptureScreen() {
 
           <View style={styles.shareHint}>
             <Text style={styles.shareHintIcon}>⇧</Text>
-            <View style={styles.shareHintCopy}><Text style={styles.shareHintTitle}>From Instagram or TikTok</Text><Text style={styles.shareHintBody}>Copy the post link, then paste it here. Direct Share to Curio requires a later native beta build.</Text></View>
+            <View style={styles.shareHintCopy}><Text style={styles.shareHintTitle}>From Instagram or TikTok</Text><Text style={styles.shareHintBody}>Copy the post link, then paste it here. Curio will organize it without folders or tags.</Text></View>
           </View>
 
-          <Pressable disabled={saving} onPress={() => void loadSample()} style={styles.sampleButton}>
+          <Pressable accessibilityRole="button" disabled={saving} onPress={() => void loadSample()} style={styles.sampleButton}>
             <Text style={styles.sampleButtonText}>No link handy? Try a processed example</Text>
           </Pressable>
           <Text style={styles.provenance}>Curio only analyzes source material it can actually access. Restricted links stay saved without an invented summary.</Text>
@@ -211,7 +214,7 @@ const styles = StyleSheet.create({
   title: { color: colors.ink, fontFamily: fonts.display, fontSize: 42, fontWeight: '700', letterSpacing: -1.8, lineHeight: 44, marginTop: 6 },
   intro: { color: colors.muted, fontFamily: fonts.body, fontSize: 14, lineHeight: 20, marginTop: 12, maxWidth: 340 },
   formCard: { backgroundColor: colors.surface, borderRadius: 24, marginTop: 28, padding: 17 },
-  fieldLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '800', letterSpacing: 1.3, marginBottom: 7 },
+  fieldLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '800', letterSpacing: 1.3, marginBottom: 7 },
   input: { backgroundColor: colors.canvas, borderColor: colors.line, borderRadius: 15, borderWidth: 1, color: colors.ink, fontFamily: fonts.body, fontSize: 14, minHeight: 53, paddingHorizontal: 14 },
   contextToggle: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 2, paddingVertical: 15 },
   contextToggleText: { color: colors.muted, fontFamily: fonts.body, fontSize: 11 },

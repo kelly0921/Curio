@@ -124,7 +124,8 @@ The recorded sample works without credentials and is clearly labeled as `determi
 | `BETTER_AUTH_SECRET` | Multi-user beta | Random server secret of at least 32 characters, stored as an encrypted Worker secret |
 | `GOOGLE_CLIENT_ID` | Multi-user beta | Google OAuth web client ID, stored as a Worker secret |
 | `GOOGLE_CLIENT_SECRET` | Multi-user beta | Google OAuth client secret, stored as a Worker secret |
-| `CURIO_INVITED_EMAILS` | Private beta | Optional comma-separated allowlist stored as an encrypted Worker secret |
+| `CURIO_INVITED_EMAILS` | Private beta | Comma-separated allowlist stored as an encrypted Worker secret; an empty list fails closed outside development |
+| `CURIO_ALLOW_ANY_GOOGLE_USER` | No | Explicit emergency/open-beta override; keep `false` for the private beta |
 | `CURIO_LEGACY_OWNER_EMAIL` | Personal-beta migration | Optional verified account email that retains the existing personal-profile data while account auth is activated |
 | `SUPABASE_URL` | Durable storage | Supabase project URL; set with the secret key |
 | `SUPABASE_SECRET_KEY` | Durable storage | Preferred `sb_secret_...` server key; never expose in `NEXT_PUBLIC_` |
@@ -161,13 +162,13 @@ Open `/api/health` and confirm `persistence.mode` is `d1` and `durable` is `true
    npx wrangler secret put CURIO_LEGACY_OWNER_EMAIL
    ```
 
-   `BETTER_AUTH_SECRET` must be a random value of at least 32 characters. The invite list is optional; leaving it unset allows any Google account, so keep it configured during the private beta. The legacy-owner email is optional and should be set only for the account that must retain the existing personal library.
+   `BETTER_AUTH_SECRET` must be a random value of at least 32 characters. The invite list fails closed when empty in production. Keep `CURIO_ALLOW_ANY_GOOGLE_USER=false` for the private beta. The legacy-owner email is optional and should be set only for the account that must retain the existing personal library.
 
-4. Build the PWA with `EXPO_PUBLIC_CURIO_AUTH_ENABLED=true`, but do not deploy that build yet.
+4. Build the PWA with `npm run export:web:beta` from the repository root, but do not deploy that build yet.
 5. In a short maintenance window, run `npx wrangler secret put GOOGLE_CLIENT_SECRET`, then immediately deploy the prepared PWA from `apps/mobile` so its login gate and Pages Function proxy go live together with the server session requirement.
 6. Confirm `/api/health` reports `authentication: "better_auth"`, remove `EXPO_PUBLIC_CURIO_API_TOKEN` from client environments, then test sign-in, sign-out, account isolation, export, and deletion with a disposable invited account.
 
-The deployed auth gate stays off until step 5. The processor also stays on the existing personal-token fallback until all four required server values—`BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET`—are present. Once the final secret exists, the processor fails closed to Google sessions and rejects the shared token, which is why the prepared PWA should be deployed immediately afterward.
+The beta export always enables the client auth gate. The processor stays on the existing personal-token fallback only until all four required server values—`BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET`—are present. Once the final secret exists, the processor fails closed to Google sessions and rejects the shared token.
 
 ## Optional Supabase setup
 
@@ -237,7 +238,7 @@ When Better Auth is configured, every API route verifies the D1-backed session a
 - Full-Reel evidence extraction samples audio and representative frames, but visual coverage is still bounded and should not be described as complete when the receipt does not support that claim
 - Uploaded media is staged privately in R2 for durable processing and then removed; it is not a signed direct-upload pipeline and remains limited to 20 MB
 - Queue processing, durable job status, idempotent submission, bounded retries, and manual retry are implemented; the dead-letter queue still requires operational monitoring
-- Better Auth and Google sign-in are implemented and the auth tables are migrated, but the client gate remains disabled until the Google OAuth credentials, Worker secrets, and physical-device callback are validated
+- Better Auth and Google sign-in are implemented; the beta export enables the client gate, while physical-device callbacks remain a release-validation item
 - The active context connector is labeled mock data; Notion OAuth and durable context synchronization are not connected yet
 - Natural-language retrieval and weekly cross-save synthesis are implemented with high-confidence deterministic matching; embeddings, Vectorize/pgvector, scheduled generation, and Queues remain later work
 - Research provides cited context and corrections, but it is not personalized professional advice
@@ -248,7 +249,7 @@ When Better Auth is configured, every API route verifies the D1-backed session a
 2. Configure and validate Google sign-in plus the native Share-to-Curio journey on signed physical-device builds; keep paste as the fallback until the share target passes the release gate.
 3. Replace the bounded Worker-staged upload with signed direct-to-R2 uploads while retaining the Queue consumer and `processLearningItem` orchestrator.
 4. Improve multi-frame visual coverage and allow `full` only when the evidence receipt supports the required channels.
-5. Publish the drafted privacy notice, connect automated alert delivery, and add beta-scale rate limits; export/deletion and privacy-safe structured logs are implemented.
+5. Publish the drafted privacy notice and connect automated alert delivery; beta-scale rate limits, export/deletion, and privacy-safe structured logs are implemented.
 6. Invite three to five external beta users before expanding connectors or adding embedding infrastructure.
 
 Current implementation choices were checked against the official [Cloudflare Next.js/OpenNext guide](https://developers.cloudflare.com/workers/framework-guides/web-apps/nextjs/), [Cloudflare Workers best practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/), [Better Auth Cloudflare integration](https://www.better-auth.com/docs/integrations/cloudflare), [Better Auth Expo integration](https://www.better-auth.com/docs/integrations/expo), [OpenAI transcription API reference](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create), and [OpenAI Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs).

@@ -47,13 +47,14 @@ export function ResourceTile({ resource, index, onPress }: { resource: Knowledge
     <Pressable
       accessibilityHint="Open this living resource"
       accessibilityLabel={resource.title}
+      accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.tile, shadows.card, pressed && styles.pressed]}>
       <View style={[styles.visual, { backgroundColor: tileColors[index % tileColors.length] }]}>
         {coverSource ? (
           <>
             <Image
-              accessibilityLabel="Frame from the original source"
+              accessible={false}
               cachePolicy="memory-disk"
               contentFit="cover"
               onError={() => setImageFailed(true)}
@@ -91,12 +92,12 @@ const styles = StyleSheet.create({
   mark: { color: colors.ink, fontFamily: fonts.display, fontSize: 32, fontWeight: '700' },
   typeBadge: { backgroundColor: 'rgba(255,252,246,0.58)', borderRadius: 10, bottom: 10, left: 10, paddingHorizontal: 8, paddingVertical: 5, position: 'absolute' },
   typeBadgeOnCover: { backgroundColor: 'rgba(23,23,19,0.78)' },
-  type: { color: 'rgba(23,23,19,0.72)', fontFamily: fonts.body, fontSize: 8, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
+  type: { color: 'rgba(23,23,19,0.72)', fontFamily: fonts.body, fontSize: 10, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   typeOnCover: { color: colors.surface },
   copy: { minHeight: 138, paddingHorizontal: 14, paddingVertical: 15 },
-  domain: { color: colors.muted, fontFamily: fonts.body, fontSize: 9, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
+  domain: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, fontWeight: '800', letterSpacing: 0.9, textTransform: 'uppercase' },
   title: { color: colors.ink, fontFamily: fonts.display, fontSize: 18, fontWeight: '700', lineHeight: 21, marginTop: 7 },
   metaRow: { gap: 3, marginTop: 'auto', paddingTop: 12 },
-  meta: { color: colors.ink, fontFamily: fonts.body, fontSize: 10, fontWeight: '800' },
-  updated: { color: colors.muted, fontFamily: fonts.body, fontSize: 9 },
+  meta: { color: colors.ink, fontFamily: fonts.body, fontSize: 11, fontWeight: '800' },
+  updated: { color: colors.muted, fontFamily: fonts.body, fontSize: 10 },
 });

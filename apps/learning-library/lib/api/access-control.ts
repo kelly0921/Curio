@@ -62,12 +62,14 @@ export function apiAuthenticationMode(): "better_auth" | "personal_beta" | "deve
   return "development_only";
 }
 
-function invitedEmail(email: string | null): boolean {
+function invitedEmail(email: string | null, environment: string | undefined = process.env.NODE_ENV): boolean {
   const invited = new Set((process.env.CURIO_INVITED_EMAILS ?? "")
     .split(",")
     .map((entry) => entry.trim().toLocaleLowerCase())
     .filter(Boolean));
-  return isInvitedCurioEmail(email, invited);
+  const allowAnyGoogleUser = process.env.CURIO_ALLOW_ANY_GOOGLE_USER?.trim() === "true"
+    || environment === "development";
+  return isInvitedCurioEmail(email, invited, allowAnyGoogleUser);
 }
 
 function profileIdForIdentity(identity: VerifiedIdentity): string {
@@ -94,7 +96,7 @@ export async function authenticateApiRequest(
   const token = bearerToken(request);
   if (authConfiguration) {
     const identity = await (options.verifyBetterAuthSession ?? verifyBetterAuthSession)(request);
-    if (!identity || !invitedEmail(identity.email)) return null;
+    if (!identity || !invitedEmail(identity.email, environment)) return null;
     return {
       profileId: profileIdForIdentity(identity),
       userId: identity.profileId,

@@ -6,6 +6,7 @@ interface CurioAuthEnvironment {
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
   CURIO_ALLOWED_ORIGINS?: string;
+  CURIO_ALLOW_ANY_GOOGLE_USER?: string;
   CURIO_INVITED_EMAILS?: string;
   CURIO_NATIVE_AUTH_ORIGINS?: string;
   GOOGLE_CLIENT_ID?: string;
@@ -14,6 +15,7 @@ interface CurioAuthEnvironment {
 }
 
 export interface CurioAuthConfiguration {
+  allowAnyGoogleUser: boolean;
   baseURL: string;
   googleClientId: string;
   googleClientSecret: string;
@@ -78,12 +80,18 @@ export function curioAuthConfiguration(
     commaSeparated(value(environment, "CURIO_INVITED_EMAILS"))
       .map((email) => email.toLocaleLowerCase()),
   );
+  const allowAnyGoogleUser = value(environment, "CURIO_ALLOW_ANY_GOOGLE_USER") === "true"
+    || environment.NODE_ENV === "development";
 
-  return { baseURL, googleClientId, googleClientSecret, invitedEmails, secret, trustedOrigins };
+  return { allowAnyGoogleUser, baseURL, googleClientId, googleClientSecret, invitedEmails, secret, trustedOrigins };
 }
 
-export function isInvitedCurioEmail(email: string | null | undefined, invitedEmails: ReadonlySet<string>): boolean {
-  if (!invitedEmails.size) return true;
+export function isInvitedCurioEmail(
+  email: string | null | undefined,
+  invitedEmails: ReadonlySet<string>,
+  allowAnyGoogleUser = false,
+): boolean {
+  if (!invitedEmails.size) return allowAnyGoogleUser;
   return Boolean(email && invitedEmails.has(email.toLocaleLowerCase()));
 }
 
@@ -117,7 +125,11 @@ export function createCurioAuth(database: D1Database, configuration: CurioAuthCo
     trustedOrigins: configuration.trustedOrigins,
     user: {
       validateUserInfo: ({ user }) => {
-        if (isInvitedCurioEmail(typeof user.email === "string" ? user.email : null, configuration.invitedEmails)) {
+        if (isInvitedCurioEmail(
+          typeof user.email === "string" ? user.email : null,
+          configuration.invitedEmails,
+          configuration.allowAnyGoogleUser,
+        )) {
           return;
         }
         return {

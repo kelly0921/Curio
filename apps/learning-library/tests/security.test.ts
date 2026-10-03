@@ -87,6 +87,7 @@ describe("server boundaries", () => {
       googleClientId: process.env.GOOGLE_CLIENT_ID,
       googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
       invitedEmails: process.env.CURIO_INVITED_EMAILS,
+      allowAnyGoogleUser: process.env.CURIO_ALLOW_ANY_GOOGLE_USER,
       legacyOwnerEmail: process.env.CURIO_LEGACY_OWNER_EMAIL,
       personalToken: process.env.CURIO_API_TOKEN,
     };
@@ -95,6 +96,7 @@ describe("server boundaries", () => {
     runtimeEnvironment.GOOGLE_CLIENT_ID = "google-client-id";
     runtimeEnvironment.GOOGLE_CLIENT_SECRET = "google-client-secret";
     process.env.CURIO_INVITED_EMAILS = "invited@example.com";
+    process.env.CURIO_ALLOW_ANY_GOOGLE_USER = "false";
     process.env.CURIO_API_TOKEN = "legacy-token-must-not-bypass-auth";
     const request = new Request("https://curio.example/api/items", {
       headers: { Cookie: "curio.session_token=verified-user-session" },
@@ -122,6 +124,17 @@ describe("server boundaries", () => {
         }),
       });
       expect(notInvited).toBeNull();
+
+      process.env.CURIO_INVITED_EMAILS = "";
+      const emptyInviteList = await authenticateApiRequest(request, {
+        environment: "production",
+        verifyBetterAuthSession: async () => ({
+          profileId: "30000000-0000-4000-8000-000000000003",
+          email: "anyone@example.com",
+        }),
+      });
+      expect(emptyInviteList).toBeNull();
+      process.env.CURIO_INVITED_EMAILS = "invited@example.com";
 
       process.env.CURIO_LEGACY_OWNER_EMAIL = "invited@example.com";
       const legacyOwner = await authenticateApiRequest(request, {
@@ -152,6 +165,7 @@ describe("server boundaries", () => {
         GOOGLE_CLIENT_ID: previous.googleClientId,
         GOOGLE_CLIENT_SECRET: previous.googleClientSecret,
         CURIO_INVITED_EMAILS: previous.invitedEmails,
+        CURIO_ALLOW_ANY_GOOGLE_USER: previous.allowAnyGoogleUser,
         CURIO_LEGACY_OWNER_EMAIL: previous.legacyOwnerEmail,
         CURIO_API_TOKEN: previous.personalToken,
       })) {
